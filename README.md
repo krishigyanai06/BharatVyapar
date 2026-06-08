@@ -1,97 +1,47 @@
-This is a new [**React Native**](https://reactnative.dev) project, bootstrapped using [`@react-native-community/cli`](https://github.com/react-native-community/cli).
+# Bharat FPO Vyapar
 
-# Getting Started
+## API Documentation
 
-> **Note**: Make sure you have completed the [Set Up Your Environment](https://reactnative.dev/docs/set-up-your-environment) guide before proceeding.
+### OTP Routes (`/api/otp`)
 
-## Step 1: Start Metro
+| Method | Route | Description | Expected Fields (Body/Query) |
+| :--- | :--- | :--- | :--- |
+| `POST` | `/send-otp` | Send an OTP to a mobile number | **Body:**<br>- `mobile` (string, required): 10-digit number starting with 6-9<br>- `role` (string, optional) |
+| `POST` | `/verify-otp` | Verify an OTP | **Body:**<br>- `mobile` (string, required): 10-digit number starting with 6-9<br>- `otp` (string, required): Exactly 6 characters<br>- `role` (string, optional) |
 
-First, you will need to run **Metro**, the JavaScript build tool for React Native.
+### User Routes (`/api/user`)
 
-To start the Metro dev server, run the following command from the root of your React Native project:
+| Method | Route | Description | Expected Fields / Details |
+| :--- | :--- | :--- | :--- |
+| `PATCH` | `/update-profile` | Update user profile with files | **Body (FormData):**<br>- `role` (enum: FPO, Trader, Miller, Corporate, SuperAdmin)<br>- `firstName`, `lastName` (string)<br>- `gender` (enum: Male, Female, Other)<br>- `village`, `district`, `state` (string)<br>- `phone` (string, 10-digits)<br>- `emailId` (string, valid email)<br><br>**Files (FormData):**<br>- `profileImage`, `shopLicense`, `GSTCertificate`, `PANCard` (max: 1 each)<br><br>*Note: Requires Authentication* |
+| `DELETE`| `/delete-account` | Delete user account | **Headers:** Requires Authentication |
+| `GET` | `/getUserDetails` | Get current user's details | **Headers:** Requires Authentication |
+| `GET` | `/getAllUsers` | Get list of all users | **Headers:** Requires Authentication |
+| `GET` | `/files/private` | Get user private files | **Query:**<br>- `type` (required, enum: shopLicense, GSTCertificate, PANCard)<br>- `index` (number, optional)<br><br>**Headers:** Requires Authentication |
+| `POST` | `/logout` | Logout the user | **Headers:** Requires Authentication |
 
-```sh
-# Using npm
-npm start
+### Sell Commodity Routes (`/api/sell-commodity`)
 
-# OR using Yarn
-yarn start
-```
+| Method | Route | Description | Expected Fields / Details |
+| :--- | :--- | :--- | :--- |
+| `POST` | `/create` | Create a new sell commodity listing | **Headers:** Requires Authentication<br><br>**Body (JSON or FormData):**<br>- `commodityName` (string, required)<br>- `type` (string, optional)<br>- `quantity` (string, required)<br>- `unit` (string, required)<br>- `sellingPrice` (number, required)<br>- `sellingPriceUnit` (enum: `"Kg"`, `"Qt"`, `"Ton"`, `"Metric Ton"`, required)<br>- `weightType` (enum: `"Gross Weight"`, `"Net Weight"`, optional)<br>- `listingEndDate` (string: YYYY-MM-DD or ISO-date, optional)<br>- `tradeType` (string, optional)<br>- `qualityParameters` (array of objects: `{ parameterName: string, parameterValue: string }`, optional)<br>- `weightTolerance` (string, optional)<br>- `billingAddress`, `exWarehouseAddress` (string, optional)<br>- `paymentTimeline`, `remarks` (string, optional)<br>- `deliveryType` (enum: `"FOR"`, `"EX_WAREHOUSE"`, optional)<br>- `isNegotiable` (boolean, default: `true`, optional)<br>- `minimumAcceptablePrice` (number, optional)<br>- `maxNegotiationRounds` (number, default: 5, optional)<br>- `offerExpiryHours` (number, default: 24, optional)<br>- `commodityLocation` (string, optional)<br>- `escrowEnabled` (boolean, default: `false`, optional)<br>- `buyerTransportAllowed` (boolean, default: `false`, optional)<br>- `status` (enum: `"active"`, `"sold"`, `"expired"`, `"cancelled"`, default: `"active"`, optional)<br>- `commodityImages` (array of base64 strings, optional)<br>- `qualityReport` (array of base64 strings, optional)<br><br>**Files (FormData):**<br>- `commodityImages` (max: 10 files, optional)<br>- `qualityReport` (max: 10 files, optional) |
+| `GET` | `/` | Fetch all/filtered sell commodity listings (paginated) | **Headers:** Requires Authentication<br><br>**Query:**<br>- `status` (enum: `"active"`, `"sold"`, `"expired"`, `"cancelled"`, optional)<br>- `sellerId` (string, optional)<br>- `commodityName` (string, optional)<br>- `type` (string, optional)<br>- `page` (number, default: 1, optional)<br>- `limit` (number, default: 10, optional) |
+| `GET` | `/:id` | Fetch details of a specific sell commodity listing | **Headers:** Requires Authentication<br><br>**Path Param:** `id` (Mongoose ObjectId of the commodity) |
+| `PATCH` | `/:id` | Update an existing sell commodity listing | **Headers:** Requires Authentication<br><br>**Path Param:** `id` (Mongoose ObjectId of the commodity)<br><br>**Body (JSON or FormData):**<br>- All creation body fields (optional)<br>- `deleteCommodityImages` (array of string keys/URLs of files to delete, optional)<br>- `deleteQualityReport` (array of string keys/URLs of files to delete, optional)<br><br>**Files (FormData):**<br>- `commodityImages` (max: 10 files, optional)<br>- `qualityReport` (max: 10 files, optional) |
+| `DELETE`| `/:id` | Delete/cancel a sell commodity listing | **Headers:** Requires Authentication<br><br>**Path Param:** `id` (Mongoose ObjectId of the commodity) |
 
-## Step 2: Build and run your app
+### Buy Commodity & Negotiation Routes (`/api/buy-commodity`)
 
-With Metro running, open a new terminal window/pane from the root of your React Native project, and use one of the following commands to build and run your Android or iOS app:
+All routes require Authentication headers.
 
-### Android
-
-```sh
-# Using npm
-npm run android
-
-# OR using Yarn
-yarn android
-```
-
-### iOS
-
-For iOS, remember to install CocoaPods dependencies (this only needs to be run on first clone or after updating native deps).
-
-The first time you create a new project, run the Ruby bundler to install CocoaPods itself:
-
-```sh
-bundle install
-```
-
-Then, and every time you update your native dependencies, run:
-
-```sh
-bundle exec pod install
-```
-
-For more information, please visit [CocoaPods Getting Started guide](https://guides.cocoapods.org/using/getting-started.html).
-
-```sh
-# Using npm
-npm run ios
-
-# OR using Yarn
-yarn ios
-```
-
-If everything is set up correctly, you should see your new app running in the Android Emulator, iOS Simulator, or your connected device.
-
-This is one way to run your app — you can also build it directly from Android Studio or Xcode.
-
-## Step 3: Modify your app
-
-Now that you have successfully run the app, let's make changes!
-
-Open `App.tsx` in your text editor of choice and make some changes. When you save, your app will automatically update and reflect these changes — this is powered by [Fast Refresh](https://reactnative.dev/docs/fast-refresh).
-
-When you want to forcefully reload, for example to reset the state of your app, you can perform a full reload:
-
-- **Android**: Press the <kbd>R</kbd> key twice or select **"Reload"** from the **Dev Menu**, accessed via <kbd>Ctrl</kbd> + <kbd>M</kbd> (Windows/Linux) or <kbd>Cmd ⌘</kbd> + <kbd>M</kbd> (macOS).
-- **iOS**: Press <kbd>R</kbd> in iOS Simulator.
-
-## Congratulations! :tada:
-
-You've successfully run and modified your React Native App. :partying_face:
-
-### Now what?
-
-- If you want to add this new React Native code to an existing application, check out the [Integration guide](https://reactnative.dev/docs/integration-with-existing-apps).
-- If you're curious to learn more about React Native, check out the [docs](https://reactnative.dev/docs/getting-started).
-
-# Troubleshooting
-
-If you're having issues getting the above steps to work, see the [Troubleshooting](https://reactnative.dev/docs/troubleshooting) page.
-
-# Learn More
-
-To learn more about React Native, take a look at the following resources:
-
-- [React Native Website](https://reactnative.dev) - learn more about React Native.
-- [Getting Started](https://reactnative.dev/docs/environment-setup) - an **overview** of React Native and how setup your environment.
-- [Learn the Basics](https://reactnative.dev/docs/getting-started) - a **guided tour** of the React Native **basics**.
-- [Blog](https://reactnative.dev/blog) - read the latest official React Native **Blog** posts.
-- [`@facebook/react-native`](https://github.com/facebook/react-native) - the Open Source; GitHub **repository** for React Native.
+| Method | Route | Description | Expected Fields / Details |
+| :--- | :--- | :--- | :--- |
+| `POST` | `/offers` | Submit an initial offer to buy | **Body (JSON):**<br>- `commodityId` (string, required)<br>- `price` (number, required)<br>- `priceUnit` (string, required)<br>- `quantity` (number, required)<br>- `unit` (string, required)<br>- `deliveryType` (enum: `"FOR"`, `"EX_WAREHOUSE"`, required)<br>- `paymentTimeline` (string, optional)<br>- `remarks` (string, optional) |
+| `GET` | `/offers` | List offers submitted by the current buyer | **Query:**<br>- `status` (enum, optional)<br>- `commodityId` (string, optional)<br>- `page` (number, default: 1, optional)<br>- `limit` (number, default: 10, optional)<br><br>*Note: If another buyer is actively negotiating, pending offers display a dynamic status of `"In Negotiation"`.* |
+| `GET` | `/offers/received/:commodityId` | List received offers from multiple buyers (Seller view) | **Path Param:** `commodityId` (required)<br>**Query:** page, limit (optional) |
+| `GET` | `/offers/:id` | Retrieve detailed offer & counter negotiation rounds | **Path Param:** `id` (offer ID) |
+| `POST` | `/offers/:id/counter` | Submit a counter offer | **Path Param:** `id` (offer ID)<br>**Body (JSON):**<br>- `price` (number, required)<br>- `quantity` (number, required)<br>- `remarks` (string, optional)<br>- `isFinalOffer` (boolean, default: `false`, optional)<br><br>*Enforces cooldown (30 min), expiry (24h), turn order, price movement limit (< 5%), and max rounds (5).* |
+| `POST` | `/offers/:id/accept` | Accept other party's counter offer | **Path Param:** `id` (offer ID)<br><br>*Accepting shifts listing status to `"sold"`, expires other offers, and creates an Escrow Deal.* |
+| `POST` | `/offers/:id/reject` | Decline/reject an offer | **Path Param:** `id` (offer ID) |
+| `GET` | `/deals/:dealId` | Retrieve details of a confirmed deal / escrow contract | **Path Param:** `dealId` (deal ID) |
+| `PATCH` | `/deals/:dealId/escrow` | Update escrow payment and delivery stage | **Path Param:** `dealId` (deal ID)<br>**Body (JSON):**<br>- `escrowStatus` (enum: `"pending_payment"`, `"funded"`, `"dispatched"`, `"delivered"`, `"released"`, `"cancelled"`, required) |

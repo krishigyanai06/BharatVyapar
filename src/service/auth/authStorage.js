@@ -5,7 +5,7 @@ const AUTH_SESSION_KEY = '@bharatFpoVyapar/auth_session';
 
 const parseSession = rawSession => {
   if (!rawSession) {
-    return { token: null, user: null, refreshToken: null };
+    return { token: null, user: null, refreshToken: null, selectedRole: null, roleColor: null };
   }
 
   try {
@@ -14,9 +14,11 @@ const parseSession = rawSession => {
       token: parsed?.token ?? null,
       user: parsed?.user ?? null,
       refreshToken: parsed?.refreshToken ?? null,
+      selectedRole: parsed?.selectedRole ?? null,
+      roleColor: parsed?.roleColor ?? null,
     };
   } catch (err) {
-    return { token: null, user: null, refreshToken: null };
+    return { token: null, user: null, refreshToken: null, selectedRole: null, roleColor: null };
   }
 };
 
@@ -25,6 +27,8 @@ export const saveAuthSession = async session => {
     token: session?.token ?? null,
     user: session?.user ?? null,
     refreshToken: session?.refreshToken ?? null,
+    selectedRole: session?.selectedRole ?? null,
+    roleColor: session?.roleColor ?? null,
   };
 
   await AsyncStorage.setItem(

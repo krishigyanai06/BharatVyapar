@@ -162,7 +162,7 @@ export default function VerifyMobileOtp({ route, navigation }) {
     ]).start();
 
     const action = await dispatch(
-      verifyOtp({ mobile, otp: enteredOtp, role: selectedRole }),
+      verifyOtp({ mobile, otp: enteredOtp, role: selectedRole, roleColor }),
     );
 
     if (verifyOtp.rejected.match(action)) {
