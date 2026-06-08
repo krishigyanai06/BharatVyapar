@@ -73,3 +73,63 @@ yarn-error.log
 !.yarn/releases
 !.yarn/sdks
 !.yarn/versions
+
+# Environment variables & sensitive config
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+.env.*.local
+src/config/index.js
+
+# API keys & secrets
+src/config/secrets.js
+src/config/keys.js
+*.pem
+*.p8
+*.p12
+*.key
+*.cert
+*.crt
+
+# Firebase
+google-services.json
+GoogleService-Info.plist
+firebase-config.js
+
+# AWS
+.aws/
+*.aws
+
+# Authentication tokens
+auth-token.json
+*.token
+
+# Local database files
+*.db
+*.sqlite
+*.realm
+
+# Logs with sensitive data
+*.log
+logs/
+
+# Build signing
+*.jks
+*.keystore
+!debug.keystore
+release.keystore
+upload-keystore.jks
+
+# Fastlane match
+fastlane/match/
+fastlane/*.cer
+fastlane/*.p12
+fastlane/*.mobileprovision
+
+# Sentry
+.sentryclirc
+
+# Code Push
+codepush.key

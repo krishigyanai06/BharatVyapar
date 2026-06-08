@@ -1,0 +1,312 @@
+import React, {
+  useImperativeHandle,
+  forwardRef,
+  useRef,
+  useState,
+} from 'react';
+import {
+  Modal,
+  View,
+  Text,
+  TouchableOpacity,
+  StyleSheet,
+  Animated,
+  Dimensions,
+} from 'react-native';
+import Icon from 'react-native-vector-icons/Ionicons';
+import COLORS from '../constant/colors';
+
+const { width } = Dimensions.get('window');
+
+/* ─── Type config ─────────────────────────────────────────── */
+const TYPE_CONFIG = {
+  success: {
+    icon: 'checkmark-circle',
+    color: COLORS.success,
+    bg: '#F0FDF4',
+    iconBg: '#DCFCE7',
+  },
+  error: {
+    icon: 'close-circle',
+    color: COLORS.error,
+    bg: '#FEF2F2',
+    iconBg: '#FEE2E2',
+  },
+  warning: {
+    icon: 'warning',
+    color: COLORS.warning,
+    bg: '#FFFBEB',
+    iconBg: '#FEF3C7',
+  },
+  info: {
+    icon: 'information-circle',
+    color: COLORS.info,
+    bg: '#EFF6FF',
+    iconBg: '#DBEAFE',
+  },
+  confirm: {
+    icon: 'help-circle',
+    color: '#7C3AED',
+    bg: '#F5F3FF',
+    iconBg: '#EDE9FE',
+  },
+};
+
+/* ─── Default fallback ────────────────────────────────────── */
+const DEFAULT = TYPE_CONFIG.info;
+
+/* ─── Singleton ref (set by <CustomAlertBox />) ─────────── */
+let _alertRef = null;
+
+/**
+ * Call this anywhere in your app to show a sweet alert.
+ * @param {{ type?: string, title: string, message: string, buttons?: Array }} options
+ */
+export const showAlert = options => {
+  if (_alertRef) {
+    _alertRef.show(options);
+  }
+};
+
+/* ─── Internal Alert Component (controlled via ref) ─────── */
+const CustomAlertInner = forwardRef((_, ref) => {
+  const [visible, setVisible] = useState(false);
+  const [config, setConfig] = useState({
+    type: 'info',
+    title: '',
+    message: '',
+    buttons: [],
+  });
+
+  const scaleAnim = useRef(new Animated.Value(0.8)).current;
+  const opacityAnim = useRef(new Animated.Value(0)).current;
+
+  useImperativeHandle(ref, () => ({
+    show(options) {
+      setConfig({
+        type: options.type || 'info',
+        title: options.title || '',
+        message: options.message || '',
+        buttons:
+          options.buttons && options.buttons.length > 0
+            ? options.buttons
+            : [{ text: 'OK', style: 'default' }],
+      });
+      setVisible(true);
+      Animated.parallel([
+        Animated.spring(scaleAnim, {
+          toValue: 1,
+          useNativeDriver: true,
+          tension: 100,
+          friction: 8,
+        }),
+        Animated.timing(opacityAnim, {
+          toValue: 1,
+          duration: 200,
+          useNativeDriver: true,
+        }),
+      ]).start();
+    },
+  }));
+
+  const handleClose = btn => {
+    Animated.parallel([
+      Animated.timing(scaleAnim, {
+        toValue: 0.8,
+        duration: 150,
+        useNativeDriver: true,
+      }),
+      Animated.timing(opacityAnim, {
+        toValue: 0,
+        duration: 150,
+        useNativeDriver: true,
+      }),
+    ]).start(() => {
+      setVisible(false);
+      scaleAnim.setValue(0.8);
+      opacityAnim.setValue(0);
+      if (btn?.onPress) btn.onPress();
+    });
+  };
+
+  const typeConf = TYPE_CONFIG[config.type] || DEFAULT;
+
+  const getButtonStyle = style => {
+    if (style === 'destructive') return styles.btnDestructive;
+    if (style === 'cancel') return styles.btnCancel;
+    return [styles.btnDefault, { backgroundColor: typeConf.color }];
+  };
+
+  const getButtonTextStyle = style => {
+    if (style === 'cancel') return styles.btnCancelText;
+    return styles.btnDefaultText;
+  };
+
+  return (
+    <Modal
+      visible={visible}
+      transparent
+      animationType="none"
+      statusBarTranslucent
+      onRequestClose={() => handleClose(null)}
+    >
+      <View style={styles.overlay}>
+        <Animated.View
+          style={[
+            styles.card,
+            { backgroundColor: typeConf.bg },
+            { transform: [{ scale: scaleAnim }], opacity: opacityAnim },
+          ]}
+        >
+          {/* ── Icon ── */}
+          <View
+            style={[styles.iconWrapper, { backgroundColor: typeConf.iconBg }]}
+          >
+            <Icon name={typeConf.icon} size={38} color={typeConf.color} />
+          </View>
+
+          {/* ── Title ── */}
+          {!!config.title && (
+            <Text style={[styles.title, { color: typeConf.color }]}>
+              {config.title}
+            </Text>
+          )}
+
+          {/* ── Message ── */}
+          {!!config.message && (
+            <Text style={styles.message}>{config.message}</Text>
+          )}
+
+          {/* ── Divider ── */}
+          <View
+            style={[styles.divider, { backgroundColor: typeConf.color + '30' }]}
+          />
+
+          {/* ── Buttons ── */}
+          <View
+            style={[
+              styles.btnRow,
+              config.buttons.length === 1 && { justifyContent: 'center' },
+            ]}
+          >
+            {config.buttons.map((btn, idx) => (
+              <TouchableOpacity
+                key={idx}
+                activeOpacity={0.8}
+                style={[
+                  styles.btn,
+                  getButtonStyle(btn.style),
+                  config.buttons.length === 1 && { minWidth: 140 },
+                ]}
+                onPress={() => handleClose(btn)}
+              >
+                <Text style={getButtonTextStyle(btn.style)}>
+                  {btn.text || 'OK'}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        </Animated.View>
+      </View>
+    </Modal>
+  );
+});
+
+/* ─── Host component — mount once in App.js ─────────────── */
+export const CustomAlertBox = () => {
+  const ref = useRef(null);
+
+  // register the singleton
+  React.useEffect(() => {
+    _alertRef = ref.current;
+    return () => {
+      _alertRef = null;
+    };
+  }, []);
+
+  return <CustomAlertInner ref={ref} />;
+};
+
+/* ─── Styles ─────────────────────────────────────────────── */
+const styles = StyleSheet.create({
+  overlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.45)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 24,
+  },
+  card: {
+    width: width - 48,
+    borderRadius: 24,
+    paddingTop: 32,
+    paddingBottom: 20,
+    paddingHorizontal: 24,
+    alignItems: 'center',
+    shadowColor: COLORS.black,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.18,
+    shadowRadius: 16,
+    elevation: 12,
+  },
+  iconWrapper: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  title: {
+    fontSize: 20,
+    fontWeight: '700',
+    textAlign: 'center',
+    marginBottom: 8,
+    letterSpacing: 0.3,
+  },
+  message: {
+    fontSize: 14,
+    color: COLORS.textLight,
+    textAlign: 'center',
+    lineHeight: 22,
+    marginBottom: 4,
+  },
+  divider: {
+    width: '100%',
+    height: 1,
+    marginVertical: 18,
+    borderRadius: 1,
+  },
+  btnRow: {
+    flexDirection: 'row',
+    gap: 10,
+    width: '100%',
+  },
+  btn: {
+    flex: 1,
+    paddingVertical: 13,
+    borderRadius: 14,
+    alignItems: 'center',
+  },
+  btnDefault: {
+    // backgroundColor set dynamically
+  },
+  btnDefaultText: {
+    color: COLORS.white,
+    fontWeight: '700',
+    fontSize: 15,
+  },
+  btnCancel: {
+    backgroundColor: COLORS.border,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  btnCancelText: {
+    color: COLORS.text,
+    fontWeight: '600',
+    fontSize: 15,
+  },
+  btnDestructive: {
+    backgroundColor: COLORS.error,
+  },
+});
