@@ -1,6 +1,7 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { SafeScreen } from '../../components/SafeScreen';
+import AppHeader from '../../components/AppHeader';
 import { useDispatch, useSelector } from 'react-redux';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { logoutUser } from '../../store/authSlice';
@@ -66,10 +67,12 @@ const HomeScreen = () => {
 
   return (
     <SafeScreen style={{ backgroundColor: roleTheme.light }} top={false}>
-      <View style={[styles.header, { backgroundColor: roleTheme.primary, paddingTop: topInset + h(10) }]}>
-        <Text style={styles.welcomeText}>Welcome</Text>
-        <Text style={styles.roleText}>{selectedRole || 'User'}</Text>
-      </View>
+      <AppHeader
+        backgroundColor={roleTheme.primary}
+        paddingTop={topInset + h(10)}
+        title="Welcome"
+        subtitle={selectedRole || 'User'}
+      />
 
       <View style={styles.content}>
         <Text style={[styles.heading, { color: roleTheme.text }]}>Home Screen</Text>
@@ -95,24 +98,7 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
-  header: {
-    paddingTop: h(10),
-    paddingBottom: h(30),
-    paddingHorizontal: w(20),
-    borderBottomLeftRadius: 30,
-    borderBottomRightRadius: 30,
-  },
-  welcomeText: {
-    fontSize: f(16),
-    color: COLORS.white,
-    opacity: 0.9,
-  },
-  roleText: {
-    fontSize: f(32),
-    fontWeight: '800',
-    color: COLORS.white,
-    marginTop: h(4),
-  },
+
   content: {
     flex: 1,
     justifyContent: 'center',
