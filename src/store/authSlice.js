@@ -5,6 +5,7 @@ import {
   removeAuthSession,
 } from '../service/auth/authStorage';
 import authApi from '../service/auth/authApi';
+import COLORS from '../constant/colors';
 
 // THUNK: App start pe disk check
 export const checkStoredToken = createAsyncThunk(
@@ -37,16 +38,24 @@ export const sendOtp = createAsyncThunk(
 
 export const verifyOtp = createAsyncThunk(
   'auth/verifyOtp',
-  async ({ mobile, otp, role }, { rejectWithValue }) => {
+  async ({ mobile, otp, role, roleColor }, { rejectWithValue }) => {
     try {
       const response = await authApi.verifyOtp({ mobile, otp, role });
 
       if (response?.token) {
+        const fallbackColor = {
+          FPO: COLORS.fpoPrimary,
+          Trader: COLORS.traderPrimary,
+          Miller: COLORS.millerPrimary,
+          Corporate: COLORS.corporatePrimary,
+        }[role] || COLORS.fpoSecondary;
+
         const normalizedSession = {
           token: response.token,
           user: response.user || response.data || null,
           refreshToken: response.refreshToken || null,
           selectedRole: role,
+          roleColor: roleColor || fallbackColor,
         };
 
         await saveAuthSession(normalizedSession);
@@ -115,11 +124,15 @@ const authSlice = createSlice({
       .addCase(checkStoredToken.fulfilled, (state, action) => {
         state.token = action.payload?.token || null;
         state.user = action.payload?.user || null;
+        state.selectedRole = action.payload?.selectedRole || null;
+        state.roleColor = action.payload?.roleColor || null;
         state.isAuthChecked = true; // Splash hatne ka signal
       })
       .addCase(checkStoredToken.rejected, state => {
         state.token = null;
         state.user = null;
+        state.selectedRole = null;
+        state.roleColor = null;
         state.isAuthChecked = true;
       })
       .addCase(sendOtp.pending, state => {
@@ -142,6 +155,7 @@ const authSlice = createSlice({
         state.token = action.payload?.token || null;
         state.user = action.payload?.user || null;
         state.selectedRole = action.payload?.selectedRole || null;
+        state.roleColor = action.payload?.roleColor || null;
       })
       .addCase(verifyOtp.rejected, (state, action) => {
         state.verifyOtpLoading = false;
