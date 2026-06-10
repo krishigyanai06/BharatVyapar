@@ -3,7 +3,12 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import AppTabs from './AppTabs';
 import WarehouseScreen from '../../screen/app/WarehouseScreen';
 import FinanceScreen from '../../screen/app/FinanceScreen';
-import AryaShaktiScreen from '../../screen/app/AryaShaktiScreen';
+
+// New static screens for Marketplace & Trades flow
+import CommodityDetailsScreen from '../../screen/app/Marketplace/CommodityDetailsScreen';
+import ReceivedOffersScreen from '../../screen/app/Trades/ReceivedOffersScreen';
+import NegotiationDetailsScreen from '../../screen/app/Trades/NegotiationDetailsScreen';
+import DealDetailsScreen from '../../screen/app/Trades/DealDetailsScreen';
 
 const Stack = createNativeStackNavigator();
 
@@ -13,7 +18,13 @@ export default function AppStack() {
       <Stack.Screen name="MainTabs" component={AppTabs} />
       <Stack.Screen name="WarehouseScreen" component={WarehouseScreen} />
       <Stack.Screen name="FinanceScreen" component={FinanceScreen} />
-      <Stack.Screen name="AryaShaktiScreen" component={AryaShaktiScreen} />
+      
+      {/* Marketplace & Trades flows */}
+      <Stack.Screen name="CommodityDetails" component={CommodityDetailsScreen} />
+      <Stack.Screen name="ReceivedOffers" component={ReceivedOffersScreen} />
+      <Stack.Screen name="NegotiationDetails" component={NegotiationDetailsScreen} />
+      <Stack.Screen name="DealDetails" component={DealDetailsScreen} />
     </Stack.Navigator>
   );
 }
+
