@@ -81,7 +81,7 @@ export default function SellCommodities() {
       showAlert({
         type: 'error',
         title: 'Fields Required',
-        message: 'Please fill out Commodity Name, Quantity, and Selling Price.',
+        message: 'Please fill out Commodity Name, Quantity, and Expected Price.',
       });
       return;
     }
@@ -112,15 +112,19 @@ export default function SellCommodities() {
     <SafeScreen style={{ backgroundColor: theme.light }} top={false} bottom={false}>
       <AppHeader
         backgroundColor={theme.primary}
-        title="Sell Commodity"
-        subtitle="List your harvest & negotiate with buyers"
+        title="Post Sell Offer"
+        subtitle="Publish crop stock details to find buyers"
       />
 
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-        <View style={styles.formCard}>
-          <Text style={[styles.formHeading, { color: theme.primary }]}>Commodity Listing Details</Text>
+        
+        {/* Section 1: Crop Basics */}
+        <View style={styles.sectionCard}>
+          <View style={styles.sectionHeader}>
+            <Icon name="corn" size={20} color={theme.primary} />
+            <Text style={[styles.sectionHeading, { color: theme.primary }]}>Crop Specifications</Text>
+          </View>
 
-          {/* Basic Info */}
           <View style={styles.row}>
             <View style={styles.halfCol}>
               <Text style={styles.inputLabel}>Commodity Name *</Text>
@@ -138,7 +142,7 @@ export default function SellCommodities() {
                 style={styles.textInput}
                 value={type}
                 onChangeText={setType}
-                placeholder="e.g. Lokwan, Yellow"
+                placeholder="e.g. Lokwan, Desi"
                 placeholderTextColor={COLORS.textMuted}
               />
             </View>
@@ -146,7 +150,7 @@ export default function SellCommodities() {
 
           <View style={styles.row}>
             <View style={styles.halfCol}>
-              <Text style={styles.inputLabel}>Quantity *</Text>
+              <Text style={styles.inputLabel}>Available Qty *</Text>
               <TextInput
                 style={styles.textInput}
                 value={quantity}
@@ -157,22 +161,32 @@ export default function SellCommodities() {
               />
             </View>
             <View style={styles.halfCol}>
-              <Text style={styles.inputLabel}>Quantity Unit</Text>
+              <Text style={styles.inputLabel}>Unit</Text>
               <View style={styles.pickerRow}>
                 {['Ton', 'Quintal', 'Kg'].map((u) => (
                   <TouchableOpacity
                     key={u}
                     onPress={() => setUnit(u)}
-                    style={[styles.pickerChip, unit === u && { backgroundColor: theme.primary }]}
+                    style={[
+                      styles.pickerChip,
+                      unit === u && { backgroundColor: theme.primary, borderColor: theme.primary }
+                    ]}
                   >
-                    <Text style={[styles.pickerChipText, unit === u && { color: COLORS.white }]}>{u}</Text>
+                    <Text style={[styles.pickerChipText, unit === u && { color: COLORS.white, fontWeight: '700' }]}>{u}</Text>
                   </TouchableOpacity>
                 ))}
               </View>
             </View>
           </View>
+        </View>
 
-          {/* Pricing Section */}
+        {/* Section 2: Expected Price & Counter Bids */}
+        <View style={styles.sectionCard}>
+          <View style={styles.sectionHeader}>
+            <Icon name="currency-inr" size={20} color={theme.primary} />
+            <Text style={[styles.sectionHeading, { color: theme.primary }]}>Pricing & Counter Bids</Text>
+          </View>
+
           <View style={styles.row}>
             <View style={styles.halfCol}>
               <Text style={styles.inputLabel}>Expected Price *</Text>
@@ -192,33 +206,35 @@ export default function SellCommodities() {
                   <TouchableOpacity
                     key={pu}
                     onPress={() => setSellingPriceUnit(pu)}
-                    style={[styles.pickerChip, sellingPriceUnit === pu && { backgroundColor: theme.primary }]}
+                    style={[
+                      styles.pickerChip,
+                      sellingPriceUnit === pu && { backgroundColor: theme.primary, borderColor: theme.primary }
+                    ]}
                   >
-                    <Text style={[styles.pickerChipText, sellingPriceUnit === pu && { color: COLORS.white }]}>{pu}</Text>
+                    <Text style={[styles.pickerChipText, sellingPriceUnit === pu && { color: COLORS.white, fontWeight: '700' }]}>{pu}</Text>
                   </TouchableOpacity>
                 ))}
               </View>
             </View>
           </View>
 
-          {/* Negotiation Details */}
           <View style={styles.switchRow}>
             <View style={{ flex: 1 }}>
-              <Text style={styles.switchLabel}>Enable Negotiation</Text>
-              <Text style={styles.switchDesc}>Allow buyers to place counter bids</Text>
+              <Text style={styles.switchLabel}>Allow Bidding / Counter Offers</Text>
+              <Text style={styles.switchDesc}>Permit buyers to negotiate the price</Text>
             </View>
             <Switch
               value={isNegotiable}
               onValueChange={setIsNegotiable}
-              trackColor={{ false: '#767577', true: theme.primary + '80' }}
-              thumbColor={isNegotiable ? theme.primary : '#f4f3f4'}
+              trackColor={{ false: '#DEE2E6', true: theme.primary + '80' }}
+              thumbColor={isNegotiable ? theme.primary : '#F1F3F5'}
             />
           </View>
 
           {isNegotiable && (
             <View style={styles.row}>
               <View style={styles.thirdCol}>
-                <Text style={styles.inputLabel}>Min Price Acceptance</Text>
+                <Text style={styles.inputLabel}>Min Price (₹)</Text>
                 <TextInput
                   style={styles.textInput}
                   value={minimumAcceptablePrice}
@@ -229,7 +245,7 @@ export default function SellCommodities() {
                 />
               </View>
               <View style={styles.thirdCol}>
-                <Text style={styles.inputLabel}>Max Counters</Text>
+                <Text style={styles.inputLabel}>Max Rounds</Text>
                 <TextInput
                   style={styles.textInput}
                   value={maxNegotiationRounds}
@@ -239,7 +255,7 @@ export default function SellCommodities() {
                 />
               </View>
               <View style={styles.thirdCol}>
-                <Text style={styles.inputLabel}>Bid Expiry (Hours)</Text>
+                <Text style={styles.inputLabel}>Expiry (Hrs)</Text>
                 <TextInput
                   style={styles.textInput}
                   value={offerExpiryHours}
@@ -250,20 +266,30 @@ export default function SellCommodities() {
               </View>
             </View>
           )}
+        </View>
 
-          {/* Delivery Details */}
+        {/* Section 3: Delivery & Logistics */}
+        <View style={styles.sectionCard}>
+          <View style={styles.sectionHeader}>
+            <Icon name="truck-delivery-outline" size={20} color={theme.primary} />
+            <Text style={[styles.sectionHeading, { color: theme.primary }]}>Logistics & Fulfillment</Text>
+          </View>
+
           <View style={styles.row}>
             <View style={styles.halfCol}>
-              <Text style={styles.inputLabel}>Delivery Type</Text>
+              <Text style={styles.inputLabel}>Delivery Clause</Text>
               <View style={styles.pickerRow}>
                 {['FOR', 'EX_WAREHOUSE'].map((dt) => (
                   <TouchableOpacity
                     key={dt}
                     onPress={() => setDeliveryType(dt)}
-                    style={[styles.pickerChip, deliveryType === dt && { backgroundColor: theme.primary }]}
+                    style={[
+                      styles.pickerChip,
+                      deliveryType === dt && { backgroundColor: theme.primary, borderColor: theme.primary }
+                    ]}
                   >
-                    <Text style={[styles.pickerChipText, deliveryType === dt && { color: COLORS.white }]}>
-                      {dt === 'FOR' ? 'Freight Free (FOR)' : 'Ex-Warehouse'}
+                    <Text style={[styles.pickerChipText, deliveryType === dt && { color: COLORS.white, fontWeight: '700' }]}>
+                      {dt === 'FOR' ? 'Delivered (FOR)' : 'Ex-Warehouse'}
                     </Text>
                   </TouchableOpacity>
                 ))}
@@ -276,19 +302,21 @@ export default function SellCommodities() {
                   <TouchableOpacity
                     key={wType}
                     onPress={() => setWeightType(wType)}
-                    style={[styles.pickerChip, weightType === wType && { backgroundColor: theme.primary }]}
+                    style={[
+                      styles.pickerChip,
+                      weightType === wType && { backgroundColor: theme.primary, borderColor: theme.primary }
+                    ]}
                   >
-                    <Text style={[styles.pickerChipText, weightType === wType && { color: COLORS.white }]}>{wType}</Text>
+                    <Text style={[styles.pickerChipText, weightType === wType && { color: COLORS.white, fontWeight: '700' }]}>{wType}</Text>
                   </TouchableOpacity>
                 ))}
               </View>
             </View>
           </View>
 
-          {/* Location & Address */}
           <View style={styles.row}>
             <View style={styles.halfCol}>
-              <Text style={styles.inputLabel}>Commodity Location</Text>
+              <Text style={styles.inputLabel}>Stock Location</Text>
               <TextInput
                 style={styles.textInput}
                 value={commodityLocation}
@@ -298,7 +326,7 @@ export default function SellCommodities() {
               />
             </View>
             <View style={styles.halfCol}>
-              <Text style={styles.inputLabel}>Listing End Date</Text>
+              <Text style={styles.inputLabel}>Listing Expiry Date</Text>
               <TextInput
                 style={styles.textInput}
                 value={listingEndDate}
@@ -314,51 +342,49 @@ export default function SellCommodities() {
             style={styles.textInput}
             value={billingAddress}
             onChangeText={setBillingAddress}
-            placeholder="Full billing address"
+            placeholder="Seller organization billing details"
             placeholderTextColor={COLORS.textMuted}
           />
 
           {deliveryType === 'EX_WAREHOUSE' && (
             <>
-              <Text style={styles.inputLabel}>Ex-Warehouse Address</Text>
+              <Text style={styles.inputLabel}>Pickup Warehouse Address</Text>
               <TextInput
                 style={styles.textInput}
                 value={exWarehouseAddress}
                 onChangeText={setExWarehouseAddress}
-                placeholder="Mandi or Warehouse complex address"
+                placeholder="Exact warehouse/mandi storage location"
                 placeholderTextColor={COLORS.textMuted}
               />
             </>
           )}
 
-          {/* Logistic Preferences */}
           <View style={styles.switchRow}>
             <View style={{ flex: 1 }}>
-              <Text style={styles.switchLabel}>Escrow Deal Enabled</Text>
-              <Text style={styles.switchDesc}>Payment secured via BharatVyapar partner Escrow</Text>
+              <Text style={styles.switchLabel}>🔐 Secured Escrow Deal</Text>
+              <Text style={styles.switchDesc}>Secure funds in neutral escrow account before dispatch</Text>
             </View>
             <Switch
               value={escrowEnabled}
               onValueChange={setEscrowEnabled}
-              trackColor={{ false: '#767577', true: theme.primary + '80' }}
-              thumbColor={escrowEnabled ? theme.primary : '#f4f3f4'}
+              trackColor={{ false: '#DEE2E6', true: theme.primary + '80' }}
+              thumbColor={escrowEnabled ? theme.primary : '#F1F3F5'}
             />
           </View>
 
           <View style={styles.switchRow}>
             <View style={{ flex: 1 }}>
-              <Text style={styles.switchLabel}>Buyer Transport Allowed</Text>
-              <Text style={styles.switchDesc}>Let buyer arrange logistics and dispatch vehicles</Text>
+              <Text style={styles.switchLabel}>Allow Buyer Arranged Logistics</Text>
+              <Text style={styles.switchDesc}>Buyer has option to supply their own transport</Text>
             </View>
             <Switch
               value={buyerTransportAllowed}
               onValueChange={setBuyerTransportAllowed}
-              trackColor={{ false: '#767577', true: theme.primary + '80' }}
-              thumbColor={buyerTransportAllowed ? theme.primary : '#f4f3f4'}
+              trackColor={{ false: '#DEE2E6', true: theme.primary + '80' }}
+              thumbColor={buyerTransportAllowed ? theme.primary : '#F1F3F5'}
             />
           </View>
 
-          {/* Terms and Remarks */}
           <View style={styles.row}>
             <View style={styles.halfCol}>
               <Text style={styles.inputLabel}>Weight Tolerance</Text>
@@ -366,107 +392,131 @@ export default function SellCommodities() {
                 style={styles.textInput}
                 value={weightTolerance}
                 onChangeText={setWeightTolerance}
-                placeholder="e.g. +/- 2%"
+                placeholder="e.g. +/- 1%"
                 placeholderTextColor={COLORS.textMuted}
               />
             </View>
             <View style={styles.halfCol}>
-              <Text style={styles.inputLabel}>Payment Timeline</Text>
+              <Text style={styles.inputLabel}>Payment Release Clause</Text>
               <TextInput
                 style={styles.textInput}
                 value={paymentTimeline}
                 onChangeText={setPaymentTimeline}
-                placeholder="e.g. Immediate on dispatch"
+                placeholder="e.g. Within 3 days of delivery"
                 placeholderTextColor={COLORS.textMuted}
               />
             </View>
           </View>
+        </View>
 
-          {/* Quality Parameters Array */}
-          <Text style={[styles.sectionSubtitle, { color: theme.primary }]}>Quality Parameters</Text>
-          <View style={styles.paramBox}>
+        {/* Section 4: Quality Parameters & Media */}
+        <View style={styles.sectionCard}>
+          <View style={styles.sectionHeader}>
+            <Icon name="clipboard-check-outline" size={20} color={theme.primary} />
+            <Text style={[styles.sectionHeading, { color: theme.primary }]}>Quality & Lab Assays</Text>
+          </View>
+
+          <Text style={styles.subCardLabel}>Active Crop Quality Parameters</Text>
+          <View style={styles.paramContainer}>
             {qualityParameters.map((param, index) => (
-              <View key={index} style={styles.paramRow}>
-                <Text style={styles.paramText}>{param.name}: <Text style={{ fontWeight: '700' }}>{param.val}</Text></Text>
+              <View key={index} style={styles.paramChipRow}>
+                <View style={styles.paramLeft}>
+                  <Icon name="circle-medium" size={16} color={theme.primary} />
+                  <Text style={styles.paramNameText}>{param.name}:</Text>
+                  <Text style={styles.paramValText}>{param.val}</Text>
+                </View>
                 <TouchableOpacity onPress={() => removeQualityParameter(index)}>
-                  <Icon name="close-circle" size={18} color={COLORS.error} />
+                  <Icon name="close" size={16} color={COLORS.error} />
                 </TouchableOpacity>
               </View>
             ))}
 
-            <View style={styles.paramAddRow}>
+            <View style={styles.paramAddForm}>
               <TextInput
-                style={[styles.textInput, { flex: 1, height: h(34), marginRight: w(6) }]}
-                placeholder="Parameter (e.g. Moisture)"
+                style={[styles.textInput, styles.paramInput]}
+                placeholder="Name (e.g. Moisture)"
                 placeholderTextColor={COLORS.textMuted}
                 value={newParamName}
                 onChangeText={setNewParamName}
               />
               <TextInput
-                style={[styles.textInput, { flex: 1, height: h(34), marginRight: w(6) }]}
-                placeholder="Value (e.g. 10%)"
+                style={[styles.textInput, styles.paramInput]}
+                placeholder="Val (e.g. 10%)"
                 placeholderTextColor={COLORS.textMuted}
                 value={newParamVal}
                 onChangeText={setNewParamVal}
               />
-              <TouchableOpacity onPress={addQualityParameter} style={[styles.paramAddBtn, { backgroundColor: theme.primary }]}>
-                <Icon name="plus" size={18} color={COLORS.white} />
+              <TouchableOpacity onPress={addQualityParameter} style={[styles.paramAddButton, { backgroundColor: theme.primary }]}>
+                <Icon name="plus" size={20} color={COLORS.white} />
               </TouchableOpacity>
             </View>
           </View>
 
-          {/* Document Upload Simulation */}
-          <View style={styles.row}>
+          {/* Media upload buttons */}
+          <View style={[styles.row, { marginTop: h(10) }]}>
             <TouchableOpacity
               onPress={() => {
                 setHasImages(true);
-                showAlert({ type: 'success', title: 'Attached', message: 'Mock commodity images attached.' });
+                showAlert({ type: 'success', title: 'Attached', message: 'Mock commodity stock images attached.' });
               }}
-              style={[styles.fileBtn, { borderColor: theme.primary }]}
+              style={[
+                styles.mediaBtn,
+                { borderColor: theme.primary },
+                hasImages && { backgroundColor: theme.primary + '10' }
+              ]}
             >
-              <Icon name="camera" size={20} color={theme.primary} />
-              <Text style={[styles.fileBtnText, { color: theme.primary }]}>
-                {hasImages ? 'Images Attached' : 'Commodity Images'}
+              <Icon name={hasImages ? "checkbox-marked-circle-outline" : "camera-outline"} size={18} color={theme.primary} />
+              <Text style={[styles.mediaBtnText, { color: theme.primary }]}>
+                {hasImages ? 'Images Added' : 'Add Crop Photos'}
               </Text>
             </TouchableOpacity>
 
             <TouchableOpacity
               onPress={() => {
                 setHasReport(true);
-                showAlert({ type: 'success', title: 'Attached', message: 'Mock Quality Lab report PDF attached.' });
+                showAlert({ type: 'success', title: 'Attached', message: 'Government assay report PDF attached.' });
               }}
-              style={[styles.fileBtn, { borderColor: theme.primary }]}
+              style={[
+                styles.mediaBtn,
+                { borderColor: theme.primary },
+                hasReport && { backgroundColor: theme.primary + '10' }
+              ]}
             >
-              <Icon name="file-pdf-box" size={20} color={theme.primary} />
-              <Text style={[styles.fileBtnText, { color: theme.primary }]}>
-                {hasReport ? 'Report Attached' : 'Quality Report Lab'}
+              <Icon name={hasReport ? "checkbox-marked-circle-outline" : "file-pdf-box"} size={18} color={theme.primary} />
+              <Text style={[styles.mediaBtnText, { color: theme.primary }]}>
+                {hasReport ? 'Report Added' : 'Add Lab Report'}
               </Text>
             </TouchableOpacity>
           </View>
 
-          <Text style={styles.inputLabel}>Remarks / Custom Terms</Text>
+          <Text style={[styles.inputLabel, { marginTop: h(12) }]}>Additional Remarks / Terms</Text>
           <TextInput
-            style={[styles.textInput, { height: h(60), textAlignVertical: 'top' }]}
+            style={[styles.textInput, styles.textArea]}
             multiline
             value={remarks}
             onChangeText={setRemarks}
-            placeholder="e.g. Bags packing, immediate lift required..."
+            placeholder="Any special storage, packing, or transport remarks..."
             placeholderTextColor={COLORS.textMuted}
           />
-
-          {/* Submit Button */}
-          <TouchableOpacity
-            onPress={handlePostListing}
-            style={[styles.submitBtn, { backgroundColor: theme.primary }]}
-            disabled={submitting}
-          >
-            {submitting ? (
-              <ActivityIndicator color={COLORS.white} />
-            ) : (
-              <Text style={styles.submitBtnText}>Post Sell Offer</Text>
-            )}
-          </TouchableOpacity>
         </View>
+
+        {/* Submit Action */}
+        <TouchableOpacity
+          onPress={handlePostListing}
+          style={[styles.submitBtn, { backgroundColor: theme.primary }]}
+          disabled={submitting}
+          activeOpacity={0.8}
+        >
+          {submitting ? (
+            <ActivityIndicator color={COLORS.white} />
+          ) : (
+            <View style={styles.submitBtnRow}>
+              <Icon name="cloud-upload-outline" size={20} color={COLORS.white} />
+              <Text style={styles.submitBtnText}>Publish Sell Listing</Text>
+            </View>
+          )}
+        </TouchableOpacity>
+
       </ScrollView>
     </SafeScreen>
   );
@@ -474,28 +524,42 @@ export default function SellCommodities() {
 
 const styles = StyleSheet.create({
   scrollContent: {
-    padding: w(16),
+    paddingHorizontal: w(14),
+    paddingTop: h(14),
     paddingBottom: h(40),
   },
-  formCard: {
+  sectionCard: {
     backgroundColor: COLORS.white,
-    borderRadius: 16,
+    borderRadius: mw(14),
     padding: w(16),
-    elevation: 2,
-    shadowColor: '#000',
+    marginBottom: h(14),
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    shadowColor: '#1A202C',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
+    shadowOpacity: 0.04,
     shadowRadius: 8,
+    elevation: 2,
   },
-  formHeading: {
-    fontSize: f(16),
+  sectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: w(8),
+    borderBottomWidth: 1,
+    borderBottomColor: '#EDF2F7',
+    paddingBottom: h(10),
+    marginBottom: h(14),
+  },
+  sectionHeading: {
+    fontSize: f(14),
     fontWeight: '800',
-    marginBottom: h(16),
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
   },
   row: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginBottom: h(14),
+    marginBottom: h(12),
     gap: w(10),
   },
   halfCol: {
@@ -512,13 +576,13 @@ const styles = StyleSheet.create({
   },
   textInput: {
     borderWidth: 1.5,
-    borderColor: '#E9ECEF',
+    borderColor: '#E2E8F0',
     borderRadius: mw(8),
     paddingHorizontal: w(10),
     height: h(40),
     fontSize: f(13),
     color: COLORS.text,
-    backgroundColor: '#F8F9FA',
+    backgroundColor: '#F8FAFC',
   },
   pickerRow: {
     flexDirection: 'row',
@@ -529,10 +593,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1.5,
-    borderColor: '#E9ECEF',
+    borderColor: '#E2E8F0',
     borderRadius: mw(8),
     paddingVertical: h(8),
-    backgroundColor: '#F8F9FA',
+    backgroundColor: '#F8FAFC',
   },
   pickerChipText: {
     fontSize: f(11),
@@ -543,12 +607,12 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    backgroundColor: '#F8F9FA',
-    borderRadius: mw(8),
-    padding: mw(10),
-    marginBottom: h(14),
+    backgroundColor: '#F8FAFC',
+    borderRadius: mw(10),
+    padding: mw(12),
+    marginVertical: h(10),
     borderWidth: 1,
-    borderColor: '#E9ECEF',
+    borderColor: '#E2E8F0',
   },
   switchLabel: {
     fontSize: f(12),
@@ -560,70 +624,102 @@ const styles = StyleSheet.create({
     color: COLORS.textMuted,
     marginTop: h(2),
   },
-  sectionSubtitle: {
-    fontSize: f(13),
-    fontWeight: '800',
-    marginTop: h(6),
+  subCardLabel: {
+    fontSize: f(12),
+    fontWeight: '700',
+    color: COLORS.text,
     marginBottom: h(8),
   },
-  paramBox: {
-    backgroundColor: '#F8F9FA',
-    borderRadius: mw(8),
+  paramContainer: {
+    backgroundColor: '#F8FAFC',
+    borderRadius: mw(10),
     padding: mw(10),
-    marginBottom: h(14),
-    borderWidth: 1.5,
-    borderColor: '#E9ECEF',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
   },
-  paramRow: {
+  paramChipRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingVertical: h(6),
+    paddingVertical: h(8),
     borderBottomWidth: 1,
-    borderBottomColor: '#E9ECEF',
+    borderBottomColor: '#EDF2F7',
   },
-  paramText: {
-    fontSize: f(12),
-    color: COLORS.text,
-  },
-  paramAddRow: {
+  paramLeft: {
     flexDirection: 'row',
-    marginTop: h(8),
     alignItems: 'center',
   },
-  paramAddBtn: {
-    width: mw(34),
-    height: mw(34),
+  paramNameText: {
+    fontSize: f(12),
+    color: COLORS.textLight,
+    marginRight: w(4),
+  },
+  paramValText: {
+    fontSize: f(12),
+    fontWeight: '700',
+    color: COLORS.text,
+  },
+  paramAddForm: {
+    flexDirection: 'row',
+    marginTop: h(10),
+    gap: w(6),
+    alignItems: 'center',
+  },
+  paramInput: {
+    flex: 1,
+    height: h(36),
+  },
+  paramAddButton: {
+    width: mw(36),
+    height: mw(36),
     borderRadius: mw(8),
     alignItems: 'center',
     justifyContent: 'center',
   },
-  fileBtn: {
+  mediaBtn: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1.5,
     borderStyle: 'dashed',
-    borderRadius: mw(8),
-    paddingVertical: h(10),
+    borderRadius: mw(10),
+    paddingVertical: h(12),
     gap: w(6),
-    backgroundColor: '#F8F9FA',
+    backgroundColor: '#F8FAFC',
   },
-  fileBtnText: {
+  mediaBtnText: {
     fontSize: f(12),
     fontWeight: '700',
   },
+  textArea: {
+    height: h(64),
+    textAlignVertical: 'top',
+    paddingTop: h(10),
+    marginTop: h(4),
+  },
   submitBtn: {
-    height: h(46),
-    borderRadius: mw(10),
+    height: h(48),
+    borderRadius: mw(12),
     alignItems: 'center',
     justifyContent: 'center',
-    marginTop: h(20),
+    marginVertical: h(10),
+    shadowColor: '#1A202C',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 3,
+  },
+  submitBtnRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: w(8),
   },
   submitBtnText: {
     color: COLORS.white,
-    fontSize: f(15),
-    fontWeight: '700',
+    fontSize: f(14),
+    fontWeight: '800',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
   },
 });

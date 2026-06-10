@@ -50,7 +50,7 @@ const TRADES_DATA = [
   },
 ];
 
-export default function TradesScreen() {
+export default function TradesScreen({ navigation }) {
   const { user, selectedRole: stateRole } = useSelector(state => state.auth);
   const selectedRole = stateRole || user?.role || 'FPO';
   const theme = ROLE_THEMES[selectedRole] || ROLE_THEMES.FPO;
@@ -92,7 +92,12 @@ export default function TradesScreen() {
       <ScrollView contentContainerStyle={styles.listContent} showsVerticalScrollIndicator={false}>
         {filteredTrades.length > 0 ? (
           filteredTrades.map((trade) => (
-            <View key={trade.id} style={styles.tradeCard}>
+            <TouchableOpacity 
+              key={trade.id} 
+              style={styles.tradeCard}
+              onPress={() => navigation.navigate('DealDetails', { dealId: trade.id })}
+              activeOpacity={0.9}
+            >
               <View style={styles.tradeHeader}>
                 <View>
                   <Text style={styles.tradeId}>{trade.id}</Text>
@@ -134,16 +139,15 @@ export default function TradesScreen() {
               </View>
               
               <View style={styles.footerActions}>
-                <TouchableOpacity style={styles.actionButton}>
-                  <Icon name="chat-outline" size={16} color={theme.primary} />
-                  <Text style={[styles.actionBtnText, { color: theme.primary }]}>Chat</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={[styles.actionButton, styles.borderLeft]}>
-                  <Icon name="file-document-outline" size={16} color={theme.primary} />
-                  <Text style={[styles.actionBtnText, { color: theme.primary }]}>View Invoice</Text>
+                <TouchableOpacity 
+                  style={styles.actionButton}
+                  onPress={() => navigation.navigate('DealDetails', { dealId: trade.id })}
+                >
+                  <Icon name="eye-outline" size={16} color={theme.primary} />
+                  <Text style={[styles.actionBtnText, { color: theme.primary }]}>Track Deal Progress</Text>
                 </TouchableOpacity>
               </View>
-            </View>
+            </TouchableOpacity>
           ))
         ) : (
           <View style={styles.emptyState}>
