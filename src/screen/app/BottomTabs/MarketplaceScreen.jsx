@@ -24,21 +24,20 @@ const ROLE_THEMES = {
 };
 
 const INITIAL_OFFERS = [
-  { id: '1', type: 'sell', crop: 'Wheat', variety: 'Lokwan', quantity: '50 MT', price: '2,400', location: 'Indore, MP', grade: 'A', moisture: '11%' },
-  { id: '2', type: 'sell', crop: 'Soybean', variety: 'JS-335', quantity: '80 MT', price: '4,750', location: 'Ujjain, MP', grade: 'A', moisture: '10%' },
-  { id: '3', type: 'buy', crop: 'Wheat', variety: 'Sharbati', quantity: '100 MT', price: '2,650', location: 'Bhopal, MP', grade: 'A+', moisture: '11.5%' },
-  { id: '4', type: 'buy', crop: 'Chana', variety: 'Desi', quantity: '40 MT', price: '5,100', location: 'Kota, RJ', grade: 'B', moisture: '12%' },
-  { id: '5', type: 'sell', crop: 'Mustard', variety: 'Pusa', quantity: '60 MT', price: '5,450', location: 'Alwar, RJ', grade: 'A', moisture: '9%' },
+  { id: '1', type: 'sell', crop: 'Wheat', variety: 'Lokwan', quantity: '50 MT', price: '2,400', location: 'Indore, MP', grade: 'A', moisture: '11%', publisherName: 'Malwa Farmers FPO', publisherRole: 'FPO' },
+  { id: '2', type: 'sell', crop: 'Soybean', variety: 'JS-335', quantity: '80 MT', price: '4,750', location: 'Ujjain, MP', grade: 'A', moisture: '10%', publisherName: 'Patidar Trading Co.', publisherRole: 'Trader' },
+  { id: '3', type: 'sell', crop: 'Wheat', variety: 'Sharbati', quantity: '100 MT', price: '2,650', location: 'Bhopal, MP', grade: 'A+', moisture: '11.5%', publisherName: 'Narmada Valley FPO', publisherRole: 'FPO' },
+  { id: '4', type: 'sell', crop: 'Chana', variety: 'Desi', quantity: '40 MT', price: '5,100', location: 'Kota, RJ', grade: 'B', moisture: '12%', publisherName: 'Rajasthan Agro Corp', publisherRole: 'Trader' },
+  { id: '5', type: 'sell', crop: 'Mustard', variety: 'Pusa', quantity: '60 MT', price: '5,450', location: 'Alwar, RJ', grade: 'A', moisture: '9%', publisherName: 'Hadoti Agro FPO', publisherRole: 'FPO' },
 ];
 
 const CROPS = ['All', 'Wheat', 'Soybean', 'Chana', 'Mustard', 'Rice'];
 
-export default function MarketplaceScreen() {
+export default function MarketplaceScreen({ navigation }) {
   const { user, selectedRole: stateRole } = useSelector(state => state.auth);
   const selectedRole = stateRole || user?.role || 'FPO';
   const theme = ROLE_THEMES[selectedRole] || ROLE_THEMES.FPO;
 
-  const [activeTab, setActiveTab] = useState('sell'); // sell or buy
   const [selectedCrop, setSelectedCrop] = useState('All');
   const [offers, setOffers] = useState(INITIAL_OFFERS);
   
@@ -48,17 +47,49 @@ export default function MarketplaceScreen() {
   const [bidPrice, setBidPrice] = useState('');
   const [bidQuantity, setBidQuantity] = useState('');
 
-  // Post offer states
-  const [postModalVisible, setPostModalVisible] = useState(false);
-  const [newCrop, setNewCrop] = useState('Wheat');
-  const [newVariety, setNewVariety] = useState('');
-  const [newQty, setNewQty] = useState('');
-  const [newPrice, setNewPrice] = useState('');
-  const [newLocation, setNewLocation] = useState('');
-
   const filteredOffers = offers.filter(
-    o => o.type === activeTab && (selectedCrop === 'All' || o.crop === selectedCrop)
+    o => (selectedCrop === 'All' || o.crop === selectedCrop)
   );
+
+  const handleCardPress = (offer) => {
+    // Map offer schema to details listing schema
+    const item = {
+      id: `COM-${offer.id}09`,
+      commodityName: offer.crop,
+      type: offer.variety,
+      quantity: offer.quantity.split(' ')[0],
+      unit: offer.quantity.split(' ')[1] || 'MT',
+      sellingPrice: Number(offer.price.replace(',', '')),
+      sellingPriceUnit: 'Qt',
+      weightType: 'Net Weight',
+      listingEndDate: '2026-07-15',
+      weightTolerance: '+/- 1%',
+      billingAddress: 'Mandi Yard Complex, ' + offer.location,
+      exWarehouseAddress: 'Mandi Yard Complex, ' + offer.location,
+      paymentTimeline: 'Within 3 days of delivery confirmation',
+      remarks: `Quality grade is ${offer.grade} with moisture level ${offer.moisture}.`,
+      deliveryType: 'FOR',
+      isNegotiable: true,
+      minimumAcceptablePrice: Number(offer.price.replace(',', '')) - 100,
+      maxNegotiationRounds: 5,
+      offerExpiryHours: 24,
+      commodityLocation: offer.location,
+      escrowEnabled: true,
+      buyerTransportAllowed: true,
+      grade: offer.grade,
+      moisture: offer.moisture,
+      qualityParameters: [
+        { name: 'Moisture', val: offer.moisture },
+        { name: 'Foreign Matter', val: '1.0%' },
+        { name: 'Grade Rating', val: offer.grade },
+      ],
+      sellerName: offer.publisherName || 'Vikas Agro FPO',
+      sellerRating: 4.6,
+      sellerCompletedTrades: 89,
+      isSellerVerified: true,
+    };
+    navigation.navigate('CommodityDetails', { item });
+  };
 
   const openBidModal = (offer) => {
     setSelectedOffer(offer);
@@ -80,38 +111,6 @@ export default function MarketplaceScreen() {
     });
   };
 
-  const handlePostOffer = () => {
-    if (!newVariety || !newQty || !newPrice || !newLocation) {
-      showAlert({ type: 'error', title: 'Missing Information', message: 'Please fill in all fields.' });
-      return;
-    }
-    const newObj = {
-      id: String(offers.length + 1),
-      type: activeTab,
-      crop: newCrop,
-      variety: newVariety,
-      quantity: `${newQty} MT`,
-      price: newPrice,
-      location: newLocation,
-      grade: 'A',
-      moisture: '12%',
-    };
-    setOffers([newObj, ...offers]);
-    setPostModalVisible(false);
-    
-    // Reset inputs
-    setNewVariety('');
-    setNewQty('');
-    setNewPrice('');
-    setNewLocation('');
-
-    showAlert({
-      type: 'success',
-      title: 'Offer Published',
-      message: `Your ${activeTab === 'sell' ? 'sell listing' : 'buy requirement'} has been posted successfully!`,
-    });
-  };
-
   return (
     <SafeScreen style={{ backgroundColor: theme.light }} top={false} bottom={false}>
       <AppHeader
@@ -120,25 +119,7 @@ export default function MarketplaceScreen() {
         subtitle="Trade crops at best market prices"
       />
 
-      {/* Tabs Selector */}
-      <View style={styles.tabBar}>
-        <TouchableOpacity
-          style={[styles.tabButton, activeTab === 'sell' && styles.activeTabBorder]}
-          onPress={() => { setActiveTab('sell'); setSelectedCrop('All'); }}
-        >
-          <Text style={[styles.tabText, activeTab === 'sell' && { color: theme.primary, fontWeight: '700' }]}>
-            🌾 Crop Listings (Sell)
-          </Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.tabButton, activeTab === 'buy' && styles.activeTabBorder]}
-          onPress={() => { setActiveTab('buy'); setSelectedCrop('All'); }}
-        >
-          <Text style={[styles.tabText, activeTab === 'buy' && { color: theme.primary, fontWeight: '700' }]}>
-            🛒 Buy Requirements
-          </Text>
-        </TouchableOpacity>
-      </View>
+
 
       {/* Crop Filter Chips */}
       <View style={styles.chipsWrapper}>
@@ -163,9 +144,37 @@ export default function MarketplaceScreen() {
       <ScrollView contentContainerStyle={styles.listContent} showsVerticalScrollIndicator={false}>
         {filteredOffers.length > 0 ? (
           filteredOffers.map((offer) => (
-            <View key={offer.id} style={styles.offerCard}>
+            <TouchableOpacity 
+              key={offer.id} 
+              style={styles.offerCard}
+              onPress={() => handleCardPress(offer)}
+              activeOpacity={0.9}
+            >
+              {/* Publisher Row */}
+              <View style={styles.publisherRow}>
+                <View style={styles.publisherInfo}>
+                  <Icon name="account-circle-outline" size={14} color={COLORS.textMuted} />
+                  <Text style={styles.publisherName}>{offer.publisherName}</Text>
+                </View>
+                <View 
+                  style={[
+                    styles.roleBadge, 
+                    { backgroundColor: (ROLE_THEMES[offer.publisherRole]?.primary || theme.primary) + '15' }
+                  ]}
+                >
+                  <Text 
+                    style={[
+                      styles.roleBadgeText, 
+                      { color: ROLE_THEMES[offer.publisherRole]?.primary || theme.primary }
+                    ]}
+                  >
+                    {offer.publisherRole}
+                  </Text>
+                </View>
+              </View>
+
               <View style={styles.offerHeader}>
-                <View>
+                <View style={{ marginTop: h(4) }}>
                   <Text style={styles.offerCrop}>{offer.crop} ({offer.variety})</Text>
                   <Text style={styles.offerLocation}>📍 {offer.location}</Text>
                 </View>
@@ -193,14 +202,14 @@ export default function MarketplaceScreen() {
 
               <TouchableOpacity
                 style={[styles.bidButton, { backgroundColor: theme.primary }]}
-                onPress={() => openBidModal(offer)}
+                onPress={() => handleCardPress(offer)}
                 activeOpacity={0.8}
               >
                 <Text style={styles.bidButtonText}>
-                  {activeTab === 'sell' ? '🤝 Place Buy Bid' : '💰 Submit Sell Offer'}
+                  View Details & Bid
                 </Text>
               </TouchableOpacity>
-            </View>
+            </TouchableOpacity>
           ))
         ) : (
           <View style={styles.emptyState}>
@@ -209,15 +218,6 @@ export default function MarketplaceScreen() {
           </View>
         )}
       </ScrollView>
-
-      {/* Floating Action Button */}
-      <TouchableOpacity
-        style={[styles.fab, { backgroundColor: theme.primary }]}
-        onPress={() => setPostModalVisible(true)}
-        activeOpacity={0.8}
-      >
-        <Icon name="plus" size={24} color={COLORS.white} />
-      </TouchableOpacity>
 
       {/* Bid Modal */}
       <Modal visible={bidModalVisible} transparent animationType="slide" onRequestClose={() => setBidModalVisible(false)}>
@@ -260,81 +260,6 @@ export default function MarketplaceScreen() {
                 onPress={handlePlaceBid}
               >
                 <Text style={styles.submitBtnText}>Submit Bid</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
-
-      {/* Post Offer Modal */}
-      <Modal visible={postModalVisible} transparent animationType="slide" onRequestClose={() => setPostModalVisible(false)}>
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>
-              {activeTab === 'sell' ? 'Post Sell Listing' : 'Post Buy Requirement'}
-            </Text>
-
-            <Text style={styles.inputLabel}>Select Crop</Text>
-            <View style={styles.dropdownSelector}>
-              {['Wheat', 'Soybean', 'Chana', 'Mustard', 'Rice'].map((c) => (
-                <TouchableOpacity
-                  key={c}
-                  style={[styles.dropdownChip, newCrop === c && { backgroundColor: theme.primary }]}
-                  onPress={() => setNewCrop(c)}
-                >
-                  <Text style={[styles.dropdownChipText, newCrop === c && { color: COLORS.white }]}>
-                    {c}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-
-            <Text style={styles.inputLabel}>Variety</Text>
-            <TextInput
-              style={styles.modalInput}
-              value={newVariety}
-              onChangeText={setNewVariety}
-              placeholder="e.g. Lokwan, Desi"
-            />
-
-            <Text style={styles.inputLabel}>Quantity (MT)</Text>
-            <TextInput
-              style={styles.modalInput}
-              keyboardType="numeric"
-              value={newQty}
-              onChangeText={setNewQty}
-              placeholder="e.g. 50"
-            />
-
-            <Text style={styles.inputLabel}>Expected Price (₹/Qtl)</Text>
-            <TextInput
-              style={styles.modalInput}
-              keyboardType="numeric"
-              value={newPrice}
-              onChangeText={setNewPrice}
-              placeholder="e.g. 2500"
-            />
-
-            <Text style={styles.inputLabel}>Location</Text>
-            <TextInput
-              style={styles.modalInput}
-              value={newLocation}
-              onChangeText={setNewLocation}
-              placeholder="e.g. Indore, MP"
-            />
-
-            <View style={styles.modalActions}>
-              <TouchableOpacity
-                style={[styles.modalBtn, styles.cancelBtn]}
-                onPress={() => setPostModalVisible(false)}
-              >
-                <Text style={styles.cancelBtnText}>Cancel</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.modalBtn, { backgroundColor: theme.primary }]}
-                onPress={handlePostOffer}
-              >
-                <Text style={styles.submitBtnText}>Post Now</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -567,5 +492,33 @@ const styles = StyleSheet.create({
     fontSize: f(11),
     fontWeight: '600',
     color: COLORS.textLight,
+  },
+  publisherRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: h(8),
+    borderBottomWidth: 1,
+    borderBottomColor: '#F1F3F5',
+    paddingBottom: h(6),
+  },
+  publisherInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: w(4),
+  },
+  publisherName: {
+    fontSize: f(11),
+    fontWeight: '700',
+    color: COLORS.textMuted,
+  },
+  roleBadge: {
+    paddingHorizontal: w(6),
+    paddingVertical: h(2),
+    borderRadius: 6,
+  },
+  roleBadgeText: {
+    fontSize: f(9),
+    fontWeight: '800',
   },
 });

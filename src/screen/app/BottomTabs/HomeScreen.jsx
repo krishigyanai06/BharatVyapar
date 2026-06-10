@@ -49,7 +49,6 @@ const ROLE_CONFIGS = {
     actions: [
       { name: 'Book Storage', icon: 'warehouse', screen: 'WarehouseScreen' },
       { name: 'Apply Loan', icon: 'cash-refund', screen: 'FinanceScreen' },
-      { name: 'Farm Monitor', icon: 'satellite-variant', screen: 'AryaShaktiScreen' },
       { name: 'Marketplace', icon: 'cart', tab: 'Market' },
     ],
   },
@@ -63,7 +62,6 @@ const ROLE_CONFIGS = {
       { name: 'Locate Storage', icon: 'warehouse', screen: 'WarehouseScreen' },
       { name: 'Trade Finance', icon: 'cash-refund', screen: 'FinanceScreen' },
       { name: 'Market Intel', icon: 'chart-box-outline', tab: 'Market' },
-      { name: 'Farm Monitor', icon: 'satellite-variant', screen: 'AryaShaktiScreen' },
     ],
   },
   Miller: {
@@ -76,7 +74,6 @@ const ROLE_CONFIGS = {
       { name: 'Factory Storage', icon: 'warehouse', screen: 'WarehouseScreen' },
       { name: 'Grain Purchase', icon: 'cart', tab: 'Market' },
       { name: 'Capital Loan', icon: 'cash-refund', screen: 'FinanceScreen' },
-      { name: 'Farm Monitor', icon: 'satellite-variant', screen: 'AryaShaktiScreen' },
     ],
   },
   Corporate: {
@@ -89,7 +86,6 @@ const ROLE_CONFIGS = {
       { name: 'Bulk Storage', icon: 'warehouse', screen: 'WarehouseScreen' },
       { name: 'Procure Grains', icon: 'cart', tab: 'Market' },
       { name: 'Credit Limit', icon: 'cash-refund', screen: 'FinanceScreen' },
-      { name: 'Supplier Farms', icon: 'satellite-variant', screen: 'AryaShaktiScreen' },
     ],
   },
 };
@@ -188,15 +184,7 @@ export default function HomeScreen({ navigation }) {
         </View>
 
         {/* AI recommendation widget */}
-        <View style={[styles.recommendationCard, { borderLeftColor: roleTheme.primary }]}>
-          <View style={styles.recHeader}>
-            <Icon name="robot" size={20} color={roleTheme.primary} />
-            <Text style={[styles.recTitle, { color: roleTheme.primary }]}>Arya Shakti AI Suggestion</Text>
-          </View>
-          <Text style={styles.recContent}>
-            Wheat prices are projected to rise by 3-5% next week in Western MP due to tight market supply. Consider holding stock in storage for short-term gains.
-          </Text>
-        </View>
+        
       </ScrollView>
     </SafeScreen>
   );
