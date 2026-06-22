@@ -214,9 +214,13 @@ export default function SendOtp({ route, navigation }) {
           <View style={styles.stickyFooter}>
             <Animated.View style={{ transform: [{ scale: btnScale }] }}>
               <TouchableOpacity
-                style={[styles.btn, { backgroundColor: roleColor }]}
+                style={[
+                  styles.btn,
+                  { backgroundColor: roleColor },
+                  (mobile.length !== 10 || sendOtpLoading) && styles.btnDisabled,
+                ]}
                 onPress={handleLoginWithOtp}
-                disabled={sendOtpLoading}
+                disabled={mobile.length !== 10 || sendOtpLoading}
                 activeOpacity={0.9}
               >
                 {sendOtpLoading ? (
@@ -408,6 +412,9 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.2,
     shadowRadius: 12,
     elevation: 6,
+  },
+  btnDisabled: {
+    opacity: 0.5,
   },
   btnText: {
     color: COLORS.white,

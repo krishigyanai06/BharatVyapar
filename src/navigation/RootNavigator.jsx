@@ -1,6 +1,7 @@
 import React, { useEffect } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { NavigationContainer } from '@react-navigation/native';
+import { selectAuthToken, selectUser, selectIsAuthChecked } from '../store/authSelectors';
 
 import { checkStoredToken, clearAuth } from '../store/authSlice';
 import { setUnauthorizedCallback } from '../service/api';
@@ -11,7 +12,11 @@ import AppStack from './AppStack/AppStack';
 
 export default function RootNavigator() {
   const dispatch = useDispatch();
-  const { token, user, isAuthChecked } = useSelector(state => state.auth);
+  // PERFORMANCE FIX: Three separate subscriptions instead of one whole-slice
+  // selector. Each only re-renders RootNavigator when its specific field changes.
+  const token         = useSelector(selectAuthToken);
+  const user          = useSelector(selectUser);
+  const isAuthChecked = useSelector(selectIsAuthChecked);
 
   const isAuthenticated = Boolean(token && user);
 

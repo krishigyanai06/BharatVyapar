@@ -65,6 +65,12 @@ yarn-error.log
 
 # testing
 /coverage
+__tests__/
+__test__/
+
+# Markdown & Text files
+*.md
+*.txt
 
 # Yarn
 .yarn/*

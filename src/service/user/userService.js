@@ -36,7 +36,7 @@ export const syncUserToDisplayData = user => ({
   village:        user?.village      || '',
   district:       user?.district     || '',
   state:          user?.state        || '',
-  profileImage:   user?.profileImage || null,
+  profileImage:   findDocumentUrl(user?.profileImage),
   shopLicense:    user?.shopLicense  || null,
   gstCertificate: user?.GSTCertificate || user?.gstCertificate || null,
   panCard:        user?.PANCard      || user?.panCard          || null,
@@ -80,7 +80,7 @@ export const validateAndExtractErrors = modalForm => {
   return { isValid, errors };
 };
 
-const findDocumentUrl = value => {
+function findDocumentUrl(value) {
   if (!value) return null;
   if (typeof value === 'string') return value;
   if (Array.isArray(value)) {
@@ -96,12 +96,12 @@ const findDocumentUrl = value => {
     if (typeof value[key] === 'string' && value[key]) return value[key];
   }
 
-  for (const key of ['data', 'file', 'document', 'result']) {
+  for (const key of ['data', 'file', 'files', 'document', 'result']) {
     const url = findDocumentUrl(value[key]);
     if (url) return url;
   }
   return null;
-};
+}
 
 export const viewDocumentByType = async (type, localUrl) => {
   try {
@@ -110,8 +110,13 @@ export const viewDocumentByType = async (type, localUrl) => {
       return { success: true };
     }
 
+    console.log(`[viewDocumentByType] Fetching private file for type: ${type}`);
     const res = await userApi.getPrivateFile({ type });
+    console.log(`[viewDocumentByType] API Response:`, JSON.stringify(res, null, 2));
+    
     const url = findDocumentUrl(res);
+    console.log(`[viewDocumentByType] Extracted URL:`, url);
+
     if (url) {
       await viewDocument(url);
       return { success: true };

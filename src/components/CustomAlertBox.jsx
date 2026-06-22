@@ -15,6 +15,7 @@ import {
 } from 'react-native';
 import Icon from 'react-native-vector-icons/Ionicons';
 import COLORS from '../constant/colors';
+import { getFriendlyErrorMessage } from '../utils/errorUtils';
 
 const { width } = Dimensions.get('window');
 
@@ -86,7 +87,7 @@ const CustomAlertInner = forwardRef((_, ref) => {
       setConfig({
         type: options.type || 'info',
         title: options.title || '',
-        message: options.message || '',
+        message: options.message ? getFriendlyErrorMessage(options.message) : '',
         buttons:
           options.buttons && options.buttons.length > 0
             ? options.buttons
@@ -142,6 +143,26 @@ const CustomAlertInner = forwardRef((_, ref) => {
     return styles.btnDefaultText;
   };
 
+  const getDynamicBtnStyle = btn => {
+    const text = btn?.text || 'OK';
+    const textLength = text.length;
+    const horizontalPadding = Math.max(6, 20 - textLength);
+    const verticalPadding = textLength > 10 ? 10 : 13;
+    return {
+      paddingHorizontal: horizontalPadding,
+      paddingVertical: verticalPadding,
+    };
+  };
+
+  const getDynamicBtnTextStyle = btn => {
+    const text = btn?.text || 'OK';
+    const textLength = text.length;
+    const fontSize = textLength > 12 ? 12 : textLength > 8 ? 13.5 : 15;
+    return {
+      fontSize,
+    };
+  };
+
   return (
     <Modal
       visible={visible}
@@ -183,29 +204,37 @@ const CustomAlertInner = forwardRef((_, ref) => {
           />
 
           {/* ── Buttons ── */}
-          <View
-            style={[
-              styles.btnRow,
-              config.buttons.length === 1 && { justifyContent: 'center' },
-            ]}
-          >
-            {config.buttons.map((btn, idx) => (
-              <TouchableOpacity
-                key={idx}
-                activeOpacity={0.8}
+          {(() => {
+            const isVertical = config.buttons.length > 3 || config.buttons.some(btn => btn.text && btn.text.length > 16);
+            return (
+              <View
                 style={[
-                  styles.btn,
-                  getButtonStyle(btn.style),
-                  config.buttons.length === 1 && { minWidth: 140 },
+                  styles.btnRow,
+                  isVertical ? { flexDirection: 'column' } : { flexDirection: 'row' },
+                  config.buttons.length === 1 && { justifyContent: 'center' },
                 ]}
-                onPress={() => handleClose(btn)}
               >
-                <Text style={getButtonTextStyle(btn.style)}>
-                  {btn.text || 'OK'}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </View>
+                {config.buttons.map((btn, idx) => (
+                  <TouchableOpacity
+                    key={idx}
+                    activeOpacity={0.8}
+                    style={[
+                      styles.btn,
+                      getButtonStyle(btn.style),
+                      getDynamicBtnStyle(btn),
+                      isVertical ? { width: '100%', flex: 0 } : { flex: 1 },
+                      config.buttons.length === 1 && { minWidth: 140 },
+                    ]}
+                    onPress={() => handleClose(btn)}
+                  >
+                    <Text style={[getButtonTextStyle(btn.style), getDynamicBtnTextStyle(btn)]}>
+                      {btn.text || 'OK'}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            );
+          })()}
         </Animated.View>
       </View>
     </Modal>
@@ -269,12 +298,12 @@ const styles = StyleSheet.create({
     color: COLORS.textLight,
     textAlign: 'center',
     lineHeight: 22,
-    marginBottom: 4,
+    marginBottom: 12,
   },
   divider: {
     width: '100%',
     height: 1,
-    marginVertical: 18,
+    marginVertical: 22,
     borderRadius: 1,
   },
   btnRow: {

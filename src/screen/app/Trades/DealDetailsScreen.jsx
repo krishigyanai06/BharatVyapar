@@ -11,6 +11,7 @@ import {
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useSelector } from 'react-redux';
 import { useFocusEffect } from '@react-navigation/native';
+import { selectUser, selectSelectedRole } from '../../../store/authSelectors';
 import { SafeScreen } from '../../../components/SafeScreen';
 import AppHeader from '../../../components/AppHeader';
 import COLORS from '../../../constant/colors';
@@ -47,7 +48,10 @@ function formatDate(dateStr) {
 }
 
 export default function DealDetailsScreen({ route, navigation }) {
-  const { user, selectedRole: stateRole } = useSelector(state => state.auth);
+  // PERFORMANCE FIX: Two granular selectors — DealDetailsScreen only re-renders
+  // when user or selectedRole change, not on profileLoading or other auth fields.
+  const user      = useSelector(selectUser);
+  const stateRole = useSelector(selectSelectedRole);
   const selectedRole = stateRole || user?.role || 'FPO';
   const theme = ROLE_THEMES[selectedRole] || ROLE_THEMES.FPO;
 
@@ -94,10 +98,12 @@ export default function DealDetailsScreen({ route, navigation }) {
   const routeRole = route?.params?.role;
   const isBuyer  = routeRole
     ? routeRole === 'buyer'
-    : !!(deal && userId && String(deal.buyerId  || deal.buyer?.id  || deal.buyer?._id)  === String(userId));
+    : !!(deal && userId &&
+        String(deal.buyerId  || deal.buyer_id  || deal.buyer?.id  || deal.buyer?._id)  === String(userId));
   const isSeller = routeRole
     ? routeRole === 'seller'
-    : !!(deal && userId && String(deal.sellerId || deal.seller?.id || deal.seller?._id) === String(userId));
+    : !!(deal && userId &&
+        String(deal.sellerId || deal.seller_id || deal.seller?.id || deal.seller?._id) === String(userId));
 
   // Escrow action handler
   const handleEscrowUpdate = (newStatus, confirmTitle, confirmMsg) => {
@@ -235,7 +241,9 @@ export default function DealDetailsScreen({ route, navigation }) {
   const finalPrice    = deal?.finalPrice    || deal?.price    || 0;
   const finalQty      = deal?.finalQuantity || deal?.quantity || 0;
   const totalValue    = deal?.totalValue    || (finalPrice * finalQty);
-  const commodityName = deal?.commodity?.name || route?.params?.item?.commodityName || '—';
+  // Backend sends commodityName (not name) on the commodity object
+  const commodityName = deal?.commodity?.commodityName || deal?.commodity?.name ||
+                        route?.params?.item?.commodityName || route?.params?.item?.name || '—';
   const tradeType     = deal?.tradeType || 'FOR';
 
   return (
@@ -291,8 +299,9 @@ export default function DealDetailsScreen({ route, navigation }) {
               <Text style={styles.commodityTitle}>{commodityName}</Text>
               <Text style={styles.dealMeta}>Deal Date: {formatDate(deal?.createdAt) || '—'}</Text>
             </View>
-            <View style={[styles.badge, { backgroundColor: theme.primary + '15' }]}>
-              <Text style={[styles.badgeText, { color: theme.primary }]}>🔐 Escrow</Text>
+            <View style={[styles.badge, { backgroundColor: theme.primary + '15', flexDirection: 'row', alignItems: 'center', gap: w(4) }]}>
+              <Icon name="lock" size={12} color={theme.primary} />
+              <Text style={[styles.badgeText, { color: theme.primary }]}>Escrow</Text>
             </View>
           </View>
 
@@ -556,7 +565,7 @@ export default function DealDetailsScreen({ route, navigation }) {
         {isReleased && (
           <View style={styles.completedCard}>
             <Icon name="check-decagram" size={36} color={COLORS.success} />
-            <Text style={styles.completedTitle}>Deal Successfully Completed! 🎉</Text>
+            <Text style={styles.completedTitle}>Deal Successfully Completed!</Text>
             <Text style={styles.completedDesc}>
               Escrow payment of ₹{Number(totalValue).toLocaleString('en-IN')} released to seller.
               Contract closed on {formatDate(deal?.releasedAt) || '—'}.

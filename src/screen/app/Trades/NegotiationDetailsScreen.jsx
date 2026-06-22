@@ -13,6 +13,8 @@ import {
 } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useSelector } from 'react-redux';
+import { useFocusEffect } from '@react-navigation/native';
+import { selectUser, selectSelectedRole } from '../../../store/authSelectors';
 import { SafeScreen } from '../../../components/SafeScreen';
 import AppHeader from '../../../components/AppHeader';
 import COLORS from '../../../constant/colors';
@@ -52,19 +54,23 @@ function formatExpiry(expiresAt) {
   return `${mins}m`;
 }
 
-// Status badge config
+// Status badge config — reflects real backend statuses
+// in_negotiation / countered: active multi-buyer negotiation (each buyer negotiates independently)
 const STATUS_CONFIG = {
   pending:        { label: 'Awaiting Response', color: '#718096', bg: '#EDF2F7' },
   countered:      { label: 'Counter Received',  color: '#3182CE', bg: '#EBF8FF' },
   accepted:       { label: 'Deal Closed',       color: '#38A169', bg: '#F0FFF4' },
   rejected:       { label: 'Rejected',          color: '#E53E3E', bg: '#FFF5F5' },
   expired:        { label: 'Expired',           color: '#718096', bg: '#EDF2F7' },
-  in_negotiation: { label: 'In Negotiation',    color: '#DD6B20', bg: '#FFFAF0' },
+  in_negotiation: { label: 'In Negotiation',   color: '#6B46C1', bg: '#FAF5FF' },
 };
 
 
 export default function NegotiationDetailsScreen({ route, navigation }) {
-  const { user, selectedRole: stateRole } = useSelector(state => state.auth);
+  // PERFORMANCE FIX: Two granular selectors — only re-renders when user or
+  // selectedRole change, not on profileLoading or other unrelated auth fields.
+  const user      = useSelector(selectUser);
+  const stateRole = useSelector(selectSelectedRole);
   const selectedRole = stateRole || user?.role || 'FPO';
   const theme = ROLE_THEMES[selectedRole] || ROLE_THEMES.FPO;
   const insets = useSafeAreaInsets();
@@ -151,14 +157,21 @@ export default function NegotiationDetailsScreen({ route, navigation }) {
   );
 
   // Construct timeline rounds ensuring the initial offer round is present
-  const displayRounds = [];
-  if (offer) {
-    const hasInitialRound = rounds.some(rd => 
-      (rd.roundNumber === 0 || rd.round_number === 0) || 
-      ((rd.roundNumber === 1 || rd.round_number === 1) && (rd.proposedBy === 'buyer' || rd.proposed_by === 'buyer' || rd.role === 'buyer'))
+  const displayRounds = React.useMemo(() => {
+    const roundsList = [];
+    if (!offer) return roundsList;
+
+    const offerRounds = offer.negotiationHistory || offer.rounds || [];
+    const firstRound = offerRounds[0];
+    const isFirstRoundBuyer = firstRound && (
+      firstRound.role === 'buyer' ||
+      firstRound.proposedBy === 'buyer' ||
+      firstRound.proposed_by === 'buyer' ||
+      (firstRound.offeredBy && buyerId && String(firstRound.offeredBy) === String(buyerId))
     );
+    const hasInitialRound = Boolean(isFirstRoundBuyer);
     if (!hasInitialRound) {
-      displayRounds.push({
+      roundsList.push({
         roundNumber: 1,
         proposedBy: 'buyer',
         price: offer.price,
@@ -169,14 +182,14 @@ export default function NegotiationDetailsScreen({ route, navigation }) {
       });
     }
     
-    rounds.forEach((rd, index) => {
+    offerRounds.forEach((rd, index) => {
       const proposedBy = rd.proposedBy || rd.proposed_by || rd.role || (rd.offeredBy && buyerId && String(rd.offeredBy) === String(buyerId) ? 'buyer' : 'seller');
       const roundNumber = rd.roundNumber ?? rd.round_number ?? (index + 1);
       const isFinal = rd.isFinal ?? rd.is_final ?? rd.isFinalOffer;
       const createdAt = rd.createdAt ?? rd.created_at;
       
       if (roundNumber === 0 || (roundNumber === 1 && proposedBy === 'buyer')) {
-        displayRounds.push({
+        roundsList.push({
           ...rd,
           roundNumber: 1,
           proposedBy,
@@ -184,11 +197,11 @@ export default function NegotiationDetailsScreen({ route, navigation }) {
           createdAt,
         });
       } else {
-        const firstRoundNum = rounds[0]?.roundNumber ?? rounds[0]?.round_number;
+        const firstRoundNum = offerRounds[0]?.roundNumber ?? offerRounds[0]?.round_number;
         const displayNum = typeof roundNumber === 'number'
           ? (roundNumber === 0 ? 1 : (firstRoundNum === 0 ? roundNumber + 1 : roundNumber))
-          : displayRounds.length + 1;
-        displayRounds.push({
+          : roundsList.length + 1;
+        roundsList.push({
           ...rd,
           roundNumber: displayNum,
           proposedBy,
@@ -197,36 +210,40 @@ export default function NegotiationDetailsScreen({ route, navigation }) {
         });
       }
     });
-  }
+    return roundsList;
+  }, [offer, buyerId]);
 
   const isMyTurn = offer ? currentTurn === myRole : false;
   const isFinalOfferFromServer = offer?.isFinalOffer === true || offer?.is_final_offer === true;
   const displayRoundCount = Math.max(1, (offer?.roundCount ?? offer?.round_count ?? displayRounds.length));
-  const roundsMaxed = displayRoundCount >= 5;
+  // maxNegotiationRounds: use listing value if available; backend enforces default of 5
+  const maxRounds = offer?.maxNegotiationRounds || offer?.commodityId?.maxNegotiationRounds || offer?.commodity?.maxNegotiationRounds || item?.maxNegotiationRounds || 5;
+  const roundsMaxed = displayRoundCount >= maxRounds;
   const isTerminal = ['accepted', 'rejected', 'expired'].includes(offer?.status);
   
   // Check if negotiation rounds are allowed
+  const resolvedCommodity = offer?.commodity || (typeof offer?.commodityId === 'object' ? offer?.commodityId : null) || item;
   const isNegotiable = offer?.isNegotiable !== false &&
                        item?.isNegotiable !== false &&
-                       offer?.commodityId?.isNegotiable !== false &&
-                       offer?.commodity?.isNegotiable !== false;
+                       resolvedCommodity?.isNegotiable !== false;
 
+  const isLockedByOtherNegotiation = false; // Multi-buyer flow: no locking — each buyer negotiates independently
   const canShowCounter = isMyTurn && !isTerminal && !isFinalOfferFromServer && !roundsMaxed && offer?.canCounter !== false && isNegotiable;
   const cooldownActive = cooldownSecs > 0;
 
   const expiresAt = offer?.expiresAt || offer?.expires_at || (offer?.createdAt ? new Date(new Date(offer.createdAt).getTime() + 24 * 3600 * 1000).toISOString() : null);
 
   // ─── Load Offer Detail ────────────────────────────────────────────────
-  const loadOfferDetails = useCallback(async (isRefresh = false) => {
+  const loadOfferDetails = useCallback(async (isRefresh = false, isBackground = false) => {
     if (!offerId) {
       setApiError('No offer ID provided.');
-      setLoading(false);
+      if (!isBackground) setLoading(false);
       return;
     }
 
     // Auto-start mock flow if navigating from mock cards
     if (String(offerId).startsWith('mock-')) {
-      setLoading(false);
+      if (!isBackground) setLoading(false);
       setIsMockMode(true);
       setApiError(null);
       setOffer({
@@ -262,8 +279,10 @@ export default function NegotiationDetailsScreen({ route, navigation }) {
     }
 
     try {
-      if (isRefresh) setRefreshing(true);
-      else setLoading(true);
+      if (!isBackground) {
+        if (isRefresh) setRefreshing(true);
+        else setLoading(true);
+      }
       setApiError(null);
 
       const res = await getOfferDetails(offerId);
@@ -271,14 +290,16 @@ export default function NegotiationDetailsScreen({ route, navigation }) {
       setOffer(offerData);
 
       // Set item from embedded commodity if not passed via route
-      if (offerData?.commodity && !routeItem) {
-        setItem(offerData.commodity);
+      const resolvedCommodity = offerData?.commodity || (typeof offerData?.commodityId === 'object' ? offerData.commodityId : null);
+      if (resolvedCommodity && !routeItem) {
+        setItem(resolvedCommodity);
       }
 
       // Pre-fill counter form with last round's price or root price
-      const rounds = offerData?.rounds || [];
-      if (rounds.length > 0) {
-        const lastRound = rounds[rounds.length - 1];
+      // Backend sends negotiationHistory (not rounds) — support both for safety
+      const history = offerData?.negotiationHistory || offerData?.rounds || [];
+      if (history.length > 0) {
+        const lastRound = history[history.length - 1];
         setCounterPrice(String(lastRound.price || ''));
         setCounterQty(String(lastRound.quantity || ''));
       } else {
@@ -295,16 +316,28 @@ export default function NegotiationDetailsScreen({ route, navigation }) {
       }
     } catch (err) {
       console.warn('[NegotiationDetails] loadOfferDetails error:', err);
-      setApiError(err?.message || 'Failed to load negotiation details.');
+      if (!isBackground) {
+        setApiError(err?.message || 'Failed to load negotiation details.');
+      }
     } finally {
-      setLoading(false);
-      setRefreshing(false);
+      if (!isBackground) {
+        setLoading(false);
+        setRefreshing(false);
+      }
     }
-  }, [offerId, routeItem]);
+  }, [offerId, routeItem, user?._id]);
 
-  useEffect(() => {
-    loadOfferDetails();
-  }, [loadOfferDetails]);
+  useFocusEffect(
+    useCallback(() => {
+      loadOfferDetails();
+      
+      const intervalId = setInterval(() => {
+        loadOfferDetails(false, true);
+      }, 300000); // 5 minutes background refresh
+
+      return () => clearInterval(intervalId);
+    }, [loadOfferDetails])
+  );
 
   // Cooldown timer tick
   useEffect(() => {
@@ -324,6 +357,8 @@ export default function NegotiationDetailsScreen({ route, navigation }) {
 
   // ─── Accept ──────────────────────────────────────────────────────────
   const handleAccept = () => {
+    if (submittingAction) return;
+
     const lastRound = displayRounds[displayRounds.length - 1];
     const price = lastRound?.price || offer?.price;
     const qty = lastRound?.quantity || offer?.quantity;
@@ -340,7 +375,7 @@ export default function NegotiationDetailsScreen({ route, navigation }) {
             if (isMockMode) {
               setOffer(prev => ({ ...prev, status: 'accepted', dealId: 'mock-deal-123' }));
               showAlert({
-                type: 'success', title: 'Deal Confirmed! 🎉', message: 'Mock Escrow deal generated.',
+                type: 'success', title: 'Deal Confirmed!', message: 'Mock Escrow deal generated.',
                 buttons: [{ text: 'View Deal', onPress: () => navigation.navigate('DealDetails', { dealId: 'mock-deal-123', item, role: myRole }) }]
               });
               return;
@@ -351,8 +386,8 @@ export default function NegotiationDetailsScreen({ route, navigation }) {
               const deal = res?.data?.deal || res?.deal;
               showAlert({
                 type: 'success',
-                title: 'Deal Confirmed! 🎉',
-                message: 'Agreement signed. Escrow deal generated successfully.',
+                title: 'Deal Confirmed!',
+                message: 'Agreement signed. Escrow deal generated successfully. Other pending offers on this listing will be automatically expired by the system.',
                 buttons: [
                   {
                     text: 'View Deal',
@@ -386,6 +421,7 @@ export default function NegotiationDetailsScreen({ route, navigation }) {
 
   // ─── Reject ──────────────────────────────────────────────────────────
   const handleReject = () => {
+    if (submittingAction) return;
     showAlert({
       type: 'confirm',
       title: 'Reject Offer',
@@ -495,7 +531,7 @@ export default function NegotiationDetailsScreen({ route, navigation }) {
 
       showAlert({
         type: 'success',
-        title: 'Counter Offer Sent ✅',
+        title: 'Counter Offer Sent',
         message: `Counter of ₹${counterPrice}/Qtl sent. Waiting for response.`,
       });
 
@@ -514,7 +550,7 @@ export default function NegotiationDetailsScreen({ route, navigation }) {
         const retryMsg = retryAfter ? ` Try again after ${new Date(retryAfter).toLocaleTimeString()}.` : '';
         showAlert({ type: 'error', title: 'Cooldown Active', message: `Please wait 30 minutes before countering again.${retryMsg}` });
       } else if (code === 'ROUND_LIMIT_REACHED') {
-        showAlert({ type: 'error', title: 'Round Limit', message: 'Maximum 5 negotiation rounds reached. You can only Accept or Reject.' });
+        showAlert({ type: 'error', title: 'Round Limit', message: `Maximum ${maxRounds} negotiation rounds reached. You can only Accept or Reject.` });
       } else {
         showAlert({ type: 'error', title: 'Counter Failed', message: err?.message || 'Could not submit counter offer. Try again.' });
       }
@@ -616,13 +652,93 @@ export default function NegotiationDetailsScreen({ route, navigation }) {
     ? { label: 'Rejected', color: '#dc2626', bg: '#fef2f2' }
     : offer?.status === 'expired'
     ? { label: 'Expired', color: '#6b7280', bg: '#f9fafb' }
-    : offer?.displayStatus === 'In Negotiation'
-    ? { label: 'In Negotiation', color: '#f97316', bg: '#fff7ed' }
+    // Backend sends 'In Negotiation' (capital, spaced) — normalise both casings
+    : (offer?.displayStatus === 'In Negotiation' || offer?.displayStatus === 'in_negotiation')
+    ? { label: 'In Negotiation', color: '#6B46C1', bg: '#FAF5FF' }
     : isMyTurn
     ? { label: 'Action Required', color: '#2563eb', bg: '#eff6ff' }
     : { label: 'Awaiting Response', color: '#9ca3af', bg: '#f9fafb' };
-  const buyerName = offer?.buyer?.name || routeOffer?.buyerName || 'Buyer';
-  const sellerName = offer?.seller?.name || item?.sellerName || 'Seller';
+  const buyerObj = offer?.buyerId || offer?.buyer || routeOffer?.buyerId || routeOffer?.buyer || {};
+  const buyerFirstName = buyerObj.firstName || '';
+  const buyerLastName  = buyerObj.lastName || '';
+  const buyerFullName  = (buyerFirstName || buyerLastName)
+    ? `${buyerFirstName} ${buyerLastName}`.trim()
+    : buyerObj.name || routeOffer?.buyerName || 'Buyer';
+  const buyerShopName  = buyerObj.shopName || buyerObj.shopname || '';
+  const buyerName      = buyerShopName ? `${buyerFullName} (${buyerShopName})` : buyerFullName;
+  const sellerObj = offer?.sellerId || offer?.seller || offer?.commodityId?.sellerId || offer?.commodity?.sellerId || routeOffer?.sellerId || routeOffer?.seller || {};
+  const sellerFirstName = typeof sellerObj === 'object' ? (sellerObj.firstName || '') : '';
+  const sellerLastName  = typeof sellerObj === 'object' ? (sellerObj.lastName || '') : '';
+  const sellerFullName  = (sellerFirstName || sellerLastName)
+    ? `${sellerFirstName} ${sellerLastName}`.trim()
+    : (typeof sellerObj === 'object' ? sellerObj.name : '') || item?.sellerName || '—';
+  const sellerShopName  = typeof sellerObj === 'object' ? (sellerObj.shopName || sellerObj.shopname || '') : '';
+  const renderedTimeline = React.useMemo(() => {
+    if (displayRounds.length === 0) {
+      return (
+        <View style={styles.emptyRoundsContainer}>
+          <Icon name="chat-outline" size={32} color={COLORS.textMuted} />
+          <Text style={styles.emptyRoundsText}>Offer submitted. Waiting for first response.</Text>
+        </View>
+      );
+    }
+    return displayRounds.map((rd, index) => {
+      const isMe = String(rd.proposedBy) === myRole;
+      return (
+        <View key={index} style={styles.timelineRow}>
+          <View style={styles.timelineIndicators}>
+            <View style={[styles.dot, { backgroundColor: isMe ? theme.primary : '#3182CE' }]} />
+            {index < displayRounds.length - 1 && <View style={styles.line} />}
+          </View>
+
+          <View style={[
+            styles.roundCard,
+            isMe
+              ? [styles.myRoundCard, { borderLeftColor: theme.primary }]
+              : styles.theirRoundCard,
+            rd.isFinal && styles.finalRoundCard,
+          ]}>
+            <View style={styles.roundHeader}>
+              <Text style={[styles.roundSender, { color: isMe ? theme.primary : '#3182CE' }]}>
+                {isMe ? 'You' : (myRole === 'buyer' ? sellerName : buyerName)}
+              </Text>
+              <Text style={styles.roundDate}>
+                {rd.createdAt ? new Date(rd.createdAt).toLocaleString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) : '—'}
+              </Text>
+            </View>
+            {isNegotiable && (
+              <Text style={styles.roundTitle}>
+                Round {rd.roundNumber ?? index + 1}
+                {rd.isFinal ? ' (FINAL OFFER)' : ''}
+              </Text>
+            )}
+            <View style={styles.roundSpecs}>
+              <View>
+                <Text style={styles.specLabel}>Price</Text>
+                <Text style={[styles.specVal, { color: isMe ? theme.primary : '#3182CE' }]}>
+                  ₹{rd.price}/Qt
+                </Text>
+              </View>
+              <View>
+                <Text style={styles.specLabel}>Quantity</Text>
+                <Text style={styles.specVal}>{rd.quantity} {item?.unit || 'Ton'}</Text>
+              </View>
+              <View>
+                <Text style={styles.specLabel}>Trade</Text>
+                <Text style={styles.specVal}>{rd.tradeType || offer?.tradeType || 'FOR'}</Text>
+              </View>
+            </View>
+            {rd.remarks ? (
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: w(4), marginTop: h(8) }}>
+                <Icon name="message-text-outline" size={13} color={COLORS.textLight} />
+                <Text style={styles.roundRemarks}>"{rd.remarks}"</Text>
+              </View>
+            ) : null}
+          </View>
+        </View>
+      );
+    });
+  }, [displayRounds, myRole, theme, sellerName, buyerName, isNegotiable, item?.unit, offer?.tradeType]);
 
   return (
     <SafeScreen style={{ backgroundColor: theme.light }} top={false} bottom={false}>
@@ -681,6 +797,21 @@ export default function NegotiationDetailsScreen({ route, navigation }) {
                 {item?.name || item?.commodityName || 'Commodity'} {item?.grade ? `(Grade ${item.grade})` : ''}
               </Text>
               <Text style={styles.commodityVariety}>{item?.type || item?.description || ''}</Text>
+              <View style={[styles.partyRow, { alignItems: 'flex-start' }]}>
+                <Icon name="account-multiple-outline" size={14} color={COLORS.textMuted} style={{ marginTop: 2 }} />
+                <View style={{ flex: 1, gap: 4 }}>
+                  {myRole !== 'buyer' && (
+                    <Text style={styles.partyText} numberOfLines={1}>
+                      <Text style={{ fontWeight: '700' }}>Buyer:</Text> {buyerName}
+                    </Text>
+                  )}
+                  {myRole !== 'seller' && (
+                    <Text style={styles.partyText} numberOfLines={1}>
+                      <Text style={{ fontWeight: '700' }}>Seller:</Text> {sellerName}
+                    </Text>
+                  )}
+                </View>
+              </View>
             </View>
             <View style={[styles.statusBadge, { backgroundColor: statusCfg.bg }]}>
               <Text style={[styles.statusBadgeText, { color: statusCfg.color }]}>{statusCfg.label}</Text>
@@ -723,7 +854,7 @@ export default function NegotiationDetailsScreen({ route, navigation }) {
               <View style={styles.metaChip}>
                 <Icon name="refresh-circle" size={14} color={theme.primary} />
                 <Text style={[styles.metaChipText, { color: theme.primary }]}>
-                  Round {displayRoundCount} of 5
+                  Round {displayRoundCount} of {maxRounds}
                 </Text>
               </View>
             ) : (
@@ -778,10 +909,10 @@ export default function NegotiationDetailsScreen({ route, navigation }) {
         )}
 
         {/* Round Limit Banner */}
-        {roundsMaxed && !isTerminal && (
+        {isNegotiable && roundsMaxed && !isTerminal && (
           <View style={styles.roundLimitBanner}>
             <Icon name="alert" size={18} color="#D69E2E" />
-            <Text style={styles.roundLimitText}>Maximum 5 rounds reached — Accept or Reject only</Text>
+            <Text style={styles.roundLimitText}>Maximum {maxRounds} rounds reached — Accept or Reject only</Text>
           </View>
         )}
 
@@ -800,64 +931,7 @@ export default function NegotiationDetailsScreen({ route, navigation }) {
           {isNegotiable ? 'Negotiation History' : 'Offer Details'}
         </Text>
         <View style={styles.timeline}>
-          {displayRounds.length === 0 ? (
-            <View style={styles.emptyRoundsContainer}>
-              <Icon name="chat-outline" size={32} color={COLORS.textMuted} />
-              <Text style={styles.emptyRoundsText}>Offer submitted. Waiting for first response.</Text>
-            </View>
-          ) : (
-            displayRounds.map((rd, index) => {
-              const isMe = String(rd.proposedBy) === myRole;
-              return (
-                <View key={index} style={styles.timelineRow}>
-                  <View style={styles.timelineIndicators}>
-                    <View style={[styles.dot, { backgroundColor: isMe ? theme.primary : '#3182CE' }]} />
-                    {index < displayRounds.length - 1 && <View style={styles.line} />}
-                  </View>
-
-                  <View style={[
-                    styles.roundCard,
-                    isMe
-                      ? [styles.myRoundCard, { borderLeftColor: theme.primary }]
-                      : styles.theirRoundCard,
-                    rd.isFinal && styles.finalRoundCard,
-                  ]}>
-                    <View style={styles.roundHeader}>
-                      <Text style={[styles.roundSender, { color: isMe ? theme.primary : '#3182CE' }]}>
-                        {isMe ? 'You' : (myRole === 'buyer' ? sellerName : buyerName)}
-                      </Text>
-                      <Text style={styles.roundDate}>
-                        {rd.createdAt ? new Date(rd.createdAt).toLocaleString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) : '—'}
-                      </Text>
-                    </View>
-                    <Text style={styles.roundTitle}>
-                      Round {rd.roundNumber ?? index + 1}
-                      {rd.isFinal ? ' ⚠️ FINAL OFFER' : ''}
-                    </Text>
-                    <View style={styles.roundSpecs}>
-                      <View>
-                        <Text style={styles.specLabel}>Price</Text>
-                        <Text style={[styles.specVal, { color: isMe ? theme.primary : '#3182CE' }]}>
-                          ₹{rd.price}/Qt
-                        </Text>
-                      </View>
-                      <View>
-                        <Text style={styles.specLabel}>Quantity</Text>
-                        <Text style={styles.specVal}>{rd.quantity} {item?.unit || 'Ton'}</Text>
-                      </View>
-                      <View>
-                        <Text style={styles.specLabel}>Trade</Text>
-                        <Text style={styles.specVal}>{rd.tradeType || offer?.tradeType || 'FOR'}</Text>
-                      </View>
-                    </View>
-                    {rd.remarks ? (
-                      <Text style={styles.roundRemarks}>💬 "{rd.remarks}"</Text>
-                    ) : null}
-                  </View>
-                </View>
-              );
-            })
-          )}
+          {renderedTimeline}
         </View>
 
         <View style={{ height: h(120) + insets.bottom }} />
@@ -889,45 +963,58 @@ export default function NegotiationDetailsScreen({ route, navigation }) {
               <Text style={styles.acceptBtnText}>Back to Offers</Text>
             </TouchableOpacity>
           )
-        ) : !isMyTurn ? (
-          <View style={styles.pendingContainer}>
-            <Icon name="timer-sand" size={22} color={COLORS.textMuted} />
-            <Text style={styles.pendingText}>
-              Waiting for {currentTurn === 'buyer' ? buyerName : sellerName} to respond...
-            </Text>
-          </View>
         ) : (
-          // My Turn — show action buttons
-          <View style={styles.buttonRow}>
-            {/* Reject always visible */}
-            <TouchableOpacity style={[styles.actionBtn, styles.rejectBtn]} onPress={handleReject}>
-              <Icon name="close-circle-outline" size={18} color={COLORS.error} />
-              <Text style={styles.rejectBtnText}>Decline</Text>
-            </TouchableOpacity>
-
-            {/* Counter — only if rounds not maxed and not final offer */}
-            {canShowCounter && (
-              <TouchableOpacity
-                style={[
-                  styles.actionBtn,
-                  styles.counterBtn,
-                  cooldownActive && styles.disabledBtn,
-                ]}
-                onPress={() => !cooldownActive && setCounterModalVisible(true)}
-                disabled={cooldownActive}
-              >
-                <Icon name="swap-horizontal" size={18} color={cooldownActive ? COLORS.textMuted : theme.primary} />
-                <Text style={[styles.counterBtnText, { color: cooldownActive ? COLORS.textMuted : theme.primary }]}>
-                  {cooldownActive ? `Counter (${formatCountdown(cooldownSecs)})` : 'Counter'}
+          // Active state (Negotiation in progress)
+          <View>
+            {!isMyTurn && (
+              <View style={[styles.pendingContainer, { marginBottom: h(8) }]}>
+                <Icon name="timer-sand" size={16} color={COLORS.textMuted} />
+                <Text style={[styles.pendingText, { flex: 1, fontSize: f(11) }]}>
+                  Waiting for {currentTurn === 'buyer' ? buyerName : sellerName} to respond...
                 </Text>
-              </TouchableOpacity>
+              </View>
             )}
+            <View style={styles.buttonRow}>
+              {/* Decline: Only for seller, visible while negotiation is active */}
+              {myRole === 'seller' && (
+                <TouchableOpacity style={[styles.actionBtn, styles.rejectBtn]} onPress={handleReject}>
+                  <Icon name="close-circle-outline" size={18} color={COLORS.error} />
+                  <Text style={styles.rejectBtnText}>Decline</Text>
+                </TouchableOpacity>
+              )}
 
-            {/* Accept */}
-            <TouchableOpacity style={[styles.actionBtn, { backgroundColor: theme.primary }]} onPress={handleAccept}>
-              <Icon name="check-decagram" size={18} color={COLORS.white} />
-              <Text style={styles.acceptBtnText}>Accept</Text>
-            </TouchableOpacity>
+              {/* Accept: Only for seller, when it's their turn and the last round was proposed by the buyer */}
+              {myRole === 'seller' && isMyTurn && lastRound && (
+                (lastRound.proposedBy === 'buyer' || lastRound.proposed_by === 'buyer' || lastRound.role === 'buyer')
+              ) && (
+                <TouchableOpacity
+                  style={[styles.actionBtn, { backgroundColor: theme.primary }]}
+                  onPress={handleAccept}
+                  disabled={submittingAction}
+                >
+                  <Icon name="check-decagram" size={18} color={COLORS.white} />
+                  <Text style={styles.acceptBtnText}>Accept</Text>
+                </TouchableOpacity>
+              )}
+
+              {/* Counter button — visible only when it is your turn */}
+              {canShowCounter && (
+                <TouchableOpacity
+                  style={[
+                    styles.actionBtn,
+                    styles.counterBtn,
+                    cooldownActive && styles.disabledBtn,
+                  ]}
+                  onPress={() => !cooldownActive && setCounterModalVisible(true)}
+                  disabled={cooldownActive}
+                >
+                  <Icon name="swap-horizontal" size={18} color={cooldownActive ? COLORS.textMuted : theme.primary} />
+                  <Text style={[styles.counterBtnText, { color: cooldownActive ? COLORS.textMuted : theme.primary }]}>
+                    {cooldownActive ? `Counter (${formatCountdown(cooldownSecs)})` : 'Counter'}
+                  </Text>
+                </TouchableOpacity>
+              )}
+            </View>
           </View>
         )}
       </View>
@@ -949,7 +1036,7 @@ export default function NegotiationDetailsScreen({ route, navigation }) {
             </View>
 
             <Text style={styles.modalDesc}>
-              Max 5% price movement per round. {displayRoundCount + 1 < 5 ? `${5 - displayRoundCount - 1} round(s) remaining after this.` : 'This is the final round.'}
+              Max 5% price movement per round. {displayRoundCount + 1 < maxRounds ? `${maxRounds - displayRoundCount - 1} round(s) remaining after this.` : 'This is the final round.'}
             </Text>
 
             <Text style={styles.inputLabel}>Counter Price (₹/Qt)</Text>
@@ -990,7 +1077,7 @@ export default function NegotiationDetailsScreen({ route, navigation }) {
               <View style={{ flex: 1 }}>
                 <Text style={styles.switchLabel}>Mark as Final Offer</Text>
                 <Text style={styles.switchDesc}>
-                  {isFinalOfferToggle ? '⚠️ Other party can ONLY accept or reject — no more counters.' : 'Other party can counter further.'}
+                  {isFinalOfferToggle ? 'Other party can ONLY accept or reject — no more counters.' : 'Other party can counter further.'}
                 </Text>
               </View>
               <Switch
@@ -1117,6 +1204,20 @@ const styles = StyleSheet.create({
     fontSize: f(11),
     color: COLORS.textLight,
     marginTop: h(2),
+  },
+  partyRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: w(4),
+    marginTop: h(6),
+    backgroundColor: '#F8FAFC',
+    paddingHorizontal: w(8),
+    paddingVertical: h(4),
+    borderRadius: 6,
+  },
+  partyText: {
+    fontSize: f(11),
+    color: COLORS.textLight,
   },
   statusBadge: {
     paddingHorizontal: w(8),

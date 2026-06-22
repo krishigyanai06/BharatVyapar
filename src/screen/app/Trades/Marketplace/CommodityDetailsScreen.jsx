@@ -8,16 +8,25 @@ import {
   TextInput,
   Modal,
   ActivityIndicator,
+  Image,
+  Dimensions,
+  Alert,
+  Share,
 } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useSelector } from 'react-redux';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { SafeScreen } from '../../../components/SafeScreen';
-import AppHeader from '../../../components/AppHeader';
-import COLORS from '../../../constant/colors';
-import { w, h, f } from '../../../utils/responsive';
-import { showAlert } from '../../../components/CustomAlertBox';
-import { getOffers, submitOffer } from '../../../service/buy/buyCommodityService';
+import { selectUser, selectSelectedRole } from '../../../../store/authSelectors';
+import { SafeScreen } from '../../../../components/SafeScreen';
+import AppHeader from '../../../../components/AppHeader';
+import COLORS from '../../../../constant/colors';
+import { w, h, f } from '../../../../utils/responsive';
+import { showAlert } from '../../../../components/CustomAlertBox';
+import { getOffers, submitOffer, getReceivedOffers } from '../../../../service/buy/buyCommodityService';
+import KycBanner from '../../../../components/KycBanner';
+import PlaceBuyOfferModal from './components/PlaceBuyOfferModal';
+import ReceivedOffersModal from './components/ReceivedOffersModal';
+import { viewDocument, downloadFile } from '../../../../utils/documentUtils'; // Force Metro reload after build completion
 
 const ROLE_THEMES = {
   FPO: { primary: COLORS.fpoPrimary, secondary: COLORS.fpoSecondary, light: COLORS.fpoLight, text: COLORS.fpoText },
@@ -26,8 +35,13 @@ const ROLE_THEMES = {
   Corporate: { primary: COLORS.corporatePrimary, secondary: COLORS.corporateSecondary, light: COLORS.corporateLight, text: COLORS.corporateText },
 };
 
+const { width: screenWidth } = Dimensions.get('window');
+
 export default function CommodityDetailsScreen({ route, navigation }) {
-  const { user, selectedRole: stateRole } = useSelector(state => state.auth);
+  // PERFORMANCE FIX: Two granular selectors — CommodityDetailsScreen only
+  // re-renders when user or selectedRole change, not on unrelated auth fields.
+  const user      = useSelector(selectUser);
+  const stateRole = useSelector(selectSelectedRole);
   const selectedRole = stateRole || user?.role || 'FPO';
   const theme = ROLE_THEMES[selectedRole] || ROLE_THEMES.FPO;
   const insets = useSafeAreaInsets();
@@ -42,13 +56,13 @@ export default function CommodityDetailsScreen({ route, navigation }) {
     sellingPrice: 2450,
     sellingPriceUnit: 'Qt',
     weightType: 'Net Weight',
-    listingEndDate: '2026-07-15',
-    weightTolerance: '+/- 1%',
-    billingAddress: 'Indore Mandi Complex, Warehouse 4A, MP',
-    exWarehouseAddress: 'Indore Mandi Complex, MP',
-    paymentTimeline: 'Within 3 days of delivery confirmation',
+    listingEndDate: null,
+    weightTolerance: null,
+    billingAddress: null,
+    exWarehouseAddress: null,
+    paymentTimeline: null,
     remarks: 'Bags packing of 50kg. High gluten content, clean grains.',
-    deliveryType: 'FOR',
+    deliveryType: null,
     isNegotiable: true,
     minimumAcceptablePrice: 2350,
     maxNegotiationRounds: 5,
@@ -68,6 +82,7 @@ export default function CommodityDetailsScreen({ route, navigation }) {
     sellerRating: 4.8,
     sellerCompletedTrades: 124,
     isSellerVerified: true,
+    shopName: 'FPO Shop',
   };
 
   // Active negotiation check state
@@ -80,22 +95,34 @@ export default function CommodityDetailsScreen({ route, navigation }) {
   const [submittingOffer, setSubmittingOffer] = useState(false);
   const [offerPrice, setOfferPrice] = useState(String(item.sellingPrice));
   const [offerQty, setOfferQty] = useState(String(item.quantity));
-  const [deliveryType, setDeliveryType] = useState(item.deliveryType);
+  const [deliveryType, setDeliveryType] = useState(item.deliveryType || 'FOR');
   const [paymentTimeline, setPaymentTimeline] = useState(item.paymentTimeline);
   const [remarks, setRemarks] = useState('');
+
+  // Seller specific state
+  const [loadingOffers, setLoadingOffers] = useState(true);
+  const [offersCount, setOffersCount] = useState(0);
+  const [receivedOffersModalVisible, setReceivedOffersModalVisible] = useState(false);
+  const [reportModalVisible, setReportModalVisible] = useState(false);
 
   const checkActiveOffer = useCallback(async () => {
     try {
       setCheckingOffer(true);
       setApiError(null);
-      const res = await getOffers({ commodityId: item.id });
+      // Use _id first (MongoDB style), fallback to id
+      const commodityId = item._id || item.id;
+      const res = await getOffers({ commodityId });
       const offersList = res?.data?.offers || res?.offers || [];
       
-      // Look for any offer on this commodity that has status pending or countered
-      const found = offersList.find(o => 
-        String(o.commodityId || o.commodity?.id) === String(item.id) && 
-        ['pending', 'countered'].includes(o.status)
-      );
+      // Find any active offer on this commodity — pending or in_negotiation (displayStatus)
+      // Backend does not use 'countered' status; pending + In Negotiation displayStatus covers all active states
+      const found = offersList.find(o => {
+        const matchesCommodity =
+          String(o.commodityId?._id || o.commodityId || o.commodity?._id || o.commodity?.id) === String(commodityId);
+        const st = (o.displayStatus || o.status || '').toLowerCase().replace(/\s+/g, '_');
+        const isActive = !['accepted', 'rejected', 'expired', 'cancelled', 'sold'].includes(st);
+        return matchesCommodity && isActive;
+      });
       
       setActiveOffer(found || null);
     } catch (err) {
@@ -105,15 +132,33 @@ export default function CommodityDetailsScreen({ route, navigation }) {
     } finally {
       setCheckingOffer(false);
     }
-  }, [item.id]);
+  }, [item.id, item._id]);
+
+  const isOwner = Boolean(user?._id && item?.sellerId && String(user._id) === String(item.sellerId));
 
   useEffect(() => {
+    const fetchReceivedOffersCount = async () => {
+      if (!isOwner) return;
+      try {
+        setLoadingOffers(true);
+        const res = await getReceivedOffers(item.id);
+        const list = res?.data?.offers || res?.offers || [];
+        setOffersCount(list.length);
+      } catch (err) {
+        console.warn('[CommodityDetails] Failed to fetch received offers count:', err);
+        setOffersCount(0);
+      } finally {
+        setLoadingOffers(false);
+      }
+    };
+
     if (item.id) {
       checkActiveOffer();
       setOfferPrice(String(item.sellingPrice || ''));
       setOfferQty(String(item.quantity || ''));
+      fetchReceivedOffersCount();
     }
-  }, [item.id, checkActiveOffer, item.sellingPrice, item.quantity]);
+  }, [item.id, checkActiveOffer, item.sellingPrice, item.quantity, isOwner]);
 
   const handlePlaceOffer = async () => {
     const finalPrice = item.isNegotiable === false ? item.sellingPrice : Number(offerPrice);
@@ -194,6 +239,29 @@ export default function CommodityDetailsScreen({ route, navigation }) {
     );
   }
 
+  const images = Array.isArray(item?.commodityImages)
+    ? item.commodityImages
+        .map(img => {
+          if (!img) return null;
+          if (typeof img === 'string') return img;
+          return img.url || img.uri || null;
+        })
+        .filter(Boolean)
+    : [];
+
+  const filteredParams = Array.isArray(item?.qualityParameters)
+    ? item.qualityParameters.filter(param => {
+        if (!param) return false;
+        const value = param.val !== undefined ? param.val : param.parameterValue;
+        return value !== null && value !== undefined && String(value).trim() !== '' && String(value).trim() !== '—';
+      })
+    : [];
+
+  if (__DEV__) {
+    console.log('🔍 COMMODITY DETAILS ITEM:', JSON.stringify(item, null, 2));
+    console.log('🖼️ EXTRACTED IMAGES:', images);
+  }
+
   return (
     <SafeScreen style={{ backgroundColor: theme.light }} top={false} bottom={false}>
       <AppHeader
@@ -215,32 +283,35 @@ export default function CommodityDetailsScreen({ route, navigation }) {
       )}
 
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+        <KycBanner actionType="buy" />
+
         {/* Gallery Section */}
         <View style={styles.galleryContainer}>
-          <ScrollView horizontal pagingEnabled showsHorizontalScrollIndicator={false}>
-            <View style={styles.gallerySlide}>
-              <View style={[styles.mockImagePlaceholder, { backgroundColor: theme.primary + '1A' }]}>
-                <Icon name="wheat" size={80} color={theme.primary} />
-                <Text style={[styles.galleryTag, { backgroundColor: theme.primary }]}>Image 1 of 3</Text>
+          {images.length > 0 ? (
+            <ScrollView horizontal pagingEnabled showsHorizontalScrollIndicator={false}>
+              {images.map((imgUrl, index) => (
+                <View key={index} style={styles.gallerySlide}>
+                  <View style={styles.imageWrapper}>
+                    <Image source={{ uri: imgUrl }} style={styles.galleryImage} />
+                    <Text style={[styles.galleryTag, { backgroundColor: theme.primary }]}>
+                      Image {index + 1} of {images.length}
+                    </Text>
+                  </View>
+                </View>
+              ))}
+            </ScrollView>
+          ) : (
+            <ScrollView horizontal pagingEnabled showsHorizontalScrollIndicator={false}>
+              <View style={styles.gallerySlide}>
+                <View style={styles.imageWrapper}>
+                  <View style={[styles.mockImagePlaceholder, { backgroundColor: theme.primary + '1A' }]}>
+                    <Icon name="wheat" size={80} color={theme.primary} />
+                    <Text style={[styles.galleryTag, { backgroundColor: theme.primary }]}>No Image Available</Text>
+                  </View>
+                </View>
               </View>
-            </View>
-            <View style={styles.gallerySlide}>
-              <View style={[styles.mockImagePlaceholder, { backgroundColor: theme.primary + '12' }]}>
-                <Icon name="silo" size={80} color={theme.primary} />
-                <Text style={[styles.galleryTag, { backgroundColor: theme.primary }]}>Image 2 of 3</Text>
-              </View>
-            </View>
-            <View style={styles.gallerySlide}>
-              <View style={[styles.mockImagePlaceholder, { backgroundColor: theme.primary + '08' }]}>
-                <Icon name="truck-delivery" size={80} color={theme.primary} />
-                <Text style={[styles.galleryTag, { backgroundColor: theme.primary }]}>Image 3 of 3</Text>
-              </View>
-            </View>
-          </ScrollView>
-          
-          <View style={styles.gradeTag}>
-            <Text style={styles.gradeTagText}>Grade {item.grade}</Text>
-          </View>
+            </ScrollView>
+          )}
         </View>
 
         {/* Core Info Card */}
@@ -282,53 +353,82 @@ export default function CommodityDetailsScreen({ route, navigation }) {
         {/* Quality Specifications */}
         <View style={styles.sectionCard}>
           <Text style={[styles.sectionTitle, { color: theme.primary }]}>Quality Parameters</Text>
-          <View style={styles.paramsGrid}>
-            {item.qualityParameters.map((param, index) => (
-              <View key={index} style={styles.paramItem}>
-                <Text style={styles.paramName}>{param.name}</Text>
-                <Text style={styles.paramVal}>{param.val}</Text>
-              </View>
-            ))}
-          </View>
           
-          <TouchableOpacity 
-            style={[styles.downloadReportBtn, { borderColor: theme.primary }]}
-            onPress={() => showAlert({ type: 'success', title: 'Quality Report', message: 'Lab report PDF downloaded successfully!' })}
-          >
-            <Icon name="file-pdf-box" size={20} color={theme.primary} />
-            <Text style={[styles.downloadReportText, { color: theme.primary }]}>Download Government Lab Report</Text>
-          </TouchableOpacity>
+          {filteredParams.length === 0 ? (
+            <Text style={{ fontSize: f(12), color: COLORS.textMuted, marginBottom: h(12), fontStyle: 'italic' }}>
+              No quality specifications listed.
+            </Text>
+          ) : (
+            <View style={styles.paramsGrid}>
+              {filteredParams.map((param, index) => (
+                <View key={index} style={styles.paramItem}>
+                  <Text style={styles.paramName}>{param.name || param.parameterName || ''}</Text>
+                  <Text style={styles.paramVal}>{param.val || param.parameterValue || ''}</Text>
+                </View>
+              ))}
+            </View>
+          )}
+          
+          {item.qualityReport && item.qualityReport.length > 0 ? (
+            <TouchableOpacity 
+              style={[styles.downloadReportBtn, { borderColor: theme.primary }]}
+              onPress={() => {
+                const report = item.qualityReport[0];
+                const reportUrl = report?.url || report?.uri;
+                if (reportUrl) {
+                  setReportModalVisible(true);
+                } else {
+                  showAlert({ type: 'error', title: 'Error', message: 'Lab report URL not found.' });
+                }
+              }}
+            >
+              <Icon name="file-pdf-box" size={20} color={theme.primary} />
+              <Text style={[styles.downloadReportText, { color: theme.primary }]}>View / Save Lab Report</Text>
+            </TouchableOpacity>
+          ) : (
+            <View style={[styles.downloadReportBtn, { borderColor: COLORS.textMuted + '40', borderStyle: 'solid', backgroundColor: '#F8F9FA' }]}>
+              <Icon name="file-pdf-box" size={20} color={COLORS.textMuted} />
+              <Text style={[styles.downloadReportText, { color: COLORS.textMuted }]}>Lab Report Not Uploaded</Text>
+            </View>
+          )}
         </View>
 
         {/* Logistics & Delivery Terms */}
         <View style={styles.sectionCard}>
           <Text style={[styles.sectionTitle, { color: theme.primary }]}>Trade & Logistics Terms</Text>
           
-          <View style={styles.termRow}>
-            <Icon name="truck-cargo-container" size={20} color={theme.primary} />
-            <View style={styles.termContent}>
-              <Text style={styles.termTitle}>Delivery Type</Text>
-              <Text style={styles.termDesc}>
-                {item.deliveryType === 'FOR' ? 'FOR (Freight Free / Delivered to your location)' : 'EX-WAREHOUSE (Ex works, buyer picks up)'}
-              </Text>
+          {item.deliveryType ? (
+            <View style={styles.termRow}>
+              <Icon name="truck-cargo-container" size={20} color={theme.primary} />
+              <View style={styles.termContent}>
+                <Text style={styles.termTitle}>Delivery Type</Text>
+                <Text style={styles.termDesc}>
+                  {item.deliveryType === 'FOR' ? 'FOR (Freight Free / Delivered to your location)' : 'EX-WAREHOUSE (Ex works, buyer picks up)'}
+                </Text>
+              </View>
             </View>
-          </View>
+          ) : null}
 
           <View style={styles.termRow}>
             <Icon name="scale-balance" size={20} color={theme.primary} />
             <View style={styles.termContent}>
               <Text style={styles.termTitle}>Weight Basis & Tolerance</Text>
-              <Text style={styles.termDesc}>{item.weightType} with tolerance {item.weightTolerance}</Text>
+              <Text style={styles.termDesc}>
+                {item.weightType || 'Net Weight'}
+                {item.weightTolerance && item.weightTolerance !== '—' ? ` with tolerance ${item.weightTolerance}` : ''}
+              </Text>
             </View>
           </View>
 
-          <View style={styles.termRow}>
-            <Icon name="cash-fast" size={20} color={theme.primary} />
-            <View style={styles.termContent}>
-              <Text style={styles.termTitle}>Payment Timeline</Text>
-              <Text style={styles.termDesc}>{item.paymentTimeline}</Text>
+          {item.paymentTimeline && item.paymentTimeline !== '—' ? (
+            <View style={styles.termRow}>
+              <Icon name="cash-fast" size={20} color={theme.primary} />
+              <View style={styles.termContent}>
+                <Text style={styles.termTitle}>Payment Timeline</Text>
+                <Text style={styles.termDesc}>{item.paymentTimeline}</Text>
+              </View>
             </View>
-          </View>
+          ) : null}
 
           <View style={styles.termRow}>
             <Icon name="shield-check" size={20} color={theme.primary} />
@@ -340,13 +440,15 @@ export default function CommodityDetailsScreen({ route, navigation }) {
             </View>
           </View>
 
-          <View style={styles.termRow}>
-            <Icon name="map-legend" size={20} color={theme.primary} />
-            <View style={styles.termContent}>
-              <Text style={styles.termTitle}>Billing Address</Text>
-              <Text style={styles.termDesc}>{item.billingAddress}</Text>
+          {item.billingAddress && item.billingAddress !== '—' ? (
+            <View style={styles.termRow}>
+              <Icon name="map-legend" size={20} color={theme.primary} />
+              <View style={styles.termContent}>
+                <Text style={styles.termTitle}>Billing Address</Text>
+                <Text style={styles.termDesc}>{item.billingAddress}</Text>
+              </View>
             </View>
-          </View>
+          ) : null}
 
           {item.remarks && (
             <View style={styles.remarksBox}>
@@ -361,16 +463,22 @@ export default function CommodityDetailsScreen({ route, navigation }) {
           <Text style={[styles.sectionTitle, { color: theme.primary }]}>Seller Profile</Text>
           <View style={styles.sellerHeader}>
             <View style={[styles.sellerAvatar, { backgroundColor: theme.primary }]}>
-              <Text style={styles.sellerAvatarText}>F</Text>
+              <Text style={styles.sellerAvatarText}>
+                {item.shopName ? item.shopName.charAt(0).toUpperCase() : (item.sellerName ? item.sellerName.charAt(0).toUpperCase() : 'F')}
+              </Text>
             </View>
             <View style={styles.sellerInfo}>
               <View style={styles.sellerNameRow}>
-                <Text style={styles.sellerName}>{item.sellerName}</Text>
+                <Text style={styles.sellerName}>{item.shopName || item.sellerName}</Text>
                 {item.isSellerVerified && (
                   <Icon name="decagram" size={16} color={COLORS.info} style={{ marginLeft: w(4) }} />
                 )}
               </View>
-              <Text style={styles.sellerSubtext}>Verified Farmer Producer Organization</Text>
+              {item.shopName && item.sellerName ? (
+                <Text style={styles.sellerSubtext}>Contact: {item.sellerName}</Text>
+              ) : (
+                <Text style={styles.sellerSubtext}>Verified Farmer Producer Organization</Text>
+              )}
               <View style={styles.sellerRatingRow}>
                 <Icon name="star" size={14} color="#D69E2E" />
                 <Text style={styles.sellerRatingText}>{item.sellerRating} • {item.sellerCompletedTrades} completed trades</Text>
@@ -385,141 +493,164 @@ export default function CommodityDetailsScreen({ route, navigation }) {
 
       {/* Floating Action Sticky Footer */}
       <View style={[styles.stickyFooter, { paddingBottom: insets.bottom + h(14) }]}>
-        {activeOffer ? (
+        {isOwner ? (
+          <TouchableOpacity
+            style={[styles.primaryActionBtn, { backgroundColor: theme.primary }]}
+            onPress={() => setReceivedOffersModalVisible(true)}
+            activeOpacity={0.8}
+          >
+            <Icon name="handshake" size={20} color={COLORS.white} />
+            <Text style={styles.primaryActionText}>
+              {loadingOffers ? 'Loading Offers...' : `View Received Offers (${offersCount})`}
+            </Text>
+            {loadingOffers && <ActivityIndicator size="small" color={COLORS.white} style={{ marginLeft: w(6) }} />}
+          </TouchableOpacity>
+        ) : activeOffer ? (
           <TouchableOpacity
             style={[styles.primaryActionBtn, { backgroundColor: COLORS.success }]}
             onPress={() => navigation.navigate('NegotiationDetails', { offer: activeOffer, item, role: 'buyer' })}
             activeOpacity={0.8}
           >
             <Icon name="handshake" size={20} color={COLORS.white} />
-            <Text style={styles.primaryActionText}>🤝 View Your Offer</Text>
+            <Text style={styles.primaryActionText}>View Your Offer</Text>
           </TouchableOpacity>
         ) : (
           <TouchableOpacity
             style={[styles.primaryActionBtn, { backgroundColor: theme.primary }]}
-            onPress={() => setOfferModalVisible(true)}
+            onPress={() => {
+              // TODO: TESTING ONLY — uncomment KYC check before production
+              // if (user?.kycStatus !== 'VERIFIED') {
+              //   showAlert({
+              //     type: 'error',
+              //     title: 'KYC Required',
+              //     message: 'You must complete your PAN verification before placing buy offers.',
+              //   });
+              //   return;
+              // }
+              setOfferModalVisible(true);
+            }}
             activeOpacity={0.8}
           >
             <Icon name="cart-arrow-right" size={20} color={COLORS.white} />
-            <Text style={styles.primaryActionText}>🤝 Submit Buy Offer</Text>
+            <Text style={styles.primaryActionText}>Submit Buy Offer</Text>
           </TouchableOpacity>
         )}
       </View>
 
-      {/* Place Offer Modal */}
-      <Modal visible={offerModalVisible} transparent animationType="slide" onRequestClose={() => setOfferModalVisible(false)}>
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Place Buy Offer</Text>
-              <TouchableOpacity onPress={() => setOfferModalVisible(false)}>
-                <Icon name="close" size={22} color={COLORS.text} />
+      <PlaceBuyOfferModal
+        visible={offerModalVisible}
+        onClose={() => setOfferModalVisible(false)}
+        theme={theme}
+        item={item}
+        offerPrice={offerPrice}
+        setOfferPrice={setOfferPrice}
+        offerQty={offerQty}
+        setOfferQty={setOfferQty}
+        deliveryType={deliveryType}
+        setDeliveryType={setDeliveryType}
+        paymentTimeline={paymentTimeline}
+        setPaymentTimeline={setPaymentTimeline}
+        remarks={remarks}
+        setRemarks={setRemarks}
+        submittingOffer={submittingOffer}
+        handlePlaceOffer={handlePlaceOffer}
+      />
+
+      {isOwner && (
+        <ReceivedOffersModal
+          visible={receivedOffersModalVisible}
+          onClose={() => setReceivedOffersModalVisible(false)}
+          item={item}
+        />
+      )}
+
+      {reportModalVisible && (
+        <Modal
+          visible={reportModalVisible}
+          transparent
+          animationType="fade"
+          statusBarTranslucent
+          onRequestClose={() => setReportModalVisible(false)}
+        >
+          <View style={styles.reportModalOverlay}>
+            <View style={styles.optionsCard}>
+              <View style={styles.optionsHeader}>
+                <View style={[styles.pdfIconContainer, { backgroundColor: theme.light }]}>
+                  <Icon name="file-pdf-box" size={32} color={theme.primary} />
+                </View>
+                <Text style={styles.optionsTitle}>Government Lab Report</Text>
+                <Text style={styles.optionsSubtitle}>Choose an action for the PDF report</Text>
+              </View>
+
+              <View style={styles.optionsList}>
+                <TouchableOpacity
+                  style={styles.optionRowBtn}
+                  activeOpacity={0.7}
+                  onPress={() => {
+                    setReportModalVisible(false);
+                    const report = item.qualityReport[0];
+                    const reportUrl = report?.url || report?.uri;
+                    viewDocument(reportUrl);
+                  }}
+                >
+                  <View style={[styles.optionIconBox, { backgroundColor: '#EFF6FF' }]}>
+                    <Icon name="eye-outline" size={20} color="#3B82F6" />
+                  </View>
+                  <Text style={styles.optionRowText}>Open / View PDF</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={styles.optionRowBtn}
+                  activeOpacity={0.7}
+                  onPress={() => {
+                    setReportModalVisible(false);
+                    const report = item.qualityReport[0];
+                    const reportUrl = report?.url || report?.uri;
+                    const name = report?.name || report?.key?.split('/').pop() || 'lab_report.pdf';
+                    downloadFile(reportUrl, name);
+                  }}
+                >
+                  <View style={[styles.optionIconBox, { backgroundColor: '#F0FDF4' }]}>
+                    <Icon name="file-download-outline" size={20} color="#22C55E" />
+                  </View>
+                  <Text style={styles.optionRowText}>Save / Download PDF</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={styles.optionRowBtn}
+                  activeOpacity={0.7}
+                  onPress={async () => {
+                    setReportModalVisible(false);
+                    const report = item.qualityReport[0];
+                    const reportUrl = report?.url || report?.uri;
+                    try {
+                      await Share.share({
+                        message: `Government Lab Report PDF: ${reportUrl}`,
+                        url: reportUrl,
+                      });
+                    } catch (err) {
+                      showAlert({ type: 'error', title: 'Error', message: 'Failed to share.' });
+                    }
+                  }}
+                >
+                  <View style={[styles.optionIconBox, { backgroundColor: '#F5F3FF' }]}>
+                    <Icon name="share-variant-outline" size={20} color="#8B5CF6" />
+                  </View>
+                  <Text style={styles.optionRowText}>Share PDF Link</Text>
+                </TouchableOpacity>
+              </View>
+
+              <TouchableOpacity
+                style={styles.optionsCancelBtn}
+                activeOpacity={0.8}
+                onPress={() => setReportModalVisible(false)}
+              >
+                <Text style={styles.optionsCancelText}>Cancel</Text>
               </TouchableOpacity>
             </View>
-
-            <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.modalScroll}>
-              <Text style={styles.modalSubtitle}>
-                Offer terms for {item.commodityName} - Grade {item.grade} ({item.sellerName})
-              </Text>
-
-              {/* Price & Quantity input */}
-              <View style={styles.row}>
-                <View style={styles.halfCol}>
-                  <Text style={styles.inputLabel}>Offer Price (₹/{item.sellingPriceUnit})</Text>
-                  <TextInput
-                    style={[
-                      styles.modalInput,
-                      item.isNegotiable === false && { backgroundColor: '#E2E8F0', color: COLORS.textMuted }
-                    ]}
-                    keyboardType="numeric"
-                    value={item.isNegotiable === false ? String(item.sellingPrice) : offerPrice}
-                    onChangeText={setOfferPrice}
-                    placeholder="e.g. 2400"
-                    editable={item.isNegotiable !== false}
-                  />
-                  <Text style={styles.hintText}>
-                    {item.isNegotiable === false ? 'Price is fixed by seller' : `Seller asks ₹${item.sellingPrice}`}
-                  </Text>
-                </View>
-                <View style={styles.halfCol}>
-                  <Text style={styles.inputLabel}>Quantity ({item.unit})</Text>
-                  <TextInput
-                    style={styles.modalInput}
-                    keyboardType="numeric"
-                    value={offerQty}
-                    onChangeText={setOfferQty}
-                    placeholder="e.g. 50"
-                  />
-                  <Text style={styles.hintText}>Available: {item.quantity} {item.unit}</Text>
-                </View>
-              </View>
-
-              {/* Delivery Type preference */}
-              <Text style={styles.inputLabel}>Preferred Delivery Type</Text>
-              <View style={styles.pickerRow}>
-                {['FOR', 'EX_WAREHOUSE'].map((dt) => (
-                  <TouchableOpacity
-                    key={dt}
-                    onPress={() => setDeliveryType(dt)}
-                    style={[styles.pickerChip, deliveryType === dt && { backgroundColor: theme.primary }]}
-                  >
-                    <Text style={[styles.pickerChipText, deliveryType === dt && { color: COLORS.white }]}>
-                      {dt === 'FOR' ? 'FOR (Freight Free)' : 'Ex-Warehouse'}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
-
-              {/* Proposed Payment timeline Preference */}
-              <Text style={styles.inputLabel}>Proposed Payment Timeline</Text>
-              <TextInput
-                style={styles.modalInput}
-                value={paymentTimeline}
-                onChangeText={setPaymentTimeline}
-                placeholder="e.g. On delivery confirmation"
-              />
-
-              {/* Remarks */}
-              <Text style={styles.inputLabel}>Remarks / Custom Clauses</Text>
-              <TextInput
-                style={[styles.modalInput, styles.remarksInput]}
-                multiline
-                value={remarks}
-                onChangeText={setRemarks}
-                placeholder="e.g. Request immediate loading, jute bags packing..."
-              />
-
-              <View style={[styles.escrowNotice, { backgroundColor: theme.primary + '0A' }]}>
-                <Icon name="shield-check-outline" size={20} color={theme.primary} />
-                <Text style={[styles.escrowNoticeText, { color: theme.text }]}>
-                  This offer will initiate a secure negotiation. On acceptance, funds will be deposited in a secure partner escrow account.
-                </Text>
-              </View>
-
-              <View style={styles.modalActions}>
-                <TouchableOpacity
-                  style={[styles.modalBtn, styles.cancelBtn]}
-                  onPress={() => setOfferModalVisible(false)}
-                  disabled={submittingOffer}
-                >
-                  <Text style={styles.cancelBtnText}>Cancel</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[styles.modalBtn, { backgroundColor: theme.primary }]}
-                  onPress={handlePlaceOffer}
-                  disabled={submittingOffer}
-                >
-                  {submittingOffer ? (
-                    <ActivityIndicator size="small" color={COLORS.white} />
-                  ) : (
-                    <Text style={styles.submitBtnText}>Submit Offer</Text>
-                  )}
-                </TouchableOpacity>
-              </View>
-            </ScrollView>
           </View>
-        </View>
-      </Modal>
+        </Modal>
+      )}
     </SafeScreen>
   );
 }
@@ -563,13 +694,31 @@ const styles = StyleSheet.create({
     paddingBottom: h(20),
   },
   galleryContainer: {
-    height: h(200),
+    height: h(220),
     position: 'relative',
     backgroundColor: COLORS.white,
+    marginVertical: h(8),
   },
   gallerySlide: {
-    width: w(360),
+    width: screenWidth,
+    height: h(220),
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  imageWrapper: {
+    width: screenWidth - w(32),
+    height: h(200),
+    borderRadius: 16,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    backgroundColor: '#F8F9FA',
+    position: 'relative',
+  },
+  galleryImage: {
+    width: '100%',
     height: '100%',
+    resizeMode: 'cover',
   },
   mockImagePlaceholder: {
     width: '100%',
@@ -580,7 +729,7 @@ const styles = StyleSheet.create({
   galleryTag: {
     position: 'absolute',
     bottom: h(10),
-    right: w(16),
+    right: w(12),
     paddingHorizontal: w(8),
     paddingVertical: h(4),
     borderRadius: 6,
@@ -967,5 +1116,91 @@ const styles = StyleSheet.create({
   remarksInput: {
     height: h(60),
     textAlignVertical: 'top',
+  },
+  reportModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.55)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: w(24),
+  },
+  optionsCard: {
+    width: '100%',
+    backgroundColor: COLORS.white,
+    borderRadius: 20,
+    paddingTop: h(24),
+    paddingBottom: h(16),
+    paddingHorizontal: w(20),
+    alignItems: 'center',
+    elevation: 8,
+    shadowColor: COLORS.black,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 10,
+  },
+  optionsHeader: {
+    alignItems: 'center',
+    marginBottom: h(20),
+  },
+  pdfIconContainer: {
+    width: w(56),
+    height: h(56),
+    borderRadius: 28,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: h(12),
+  },
+  optionsTitle: {
+    fontSize: f(16),
+    fontWeight: '700',
+    color: COLORS.text,
+    textAlign: 'center',
+    marginBottom: h(4),
+  },
+  optionsSubtitle: {
+    fontSize: f(12),
+    color: COLORS.textMuted,
+    textAlign: 'center',
+  },
+  optionsList: {
+    width: '100%',
+    gap: h(10),
+    marginBottom: h(16),
+  },
+  optionRowBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: h(10),
+    paddingHorizontal: w(12),
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#F1F3F5',
+    backgroundColor: '#F8F9FA',
+  },
+  optionIconBox: {
+    width: w(36),
+    height: h(36),
+    borderRadius: 8,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: w(12),
+  },
+  optionRowText: {
+    fontSize: f(13),
+    fontWeight: '600',
+    color: COLORS.text,
+  },
+  optionsCancelBtn: {
+    width: '100%',
+    paddingVertical: h(12),
+    borderRadius: 12,
+    alignItems: 'center',
+    backgroundColor: '#F1F3F5',
+    marginTop: h(4),
+  },
+  optionsCancelText: {
+    fontSize: f(13),
+    fontWeight: '700',
+    color: COLORS.textLight,
   },
 });

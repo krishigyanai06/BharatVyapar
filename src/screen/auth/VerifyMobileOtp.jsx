@@ -24,7 +24,7 @@ export default function VerifyMobileOtp({ route, navigation }) {
     mobile,
     selectedRole,
     roleColor = COLORS.fpoSecondary,
-  } = route.params;
+  } = route?.params || {};
   const [otp, setOtp] = useState(['', '', '', '', '', '']);
   const [error, setError] = useState('');
   const dispatch = useDispatch();
@@ -303,9 +303,13 @@ export default function VerifyMobileOtp({ route, navigation }) {
               {/* Verify Button */}
               <Animated.View style={{ transform: [{ scale: btnScale }] }}>
                 <TouchableOpacity
-                  style={[styles.btn, { backgroundColor: roleColor }]}
+                  style={[
+                    styles.btn,
+                    { backgroundColor: roleColor },
+                    (filledCount < 6 || verifyOtpLoading) && styles.btnDisabled,
+                  ]}
                   onPress={handleVerify}
-                  disabled={verifyOtpLoading}
+                  disabled={filledCount < 6 || verifyOtpLoading}
                   activeOpacity={0.9}
                 >
                   {verifyOtpLoading ? (
@@ -482,6 +486,9 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.2,
     shadowRadius: 12,
     elevation: 6,
+  },
+  btnDisabled: {
+    opacity: 0.5,
   },
   btnText: {
     color: COLORS.white,

@@ -16,6 +16,7 @@ import COLORS from '../../constant/colors';
 import { w, h, mw, f } from '../../utils/responsive';
 import { showAlert } from '../../components/CustomAlertBox';
 import { SafeScreen } from '../../components/SafeScreen';
+import { selectUser } from '../../store/authSelectors';
 
 const WAREHOUSES = [
   {
@@ -70,7 +71,10 @@ const WAREHOUSES = [
 
 export default function WarehouseScreen() {
   const insets = useSafeAreaInsets();
-  const { user } = useSelector(state => state.auth);
+  // PERFORMANCE FIX: Single granular selector — WarehouseScreen only needs
+  // user.role for theming. Subscribing to the entire auth slice caused
+  // re-renders from unrelated auth actions (profileLoading, sendOtpError, etc.).
+  const user = useSelector(selectUser);
   const selectedRole = user?.role || 'FPO';
   const roleColor = {
     FPO: COLORS.fpoPrimary,

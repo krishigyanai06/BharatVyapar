@@ -37,7 +37,11 @@ api.interceptors.request.use(async reqConfig => {
   }
 
   if (__DEV__) {
-    console.log('📤', reqConfig.method?.toUpperCase(), reqConfig.url);
+    let bodyLog = reqConfig.data;
+    if (reqConfig.data instanceof FormData) {
+      bodyLog = reqConfig.data._parts ? Object.fromEntries(reqConfig.data._parts) : '[FormData]';
+    }
+    console.log(`📤 SENDING [${reqConfig.method?.toUpperCase()}] ${reqConfig.url}\nPayload:`, bodyLog);
   }
 
   return reqConfig;
@@ -63,7 +67,12 @@ const forceLogout = async () => {
 };
 
 api.interceptors.response.use(
-  res => res,
+  res => {
+    if (__DEV__) {
+      console.log(`📥 RECEIVED [${res.config?.method?.toUpperCase()}] ${res.config?.url}\nResponse:`, res.data);
+    }
+    return res;
+  },
   async error => {
     const original = error.config || {};
     const statusCode = error.response?.status;
@@ -72,17 +81,15 @@ api.interceptors.response.use(
     if (axios.isCancel(error)) return Promise.reject(error);
 
     if (__DEV__) {
-      console.log('[NET][RES][ERR]', {
-        statusCode,
-        method: original?.method?.toUpperCase?.(),
-        url: original?.url,
-        data: error.response?.data || null,
-      });
+      console.log(`❌ ERROR [${original?.method?.toUpperCase?.()}] ${original?.url}\nError data:`, error.response?.data || error.message);
     }
 
     if (!error.response) {
+      const isTimeout = error.code === 'ECONNABORTED' || error.message?.includes('timeout');
       return Promise.reject({
-        message: 'No internet connection',
+        message: isTimeout
+          ? 'Request timed out. The server may be starting up — please try again in a moment.'
+          : 'Unable to reach the server. Please check your connection and try again.',
         type: 'NETWORK_ERROR',
         statusCode: null,
         backendError: null,

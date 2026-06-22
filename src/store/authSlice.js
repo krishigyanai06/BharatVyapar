@@ -143,7 +143,7 @@ export const getUserDetails = createAsyncThunk(
 
 export const updateProfile = createAsyncThunk(
   'auth/updateProfile',
-  async ({ formData, clientUpdatedUser }, { rejectWithValue, getState, signal }) => {
+  async ({ formData, clientUpdatedUser, type }, { rejectWithValue, getState, signal }) => {
     try {
       const currentUser = getState().auth.user || {};
       console.log('📤 [UPDATE PROFILE] Updating profile...');
@@ -155,7 +155,7 @@ export const updateProfile = createAsyncThunk(
         shopName: currentUser.shopName,
       });
 
-      const response = await userApi.updateProfile(formData, signal);
+      const response = await userApi.updateProfile(formData, type, signal);
       console.log('🔍 [UPDATE PROFILE] Backend response:', response);
       console.log('🔍 [UPDATE PROFILE] Backend response.data:', response?.data);
 
@@ -172,6 +172,26 @@ export const updateProfile = createAsyncThunk(
 
       if (mergedUser.phone) {
         await saveLocalProfile(mergedUser.phone, mergedUser);
+      }
+
+      // Persist the updated session to AsyncStorage here in the thunk — BEFORE
+      // returning to the reducer — so we can safely await it. Doing async work
+      // inside an Immer reducer (fulfilled handler) is unsafe because Immer
+      // finalises the draft synchronously; any async .then() continuation runs
+      // after the draft is already revoked, leading to stale-capture bugs.
+      try {
+        const session = await getStoredAuthSession();
+        const authState = getState().auth;
+        console.log('💾 [PERSIST USER] Saving session to storage...');
+        await saveAuthSession({
+          token: authState.token,
+          user: mergedUser,
+          refreshToken: session?.refreshToken ?? null,
+          selectedRole: authState.selectedRole,
+          roleColor: authState.roleColor,
+        });
+      } catch (persistErr) {
+        console.error('❌ [PERSIST USER] Failed:', persistErr);
       }
 
       console.log('✅ [UPDATE PROFILE] Updated successfully');
@@ -306,8 +326,20 @@ const authSlice = createSlice({
       })
       .addCase(getUserDetails.fulfilled, (state, action) => {
         state.profileLoading = false;
-        // Merge with existing user to preserve fields backend doesn't return (e.g. emailId)
-        state.user = { ...(state.user || {}), ...action.payload };
+        // Merge incoming payload with existing user to preserve fields the backend
+        // doesn't return (e.g. emailId cached locally).
+        //
+        // PERFORMANCE FIX — shallow equality guard:
+        //   Without this guard, every getUserDetails call produces a NEW user
+        //   object reference (via spread), even when the data hasn't changed.
+        //   That new reference causes ALL components subscribed via useSelector
+        //   to re-render simultaneously (the ~1.29s "Render" burst in profiler).
+        //   Solution: only assign state.user when the merged result is actually
+        //   different from the current user (JSON.stringify fast-path).
+        const merged = { ...(state.user || {}), ...action.payload };
+        if (JSON.stringify(merged) !== JSON.stringify(state.user)) {
+          state.user = merged;
+        }
       })
       .addCase(getUserDetails.rejected, (state, action) => {
         state.profileLoading = false;
@@ -319,22 +351,9 @@ const authSlice = createSlice({
       })
       .addCase(updateProfile.fulfilled, (state, action) => {
         state.profileLoading = false;
+        // Session persistence is now handled in the thunk (before returning),
+        // keeping this reducer purely synchronous as Immer requires.
         state.user = action.payload;
-        // Capture from Immer draft synchronously before async call
-        const token       = state.token;
-        const selectedRole = state.selectedRole;
-        const roleColor   = state.roleColor;
-        const updatedUser = action.payload;
-        getStoredAuthSession().then(session => {
-          console.log('💾 [PERSIST USER] Saving session to storage...');
-          return saveAuthSession({
-            token,
-            user: updatedUser,
-            refreshToken: session?.refreshToken ?? null,
-            selectedRole,
-            roleColor,
-          });
-        }).catch(err => console.error('❌ [PERSIST USER] Failed:', err));
       })
       .addCase(updateProfile.rejected, (state, action) => {
         state.profileLoading = false;

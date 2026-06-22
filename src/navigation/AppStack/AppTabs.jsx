@@ -2,11 +2,12 @@ import React from 'react';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { useSelector } from 'react-redux';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
+import { selectUser, selectSelectedRole, selectRoleColor } from '../../store/authSelectors';
 
 import HomeScreen from '../../screen/app/BottomTabs/HomeScreen';
-import MarketplaceScreen from '../../screen/app/BottomTabs/MarketplaceScreen';
-import TradesScreen from '../../screen/app/BottomTabs/TradesScreen';
-import SellCommodities from '../../screen/app/BottomTabs/SellCommodities';
+import MarketplaceScreen from '../../screen/app/Trades/Marketplace/MarketplaceScreen';
+import TradesScreen from '../../screen/app/Trades/TradesScreen';
+import SellCommodities from '../../screen/app/Trades/SellCommodities';
 import ProfileScreen from '../../screen/app/BottomTabs/ProfileScreen';
 import COLORS from '../../constant/colors';
 
@@ -38,7 +39,12 @@ const getScreenOptions = (roleColor) => ({ route }) => ({
 });
 
 export default function AppTabs() {
-  const { user, selectedRole: stateRole, roleColor: stateColor } = useSelector(state => state.auth);
+  // PERFORMANCE FIX: Three separate subscriptions — AppTabs only re-renders
+  // when user, selectedRole, or roleColor specifically change; not on every
+  // auth action (e.g. profileLoading, sendOtpError) that other screens trigger.
+  const user       = useSelector(selectUser);
+  const stateRole  = useSelector(selectSelectedRole);
+  const stateColor = useSelector(selectRoleColor);
 
   const getNormalizedRole = (role) => {
     if (!role) return 'FPO';
