@@ -5,9 +5,7 @@ import WarehouseScreen from '../../screen/app/WarehouseScreen';
 import FinanceScreen from '../../screen/app/FinanceScreen';
 
 // New static screens for Marketplace & Trades flow
-import CommodityDetailsScreen from '../../screen/app/Marketplace/CommodityDetailsScreen';
-import CommodityDetailsOwnerScreen from '../../screen/app/Marketplace/CommodityDetailsOwnerScreen';
-import ReceivedOffersScreen from '../../screen/app/Trades/ReceivedOffersScreen';
+import CommodityDetailsScreen from '../../screen/app/Trades/Marketplace/CommodityDetailsScreen';
 import NegotiationDetailsScreen from '../../screen/app/Trades/NegotiationDetailsScreen';
 import DealDetailsScreen from '../../screen/app/Trades/DealDetailsScreen';
 
@@ -22,8 +20,6 @@ export default function AppStack() {
       
       {/* Marketplace & Trades flows */}
       <Stack.Screen name="CommodityDetails" component={CommodityDetailsScreen} />
-      <Stack.Screen name="CommodityDetailsOwner" component={CommodityDetailsOwnerScreen} />
-      <Stack.Screen name="ReceivedOffers" component={ReceivedOffersScreen} />
       <Stack.Screen name="NegotiationDetails" component={NegotiationDetailsScreen} />
       <Stack.Screen name="DealDetails" component={DealDetailsScreen} />
     </Stack.Navigator>

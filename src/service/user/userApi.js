@@ -2,8 +2,11 @@
 import apiClient from '../api';
 
 const userApi = {
-  updateProfile: async (formData, signal) => {
-    const res = await apiClient.patch('/user/update-profile', formData, { signal });
+  updateProfile: async (formData, type, signal) => {
+    const url = type
+      ? `/user/update-profile?type=${type}`
+      : '/user/update-profile';
+    const res = await apiClient.patch(url, formData, { signal });
     return res.data;
   },
 
@@ -31,6 +34,12 @@ const userApi = {
 
   logout: async () => {
     const res = await apiClient.post('/user/logout');
+    return res.data;
+  },
+
+  verifyPan: async ({ pan, name }) => {
+    const res = await apiClient.post('user/kyc/verify-pan', { pan, name });
+    console.log('Kyc Status', res.data);
     return res.data;
   },
 };

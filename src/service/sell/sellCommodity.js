@@ -6,13 +6,19 @@ const BASE_URL = '/sell-commodity';
  * Create a new sell commodity listing
  * Method: POST
  * Route: /api/sell-commodity/create
- * @param {Object|FormData} data 
- * Expected Fields: commodityName, quantity, unit, sellingPrice, sellingPriceUnit, etc.
+ * @param {FormData} data - multipart form data (files + fields)
+ * @param {Object} options - extra fields that must be sent as typed JSON (not FormData strings)
+ * @param {boolean} [options.isNegotiable] - sent as boolean query param so backend receives true boolean
  */
-export const createSellCommodity = async (data) => {
-  console.log('[API] createSellCommodity called with data:', data);
+export const createSellCommodity = async (data, options = {}, config = {}) => {
+  console.log('[API] createSellCommodity called');
   try {
-    const response = await api.post(`${BASE_URL}/create`, data);
+    const params = {};
+    // isNegotiable MUST be a boolean — FormData always serialises as string so we send via query param
+    if (typeof options.isNegotiable === 'boolean') {
+      params.isNegotiable = options.isNegotiable;
+    }
+    const response = await api.post(`${BASE_URL}/create`, data, { params, ...config });
     console.log('[API] createSellCommodity success:', response.data);
     return response.data;
   } catch (error) {
@@ -62,13 +68,19 @@ export const getSellCommodityById = async (id) => {
  * Update an existing sell commodity listing
  * Method: PATCH
  * Route: /api/sell-commodity/:id
- * @param {string} id 
- * @param {Object|FormData} data 
+ * @param {string} id
+ * @param {FormData} data - multipart form data
+ * @param {Object} options - extra typed fields
+ * @param {boolean} [options.isNegotiable] - sent as boolean query param
  */
-export const updateSellCommodity = async (id, data) => {
-  console.log(`[API] updateSellCommodity called for id: ${id} with data:`, data);
+export const updateSellCommodity = async (id, data, options = {}, config = {}) => {
+  console.log(`[API] updateSellCommodity called for id: ${id}`);
   try {
-    const response = await api.patch(`${BASE_URL}/${id}`, data);
+    const params = {};
+    if (typeof options.isNegotiable === 'boolean') {
+      params.isNegotiable = options.isNegotiable;
+    }
+    const response = await api.patch(`${BASE_URL}/${id}`, data, { params, ...config });
     console.log('[API] updateSellCommodity success:', response.data);
     return response.data;
   } catch (error) {

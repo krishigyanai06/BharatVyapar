@@ -1,3 +1,10 @@
+// babel.config.js
 module.exports = {
   presets: ['module:@react-native/babel-preset'],
+  plugins: [['@babel/plugin-transform-runtime']],
+  env: {
+    production: {
+      plugins: ['transform-remove-console'],
+    },
+  },
 };

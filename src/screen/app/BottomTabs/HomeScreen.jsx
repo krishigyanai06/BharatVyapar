@@ -1,12 +1,15 @@
-import React from 'react';
+import React, { useMemo, useCallback } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useSelector } from 'react-redux';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { selectUser, selectSelectedRole } from '../../../store/authSelectors';
 import { SafeScreen } from '../../../components/SafeScreen';
 import AppHeader from '../../../components/AppHeader';
 import COLORS from '../../../constant/colors';
 import { w, h, f } from '../../../utils/responsive';
+import { syncUserToDisplayData } from '../../../service/user/userService';
+import { showAlert } from '../../../components/CustomAlertBox';
 
 const ROLE_THEMES = {
   FPO: {
@@ -47,9 +50,10 @@ const ROLE_CONFIGS = {
       { label: 'Active Listings', value: '8 Offers', icon: 'storefront' },
     ],
     actions: [
+      { name: 'Buy', icon: 'cart-outline', tab: 'Market', highlight: true },
+      { name: 'Sell', icon: 'storefront-outline', screen: 'Sell', highlight: true },
       { name: 'Book Storage', icon: 'warehouse', screen: 'WarehouseScreen' },
       { name: 'Apply Loan', icon: 'cash-refund', screen: 'FinanceScreen' },
-      { name: 'Marketplace', icon: 'cart', tab: 'Market' },
     ],
   },
   Trader: {
@@ -59,9 +63,10 @@ const ROLE_CONFIGS = {
       { label: 'Active Bids', value: '12 Bids', icon: 'gavel' },
     ],
     actions: [
+      { name: 'Buy', icon: 'cart-outline', tab: 'Market', highlight: true },
+      { name: 'Sell', icon: 'storefront-outline', screen: 'Sell', highlight: true },
       { name: 'Locate Storage', icon: 'warehouse', screen: 'WarehouseScreen' },
       { name: 'Trade Finance', icon: 'cash-refund', screen: 'FinanceScreen' },
-      { name: 'Market Intel', icon: 'chart-box-outline', tab: 'Market' },
     ],
   },
   Miller: {
@@ -71,8 +76,9 @@ const ROLE_CONFIGS = {
       { label: 'Buy Indents', value: '4 Active', icon: 'clipboard-list' },
     ],
     actions: [
+      { name: 'Buy', icon: 'cart-outline', tab: 'Market', highlight: true },
+      { name: 'Sell', icon: 'storefront-outline', screen: 'Sell', highlight: true },
       { name: 'Factory Storage', icon: 'warehouse', screen: 'WarehouseScreen' },
-      { name: 'Grain Purchase', icon: 'cart', tab: 'Market' },
       { name: 'Capital Loan', icon: 'cash-refund', screen: 'FinanceScreen' },
     ],
   },
@@ -83,8 +89,9 @@ const ROLE_CONFIGS = {
       { label: 'Open Tenders', value: '6 Bids', icon: 'file-document-outline' },
     ],
     actions: [
+      { name: 'Buy', icon: 'cart-outline', tab: 'Market', highlight: true },
+      { name: 'Sell', icon: 'storefront-outline', screen: 'Sell', highlight: true },
       { name: 'Bulk Storage', icon: 'warehouse', screen: 'WarehouseScreen' },
-      { name: 'Procure Grains', icon: 'cart', tab: 'Market' },
       { name: 'Credit Limit', icon: 'cash-refund', screen: 'FinanceScreen' },
     ],
   },
@@ -97,95 +104,228 @@ const MANDI_PRICES = [
 ];
 
 export default function HomeScreen({ navigation }) {
-  const { user, selectedRole: stateRole } = useSelector(state => state.auth);
-  const selectedRole = stateRole || user?.role || 'FPO';
+  // PERFORMANCE FIX: Two separate subscriptions — HomeScreen only re-renders
+  // when user or selectedRole change, not on profileLoading or other auth fields.
+  const user      = useSelector(selectUser);
+  const stateRole = useSelector(selectSelectedRole);
   
-  const roleTheme = ROLE_THEMES[selectedRole] || ROLE_THEMES.FPO;
-  const config = ROLE_CONFIGS[selectedRole] || ROLE_CONFIGS.FPO;
+  const selectedRole = useMemo(() => stateRole || user?.role || 'FPO', [stateRole, user?.role]);
+  const roleTheme = useMemo(() => ROLE_THEMES[selectedRole] || ROLE_THEMES.FPO, [selectedRole]);
+  const config = useMemo(() => ROLE_CONFIGS[selectedRole] || ROLE_CONFIGS.FPO, [selectedRole]);
   const { top: topInset } = useSafeAreaInsets();
 
-  const handleAction = (item) => {
-    if (item.screen) {
-      navigation.navigate(item.screen);
-    } else if (item.tab) {
-      navigation.navigate(item.tab);
+  const handleAction = useCallback((item) => {
+    try {
+      console.log(`[HomeScreen] handleAction navigation triggered: target screen=${item.screen}, tab=${item.tab}`);
+      if (item.screen) {
+        navigation.navigate(item.screen);
+      } else if (item.tab) {
+        navigation.navigate(item.tab);
+      }
+    } catch (error) {
+      console.error('[HomeScreen] handleAction navigation failure:', error);
+      showAlert({
+        type: 'error',
+        title: 'Navigation Error',
+        message: 'Could not complete the transition to the requested page.',
+        buttons: [{ text: 'OK' }]
+      });
     }
-  };
+  }, [navigation]);
+
+  const displayData = useMemo(() => syncUserToDisplayData(user), [user]);
+  const fullName = useMemo(() => {
+    return [displayData.firstName, displayData.lastName].filter(Boolean).join(' ').trim();
+  }, [displayData.firstName, displayData.lastName]);
+
+  // Precalculated layouts and colors to optimize JSX and avoid layout calculation overhead
+  const headerPaddingTop = useMemo(() => topInset + h(10), [topInset]);
+  const userNameStyle = useMemo(() => [styles.userName, { color: roleTheme.primary }], [roleTheme.primary]);
+  const seeAllStyle = useMemo(() => [styles.seeAllText, { color: roleTheme.primary }], [roleTheme.primary]);
+  const welcomeText = useMemo(() => fullName || user?.phone || 'Partner', [fullName, user?.phone]);
+
+  const stats = useMemo(() => {
+    return (config.stats || []).map((stat) => ({
+      ...stat,
+      iconWrapperStyle: [
+        styles.statIconWrapper,
+        { backgroundColor: roleTheme.primary + '15' }
+      ],
+      iconColor: roleTheme.primary
+    }));
+  }, [config.stats, roleTheme.primary]);
+
+  const quickActions = useMemo(() => {
+    return (config.actions || []).map((act) => {
+      const isHighlight = act.highlight;
+      return {
+        ...act,
+        buttonStyle: [
+          styles.actionButton,
+          isHighlight && {
+            borderColor: roleTheme.primary,
+            borderWidth: 1,
+            backgroundColor: roleTheme.primary + '05',
+          }
+        ],
+        iconCircleStyle: [
+          styles.actionIconCircle,
+          isHighlight
+            ? { backgroundColor: roleTheme.primary }
+            : { backgroundColor: '#F1F5F9' }
+        ],
+        iconColor: isHighlight ? COLORS.white : COLORS.textLight,
+        textStyle: [
+          styles.actionText,
+          isHighlight && { color: roleTheme.primary, fontWeight: '800' }
+        ]
+      };
+    });
+  }, [config.actions, roleTheme.primary]);
+
+  const mandiPrices = useMemo(() => {
+    return (MANDI_PRICES || []).map((item) => {
+      const trendBg = item.up ? COLORS.success + '15' : COLORS.error + '15';
+      const trendColor = item.up ? COLORS.success : COLORS.error;
+      const trendIcon = item.up ? 'trending-up' : 'trending-down';
+      return {
+        ...item,
+        cropIconBg: COLORS.success + '15',
+        trendBg,
+        trendColor,
+        trendIcon
+      };
+    });
+  }, []);
 
   return (
-    <SafeScreen style={{ backgroundColor: roleTheme.light }} top={false} bottom={false}>
+    <SafeScreen style={styles.safeContainer} top={false} bottom={false}>
       <AppHeader
         backgroundColor={roleTheme.primary}
-        paddingTop={topInset + h(10)}
+        paddingTop={headerPaddingTop}
         title="Bharat FPO Vyapar"
         subtitle={`${selectedRole} Dashboard`}
         showBackButton={false}
       />
 
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-        {/* Welcome Card */}
-        <View style={styles.welcomeCard}>
+        {/* Welcome Section */}
+        <View 
+          style={styles.welcomeHeader}
+          accessible={true}
+          accessibilityRole="header"
+          accessibilityLabel={`Welcome back, ${welcomeText}. Manage your agriculture trading & storage seamlessly.`}
+        >
           <Text style={styles.welcomeTitle}>Welcome back,</Text>
-          <Text style={[styles.userName, { color: roleTheme.primary }]}>
-            {user?.name || user?.phone || 'Partner'}
+          <Text style={userNameStyle}>
+            {welcomeText}
           </Text>
           <Text style={styles.welcomeSubtitle}>Manage your agriculture trading & storage seamlessly.</Text>
         </View>
 
         {/* Stats Row */}
-        <View style={styles.statsContainer}>
-          {config.stats.map((stat, idx) => (
-            <View key={idx} style={styles.statCard}>
-              <Icon name={stat.icon} size={24} color={roleTheme.primary} style={styles.statIcon} />
-              <Text style={styles.statValue}>{stat.value}</Text>
-              <Text style={styles.statLabel}>{stat.label}</Text>
-            </View>
-          ))}
-        </View>
+        {stats.length > 0 ? (
+          <View style={styles.statsContainer}>
+            {stats.map((stat, idx) => (
+              <View 
+                key={idx} 
+                style={styles.statCard}
+                accessible={true}
+                accessibilityLabel={`${stat.label}: ${stat.value}`}
+              >
+                <View style={stat.iconWrapperStyle}>
+                  <Icon name={stat.icon} size={18} color={stat.iconColor} />
+                </View>
+                <Text style={styles.statValue}>{stat.value}</Text>
+                <Text style={styles.statLabel}>{stat.label}</Text>
+              </View>
+            ))}
+          </View>
+        ) : (
+          <View style={styles.emptyContainer} accessible={true} accessibilityLabel="No stats available.">
+            <Text style={styles.emptyText}>No stats available</Text>
+          </View>
+        )}
 
         {/* Quick Actions Grid */}
-        <Text style={styles.sectionTitle}>Quick Actions</Text>
-        <View style={styles.gridContainer}>
-          {config.actions.map((act, idx) => (
-            <TouchableOpacity
-              key={idx}
-              style={styles.actionButton}
-              onPress={() => handleAction(act)}
-              activeOpacity={0.8}
-            >
-              <View style={[styles.actionIconCircle, { backgroundColor: roleTheme.primary + '15' }]}>
-                <Icon name={act.icon} size={28} color={roleTheme.primary} />
-              </View>
-              <Text style={styles.actionText}>{act.name}</Text>
-            </TouchableOpacity>
-          ))}
+        <View style={styles.sectionHeader} accessible={true} accessibilityRole="header">
+          <Text style={styles.sectionTitle}>Quick Actions</Text>
         </View>
+        {quickActions.length > 0 ? (
+          <View style={styles.gridContainer}>
+            {quickActions.map((act, idx) => (
+              <TouchableOpacity
+                key={idx}
+                style={act.buttonStyle}
+                onPress={() => handleAction(act)}
+                activeOpacity={0.7}
+                accessible={true}
+                accessibilityRole="button"
+                accessibilityLabel={`Navigate to ${act.name}`}
+                accessibilityHint={`Opens the ${act.name} feature`}
+              >
+                <View style={act.iconCircleStyle}>
+                  <Icon name={act.icon} size={22} color={act.iconColor} />
+                </View>
+                <Text style={act.textStyle}>{act.name}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        ) : (
+          <View style={styles.emptyContainer} accessible={true} accessibilityLabel="No quick actions available.">
+            <Text style={styles.emptyText}>No actions available</Text>
+          </View>
+        )}
 
         {/* Mandi Ticker */}
-        <Text style={styles.sectionTitle}>Live Mandi Prices</Text>
-        <View style={styles.mandiCard}>
-          {MANDI_PRICES.map((item, idx) => (
-            <View key={idx} style={[styles.mandiRow, idx !== MANDI_PRICES.length - 1 && styles.borderBottom]}>
-              <Text style={styles.cropName}>{item.crop}</Text>
-              <View style={styles.mandiPriceCol}>
-                <Text style={styles.cropPrice}>{item.price}</Text>
-                <View style={styles.mandiTrend}>
-                  <Icon
-                    name={item.up ? 'trending-up' : 'trending-down'}
-                    size={16}
-                    color={item.up ? COLORS.success : COLORS.error}
-                  />
-                  <Text style={[styles.cropChange, { color: item.up ? COLORS.success : COLORS.error }]}>
-                    {item.change}
-                  </Text>
+        <View style={styles.sectionHeader} accessible={true} accessibilityRole="header">
+          <Text style={styles.sectionTitle}>Live Mandi Prices</Text>
+          <TouchableOpacity 
+            activeOpacity={0.6}
+            accessible={true}
+            accessibilityRole="button"
+            accessibilityLabel="View All Mandi Prices"
+            accessibilityHint="Navigates to details for all mandi prices"
+          >
+            <Text style={seeAllStyle}>View All</Text>
+          </TouchableOpacity>
+        </View>
+        {mandiPrices.length > 0 ? (
+          <View style={styles.mandiCard}>
+            {mandiPrices.map((item, idx) => (
+              <View 
+                key={idx} 
+                style={[styles.mandiRow, idx !== mandiPrices.length - 1 && styles.borderBottom]}
+                accessible={true}
+                accessibilityLabel={`Mandi price for ${item.crop}: ${item.price}, change is ${item.change}`}
+              >
+                <View style={styles.cropInfo}>
+                  <View style={[styles.cropIconContainer, { backgroundColor: item.cropIconBg }]}>
+                    <Icon name="sprout" size={16} color={COLORS.success} />
+                  </View>
+                  <Text style={styles.cropName}>{item.crop}</Text>
+                </View>
+                <View style={styles.mandiPriceCol}>
+                  <Text style={styles.cropPrice}>{item.price}</Text>
+                  <View style={[styles.mandiTrend, { backgroundColor: item.trendBg }]}>
+                    <Icon
+                      name={item.trendIcon}
+                      size={12}
+                      color={item.trendColor}
+                    />
+                    <Text style={[styles.cropChange, { color: item.trendColor }]}>
+                      {item.change}
+                    </Text>
+                  </View>
                 </View>
               </View>
-            </View>
-          ))}
-        </View>
-
-        {/* AI recommendation widget */}
-        
+            ))}
+          </View>
+        ) : (
+          <View style={styles.mandiCard} accessible={true} accessibilityLabel="No live mandi prices available at this time.">
+            <Text style={styles.emptyText}>No live mandi prices available</Text>
+          </View>
+        )}
       </ScrollView>
     </SafeScreen>
   );
@@ -195,174 +335,184 @@ const styles = StyleSheet.create({
   scrollContent: {
     paddingHorizontal: w(16),
     paddingBottom: h(20),
-    paddingTop: h(12),
+    paddingTop: h(8),
   },
-  welcomeCard: {
-    backgroundColor: COLORS.white,
-    borderRadius: 16,
-    padding: w(16),
-    marginBottom: h(16),
-    elevation: 2,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 8,
+  welcomeHeader: {
+    paddingVertical: h(4),
+    marginBottom: h(12),
   },
   welcomeTitle: {
-    fontSize: f(14),
-    color: COLORS.textLight,
+    fontSize: f(13),
+    color: '#64748B',
+    fontWeight: '500',
   },
   userName: {
     fontSize: f(20),
     fontWeight: '800',
     marginTop: h(2),
+    letterSpacing: -0.3,
   },
   welcomeSubtitle: {
     fontSize: f(12),
-    color: COLORS.textMuted,
-    marginTop: h(4),
+    color: '#94A3B8',
+    marginTop: h(2),
   },
   statsContainer: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginBottom: h(20),
+    marginBottom: h(16),
     gap: w(8),
   },
   statCard: {
     flex: 1,
     backgroundColor: COLORS.white,
     borderRadius: 12,
-    padding: w(12),
+    paddingVertical: h(12),
+    paddingHorizontal: w(6),
     alignItems: 'center',
-    elevation: 2,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 8,
+    borderWidth: 1,
+    borderColor: '#F0F0F0',
   },
-  statIcon: {
-    marginBottom: h(4),
+  statIconWrapper: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: h(6),
   },
   statValue: {
-    fontSize: f(14),
-    fontWeight: '700',
-    color: COLORS.text,
+    fontSize: f(13),
+    fontWeight: '800',
+    color: '#1E293B',
   },
   statLabel: {
     fontSize: f(10),
-    color: COLORS.textMuted,
+    fontWeight: '600',
+    color: '#64748B',
     marginTop: h(2),
     textAlign: 'center',
   },
-  sectionTitle: {
-    fontSize: f(15),
-    fontWeight: '700',
-    color: COLORS.text,
+  sectionHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
     marginBottom: h(10),
+  },
+  sectionTitle: {
+    fontSize: f(14),
+    fontWeight: '800',
+    color: '#1E293B',
+  },
+  seeAllText: {
+    fontSize: f(12),
+    fontWeight: '700',
   },
   gridContainer: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     justifyContent: 'space-between',
-    marginBottom: h(20),
-    rowGap: h(12),
+    marginBottom: h(16),
+    rowGap: h(10),
   },
   actionButton: {
     width: '48%',
     backgroundColor: COLORS.white,
     borderRadius: 16,
-    paddingVertical: h(16),
+    paddingVertical: h(12),
     paddingHorizontal: w(12),
     alignItems: 'center',
-    elevation: 2,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 8,
+    borderWidth: 1,
+    borderColor: '#F0F0F0',
   },
   actionIconCircle: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: h(8),
   },
   actionText: {
     fontSize: f(13),
-    fontWeight: '600',
-    color: COLORS.text,
+    fontWeight: '700',
+    color: '#334155',
     textAlign: 'center',
   },
   mandiCard: {
     backgroundColor: COLORS.white,
     borderRadius: 16,
-    paddingHorizontal: w(16),
-    marginBottom: h(20),
-    elevation: 2,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 8,
+    paddingHorizontal: w(14),
+    marginBottom: h(16),
+    borderWidth: 1,
+    borderColor: '#F0F0F0',
   },
   mandiRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingVertical: h(14),
+    paddingVertical: h(10),
   },
   borderBottom: {
     borderBottomWidth: 1,
-    borderBottomColor: '#F1F3F5',
+    borderBottomColor: '#F0F0F0',
+  },
+  cropInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  cropIconContainer: {
+    width: 32,
+    height: 32,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: w(10),
   },
   cropName: {
     fontSize: f(13),
-    fontWeight: '600',
-    color: COLORS.text,
+    fontWeight: '700',
+    color: '#1E293B',
   },
   mandiPriceCol: {
     alignItems: 'flex-end',
   },
   cropPrice: {
     fontSize: f(13),
-    fontWeight: '700',
-    color: COLORS.text,
+    fontWeight: '800',
+    color: '#1E293B',
   },
   mandiTrend: {
     flexDirection: 'row',
     alignItems: 'center',
     marginTop: h(2),
+    paddingHorizontal: w(6),
+    paddingVertical: h(2),
+    borderRadius: 6,
   },
   cropChange: {
     fontSize: f(11),
-    fontWeight: '600',
+    fontWeight: '800',
     marginLeft: w(2),
   },
-  recommendationCard: {
-    backgroundColor: COLORS.white,
-    borderRadius: 12,
-    borderLeftWidth: 4,
-    padding: w(16),
-    marginBottom: h(10),
-    elevation: 2,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 8,
-  },
-  recHeader: {
-    flexDirection: 'row',
+  emptyContainer: {
+    padding: h(20),
     alignItems: 'center',
-    marginBottom: h(6),
+    justifyContent: 'center',
+    backgroundColor: COLORS.white,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#F0F0F0',
+    marginBottom: h(16),
   },
-  recTitle: {
+  emptyText: {
     fontSize: f(13),
-    fontWeight: '700',
-    marginLeft: w(6),
+    color: '#64748B',
+    fontWeight: '500',
+    textAlign: 'center',
   },
-  recContent: {
-    fontSize: f(12),
-    color: COLORS.textLight,
-    lineHeight: h(18),
+  safeContainer: {
+    backgroundColor: '#FFFFFF',
+    flex: 1,
   },
 });
