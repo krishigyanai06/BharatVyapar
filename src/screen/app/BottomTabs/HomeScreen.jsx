@@ -1,5 +1,11 @@
 import React, { useMemo, useCallback } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
+import {
+  View,
+  Text,
+  StyleSheet,
+  TouchableOpacity,
+  ScrollView,
+} from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useSelector } from 'react-redux';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -7,7 +13,7 @@ import { selectUser, selectSelectedRole } from '../../../store/authSelectors';
 import { SafeScreen } from '../../../components/SafeScreen';
 import AppHeader from '../../../components/AppHeader';
 import COLORS from '../../../constant/colors';
-import { w, h, f,mw} from '../../../utils/responsive';
+import { w, h, f, mw } from '../../../utils/responsive';
 import { syncUserToDisplayData } from '../../../service/user/userService';
 import { showAlert } from '../../../components/CustomAlertBox';
 import { useTranslation } from '../../../hook/useTranslation';
@@ -47,12 +53,22 @@ const ROLE_THEMES = {
 
 const ROLE_CONFIGS = {
   FPO: {
-    stats: [
-      { label: 'Active Listings', value: '8 Offers', icon: 'storefront' },
-    ],
+    stats: [],
     actions: [
-      { name: 'Buy', description: 'Explore market listings and place offers', icon: 'cart-outline', tab: 'Market', highlight: true },
-      { name: 'Sell', description: 'Publish crop stock details to find buyers', icon: 'storefront-outline', screen: 'Sell', highlight: true },
+      {
+        name: 'Buy',
+        description: 'Explore market listings and place offers',
+        icon: 'cart-outline',
+        tab: 'Market',
+        highlight: true,
+      },
+      {
+        name: 'Sell',
+        description: 'Publish crop stock details to find buyers',
+        icon: 'storefront-outline',
+        screen: 'Sell',
+        highlight: true,
+      },
     ],
   },
   Trader: {
@@ -62,8 +78,20 @@ const ROLE_CONFIGS = {
       { label: 'Active Bids', value: '12 Bids', icon: 'gavel' },
     ],
     actions: [
-      { name: 'Buy', description: 'Explore market listings and place offers', icon: 'cart-outline', tab: 'Market', highlight: true },
-      { name: 'Sell', description: 'Publish crop stock details to find buyers', icon: 'storefront-outline', screen: 'Sell', highlight: true },
+      {
+        name: 'Buy',
+        description: 'Explore market listings and place offers',
+        icon: 'cart-outline',
+        tab: 'Market',
+        highlight: true,
+      },
+      {
+        name: 'Sell',
+        description: 'Publish crop stock details to find buyers',
+        icon: 'storefront-outline',
+        screen: 'Sell',
+        highlight: true,
+      },
     ],
   },
   Miller: {
@@ -73,8 +101,20 @@ const ROLE_CONFIGS = {
       { label: 'Buy Indents', value: '4 Active', icon: 'clipboard-list' },
     ],
     actions: [
-      { name: 'Buy', description: 'Explore market listings and place offers', icon: 'cart-outline', tab: 'Market', highlight: true },
-      { name: 'Sell', description: 'Publish crop stock details to find buyers', icon: 'storefront-outline', screen: 'Sell', highlight: true },
+      {
+        name: 'Buy',
+        description: 'Explore market listings and place offers',
+        icon: 'cart-outline',
+        tab: 'Market',
+        highlight: true,
+      },
+      {
+        name: 'Sell',
+        description: 'Publish crop stock details to find buyers',
+        icon: 'storefront-outline',
+        screen: 'Sell',
+        highlight: true,
+      },
     ],
   },
   Corporate: {
@@ -84,8 +124,20 @@ const ROLE_CONFIGS = {
       { label: 'Open Tenders', value: '6 Bids', icon: 'file-document-outline' },
     ],
     actions: [
-      { name: 'Buy', description: 'Explore market listings and place offers', icon: 'cart-outline', tab: 'Market', highlight: true },
-      { name: 'Sell', description: 'Publish crop stock details to find buyers', icon: 'storefront-outline', screen: 'Sell', highlight: true },
+      {
+        name: 'Buy',
+        description: 'Explore market listings and place offers',
+        icon: 'cart-outline',
+        tab: 'Market',
+        highlight: true,
+      },
+      {
+        name: 'Sell',
+        description: 'Publish crop stock details to find buyers',
+        icon: 'storefront-outline',
+        screen: 'Sell',
+        highlight: true,
+      },
     ],
   },
 };
@@ -93,22 +145,30 @@ const ROLE_CONFIGS = {
 function HomeScreen({ navigation }) {
   // PERFORMANCE FIX: Two separate subscriptions — HomeScreen only re-renders
   // when user or selectedRole change, not on profileLoading or other auth fields.
-  const user      = useSelector(selectUser);
+  const user = useSelector(selectUser);
   const stateRole = useSelector(selectSelectedRole);
-  const { t }     = useTranslation();
-  
+  const { t } = useTranslation();
+
   // Deal Lifecycle Engine: Buyer Requirements
   const [requirements, setRequirements] = React.useState([]);
   const [showRequirementModal, setShowRequirementModal] = React.useState(false);
   const [loadingRequirements, setLoadingRequirements] = React.useState(false);
+  const [expandedReqId, setExpandedReqId] = React.useState(null);
 
   React.useEffect(() => {
     const fetchRequirements = async () => {
       setLoadingRequirements(true);
       try {
+        const myId = user?._id || user?.id;
         const res = await requirementService.getAllRequirements();
         if (res?.success) {
-          setRequirements(res.data.requirements);
+          const all = res.data.requirements || [];
+          // Dummy mode: buyer_001 = currentBuyer. Real mode: match actual user._id
+          const mine = all.filter(r => {
+            const bid = r.buyerId?._id || r.buyerId;
+            return String(bid) === String(myId) || String(bid) === 'buyer_001';
+          });
+          setRequirements(mine);
         }
       } catch (e) {
         console.error(e);
@@ -117,64 +177,94 @@ function HomeScreen({ navigation }) {
       }
     };
     fetchRequirements();
-  }, []);
+  }, [user?._id, user?.id]);
 
-  const handleRequirementSubmit = async (payload) => {
-    const res = await requirementService.submitRequirement(payload);
+  const handleRequirementSubmit = async payload => {
+    const res = await requirementService.submitRequirement({
+      ...payload,
+      buyerId: {
+        _id: user?._id || user?.id || 'me',
+        firstName: displayData.firstName || '',
+        lastName: displayData.lastName || '',
+      },
+    });
     if (res?.success) {
       setRequirements(prev => [...prev, res.data]);
     }
   };
-  
-  const selectedRole = useMemo(() => stateRole || user?.role || 'FPO', [stateRole, user?.role]);
-  const roleTheme = useMemo(() => ROLE_THEMES[selectedRole] || ROLE_THEMES.FPO, [selectedRole]);
-  const config = useMemo(() => ROLE_CONFIGS[selectedRole] || ROLE_CONFIGS.FPO, [selectedRole]);
+
+  const selectedRole = useMemo(
+    () => stateRole || user?.role || 'FPO',
+    [stateRole, user?.role],
+  );
+  const roleTheme = useMemo(
+    () => ROLE_THEMES[selectedRole] || ROLE_THEMES.FPO,
+    [selectedRole],
+  );
+  const config = useMemo(
+    () => ROLE_CONFIGS[selectedRole] || ROLE_CONFIGS.FPO,
+    [selectedRole],
+  );
   const { top: topInset } = useSafeAreaInsets();
 
-  const handleAction = useCallback((item) => {
-    try {
-      console.log(`[HomeScreen] handleAction navigation triggered: target screen=${item.screen}, tab=${item.tab}`);
-      if (item.screen) {
-        navigation.navigate(item.screen);
-      } else if (item.tab) {
-        navigation.navigate(item.tab);
+  const handleAction = useCallback(
+    item => {
+      try {
+        console.log(
+          `[HomeScreen] handleAction navigation triggered: target screen=${item.screen}, tab=${item.tab}`,
+        );
+        if (item.screen) {
+          navigation.navigate(item.screen);
+        } else if (item.tab) {
+          navigation.navigate(item.tab);
+        }
+      } catch (error) {
+        console.error('[HomeScreen] handleAction navigation failure:', error);
+        showAlert({
+          type: 'error',
+          title: 'Navigation Error',
+          message: 'Could not complete the transition to the requested page.',
+          buttons: [{ text: 'OK' }],
+        });
       }
-    } catch (error) {
-      console.error('[HomeScreen] handleAction navigation failure:', error);
-      showAlert({
-        type: 'error',
-        title: 'Navigation Error',
-        message: 'Could not complete the transition to the requested page.',
-        buttons: [{ text: 'OK' }]
-      });
-    }
-  }, [navigation]);
+    },
+    [navigation],
+  );
 
   const displayData = useMemo(() => syncUserToDisplayData(user), [user]);
   const fullName = useMemo(() => {
-    return [displayData.firstName, displayData.lastName].filter(Boolean).join(' ').trim();
+    return [displayData.firstName, displayData.lastName]
+      .filter(Boolean)
+      .join(' ')
+      .trim();
   }, [displayData.firstName, displayData.lastName]);
 
   // Precalculated layouts and colors to optimize JSX and avoid layout calculation overhead
   const headerPaddingTop = useMemo(() => topInset + h(10), [topInset]);
-  const userNameStyle = useMemo(() => [styles.userName, { color: roleTheme.primary }], [roleTheme.primary]);
-  const welcomeText = useMemo(() => fullName || user?.phone || t('Partner'), [fullName, user?.phone, t]);
+  const userNameStyle = useMemo(
+    () => [styles.userName, { color: roleTheme.primary }],
+    [roleTheme.primary],
+  );
+  const welcomeText = useMemo(
+    () => fullName || user?.phone || t('Partner'),
+    [fullName, user?.phone, t],
+  );
 
   const stats = useMemo(() => {
-    return (config.stats || []).map((stat) => ({
+    return (config.stats || []).map(stat => ({
       ...stat,
       label: t(stat.label),
       value: t(stat.value),
       iconWrapperStyle: [
         styles.statIconWrapper,
-        { backgroundColor: roleTheme.primary + '15' }
+        { backgroundColor: roleTheme.primary + '15' },
       ],
-      iconColor: roleTheme.primary
+      iconColor: roleTheme.primary,
     }));
   }, [config.stats, roleTheme.primary, t]);
 
   const quickActions = useMemo(() => {
-    return (config.actions || []).map((act) => {
+    return (config.actions || []).map(act => {
       return {
         ...act,
         name: t(act.name),
@@ -183,20 +273,15 @@ function HomeScreen({ navigation }) {
           styles.actionButton,
           {
             borderColor: roleTheme.primary + '20',
-          }
+          },
         ],
         iconCircleStyle: [
           styles.actionIconCircle,
-          { backgroundColor: roleTheme.primary + '10' }
+          { backgroundColor: roleTheme.primary + '10' },
         ],
         iconColor: roleTheme.primary,
-        textStyle: [
-          styles.actionText,
-          { color: roleTheme.primary }
-        ],
-        descriptionStyle: [
-          styles.actionDescription,
-        ]
+        textStyle: [styles.actionText, { color: roleTheme.primary }],
+        descriptionStyle: [styles.actionDescription],
       };
     });
   }, [config.actions, roleTheme.primary, t]);
@@ -206,29 +291,39 @@ function HomeScreen({ navigation }) {
       <AppHeader
         backgroundColor={roleTheme.primary}
         paddingTop={headerPaddingTop}
-        title={t("Bharat FPO Vyapar")}
+        title={t('Bharat FPO Vyapar')}
         subtitle={t(`${selectedRole} Dashboard`)}
         showBackButton={false}
         showLanguageSwitcher={true}
       />
 
-      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+      >
         {/* Welcome Section */}
-        <View 
+        <View
           style={styles.welcomeHeader}
           accessible={true}
           accessibilityRole="header"
-          accessibilityLabel={`${t("Welcome back,")} ${welcomeText}. ${t("Empowering your agricultural trade transactions.")}`}
+          accessibilityLabel={`${t('Welcome back,')} ${welcomeText}. ${t(
+            'Empowering your agricultural trade transactions.',
+          )}`}
         >
           <View style={styles.welcomeRow}>
             <View style={styles.welcomeTextContainer}>
-              <Text style={styles.welcomeTitle}>{t("Welcome back,")}</Text>
-              <Text style={userNameStyle}>
-                {welcomeText}
+              <Text style={styles.welcomeTitle}>{t('Welcome back,')}</Text>
+              <Text style={userNameStyle}>{welcomeText}</Text>
+              <Text style={styles.welcomeSubtitle}>
+                {t('Empowering your agricultural trade transactions.')}
               </Text>
-              <Text style={styles.welcomeSubtitle}>{t("Empowering your agricultural trade transactions.")}</Text>
             </View>
-            <View style={[styles.avatarCircle, { backgroundColor: roleTheme.primary }]}>
+            <View
+              style={[
+                styles.avatarCircle,
+                { backgroundColor: roleTheme.primary },
+              ]}
+            >
               <Text style={styles.avatarText}>
                 {welcomeText ? welcomeText.substring(0, 1).toUpperCase() : 'B'}
               </Text>
@@ -238,17 +333,20 @@ function HomeScreen({ navigation }) {
 
         {/* Buyer Requirement Section */}
         {requirements.length === 0 && !loadingRequirements ? (
-          <TouchableOpacity 
-            style={[styles.welcomeHeader, { backgroundColor: roleTheme.light, borderColor: roleTheme.primary }]}
+          <TouchableOpacity
+            style={[
+              styles.welcomeHeader,
+              { backgroundColor: roleTheme.light, borderColor: roleTheme.primary },
+            ]}
             onPress={() => setShowRequirementModal(true)}
           >
             <View style={styles.welcomeRow}>
               <View style={styles.welcomeTextContainer}>
                 <Text style={[styles.welcomeTitle, { color: roleTheme.primary, fontWeight: 'bold' }]}>
-                  {t("Looking for a specific commodity?")}
+                  {t('Looking for a specific commodity?')}
                 </Text>
                 <Text style={[styles.welcomeSubtitle, { color: roleTheme.text }]}>
-                  {t("Post your requirement here and sellers will contact you directly.")}
+                  {t('Post your requirement here and sellers will contact you directly.')}
                 </Text>
               </View>
               <View style={[styles.avatarCircle, { backgroundColor: roleTheme.primary }]}>
@@ -259,35 +357,85 @@ function HomeScreen({ navigation }) {
         ) : requirements.length > 0 ? (
           <>
             <View style={styles.sectionHeader}>
-              <Text style={styles.sectionTitle}>{t("My Requirements")}</Text>
+              <Text style={styles.sectionTitle}>{t('My Requirements')}</Text>
               <TouchableOpacity onPress={() => setShowRequirementModal(true)}>
                 <Icon name="plus-circle" size={24} color={roleTheme.primary} />
               </TouchableOpacity>
             </View>
-            {requirements.map((req, idx) => (
-              <View key={idx} style={styles.requirementCard}>
-                <View style={styles.reqHeaderRow}>
-                  <Text style={styles.reqCommodity}>{req.commodity}</Text>
-                  <View style={[styles.reqBadge, { backgroundColor: roleTheme.primary + '15' }]}>
-                    <Text style={[styles.reqBadgeText, { color: roleTheme.primary }]}>Active</Text>
+            {requirements.map((req, idx) => {
+              const reqId = req.id || req._id || idx;
+              const isExpanded = expandedReqId === reqId;
+              return (
+                <View key={reqId} style={styles.requirementCard}>
+                  {/* Accordion Header — tap to expand/collapse */}
+                  <TouchableOpacity
+                    onPress={() => setExpandedReqId(isExpanded ? null : reqId)}
+                    activeOpacity={0.8}
+                    style={styles.reqAccordionHeader}
+                  >
+                    <View style={styles.reqHeaderLeft}>
+                      <Text style={styles.reqCommodity}>{t(req.commodity)}</Text>
+                      <View style={[styles.reqBadge, { backgroundColor: roleTheme.primary + '15' }]}>
+                        <Text style={[styles.reqBadgeText, { color: roleTheme.primary }]}>
+                          {t(req.status || 'OPEN')}
+                        </Text>
+                      </View>
+                    </View>
+                    <Icon
+                      name={isExpanded ? 'chevron-up' : 'chevron-down'}
+                      size={20}
+                      color={roleTheme.primary}
+                    />
+                  </TouchableOpacity>
+
+                  {/* Summary always visible */}
+                  <View style={styles.reqSummaryRow}>
+                    <Text style={styles.reqDetailText}>
+                      {t('Qty:')} <Text style={{ fontWeight: '700' }}>{req.quantity} {t(req.unit || 'Qt')}</Text>
+                    </Text>
+                    <Text style={styles.reqDetailText}>
+                      {t('Expected:')} <Text style={{ fontWeight: '700' }}>₹{req.expectedPrice || req.targetPrice}</Text>
+                    </Text>
+                    <Text style={styles.reqDetailText}>
+                      {t('Loc:')} <Text style={{ fontWeight: '700' }}>{t(req.location)}</Text>
+                    </Text>
                   </View>
+
+                  {/* Expanded details */}
+                  {isExpanded && (
+                    <View style={styles.reqExpandedBody}>
+                      <View style={styles.reqDetailsRow}>
+                        <Text style={styles.reqDetailText}>
+                          {t('Remaining:')} <Text style={{ fontWeight: '700' }}>{req.remainingQuantity ?? req.quantity} {t(req.unit || 'Qt')}</Text>
+                        </Text>
+                        <Text style={styles.reqDetailText}>
+                          {t('Grade:')} <Text style={{ fontWeight: '700' }}>{t(req.grade) || '—'}</Text>
+                        </Text>
+                      </View>
+                      <TouchableOpacity
+                        style={[styles.reqViewQuotesBtn, { borderColor: roleTheme.primary }]}
+                        onPress={() => navigation.navigate('BuyerQuoteDashboard', { requirement: req })}
+                        activeOpacity={0.8}
+                      >
+                        <Icon name="format-list-bulleted" size={14} color={roleTheme.primary} />
+                        <Text style={[styles.reqFooterText, { color: roleTheme.primary }]}>
+                          {t('View Received Quotes')}
+                        </Text>
+                      </TouchableOpacity>
+                    </View>
+                  )}
                 </View>
-                <View style={styles.reqDetailsRow}>
-                  <Text style={styles.reqDetailText}>{t("Qty:")} <Text style={{fontWeight: '700'}}>{req.quantity} Qt</Text></Text>
-                  <Text style={styles.reqDetailText}>{t("Target:")} <Text style={{fontWeight: '700'}}>₹{req.targetPrice}</Text></Text>
-                  <Text style={styles.reqDetailText}>{t("Loc:")} <Text style={{fontWeight: '700'}}>{req.location}</Text></Text>
-                </View>
-              </View>
-            ))}
-          </  >
+              );
+            })}
+          </>
         ) : null}
 
         {/* Stats Row */}
-        {stats.length > 0 ? (
+        {stats.length > 0 && (
           <View style={styles.statsContainer}>
             {stats.map((stat, idx) => (
-              <View 
-                key={idx} 
+              <View
+                key={idx}
                 style={styles.statCard}
                 accessible={true}
                 accessibilityLabel={`${stat.label}: ${stat.value}`}
@@ -300,15 +448,15 @@ function HomeScreen({ navigation }) {
               </View>
             ))}
           </View>
-        ) : (
-          <View style={styles.emptyContainer} accessible={true} accessibilityLabel={t("No stats available.")}>
-            <Text style={styles.emptyText}>{t("No stats available")}</Text>
-          </View>
         )}
 
         {/* Trade Operations Section */}
-        <View style={styles.sectionHeader} accessible={true} accessibilityRole="header">
-          <Text style={styles.sectionTitle}>{t("Trade Operations")}</Text>
+        <View
+          style={styles.sectionHeader}
+          accessible={true}
+          accessibilityRole="header"
+        >
+          <Text style={styles.sectionTitle}>{t('Trade Operations')}</Text>
         </View>
         {quickActions.length > 0 ? (
           <View style={styles.gridContainer}>
@@ -320,8 +468,14 @@ function HomeScreen({ navigation }) {
                 activeOpacity={0.7}
                 accessible={true}
                 accessibilityRole="button"
-                accessibilityLabel={t("Navigate to {name}").replace('{name}', act.name)}
-                accessibilityHint={t("Opens the {name} feature").replace('{name}', act.name)}
+                accessibilityLabel={t('Navigate to {name}').replace(
+                  '{name}',
+                  act.name,
+                )}
+                accessibilityHint={t('Opens the {name} feature').replace(
+                  '{name}',
+                  act.name,
+                )}
               >
                 <View style={act.iconCircleStyle}>
                   <Icon name={act.icon} size={24} color={act.iconColor} />
@@ -332,39 +486,66 @@ function HomeScreen({ navigation }) {
             ))}
           </View>
         ) : (
-          <View style={styles.emptyContainer} accessible={true} accessibilityLabel={t("No actions available.")}>
-            <Text style={styles.emptyText}>{t("No actions available")}</Text>
+          <View
+            style={styles.emptyContainer}
+            accessible={true}
+            accessibilityLabel={t('No actions available.')}
+          >
+            <Text style={styles.emptyText}>{t('No actions available')}</Text>
           </View>
         )}
 
         {/* Help & Support */}
-        <View style={[styles.supportCard, { borderColor: roleTheme.primary + '15' }]}>
+        <View
+          style={[
+            styles.supportCard,
+            { borderColor: roleTheme.primary + '15' },
+          ]}
+        >
           <View style={styles.supportRow}>
-            <View style={[styles.supportIconContainer, { backgroundColor: roleTheme.primary + '15' }]}>
+            <View
+              style={[
+                styles.supportIconContainer,
+                { backgroundColor: roleTheme.primary + '15' },
+              ]}
+            >
               <Icon name="headset" size={20} color={roleTheme.primary} />
             </View>
             <View style={styles.supportTextContainer}>
-              <Text style={[styles.supportTitle, { color: roleTheme.primary }]}>{t("Help & Support Desk")}</Text>
-              <Text style={styles.supportDesc}>{t("Have questions about trades or transactions? We are here 24/7.")}</Text>
+              <Text style={[styles.supportTitle, { color: roleTheme.primary }]}>
+                {t('Help & Support Desk')}
+              </Text>
+              <Text style={styles.supportDesc}>
+                {t(
+                  'Have questions about trades or transactions? We are here 24/7.',
+                )}
+              </Text>
             </View>
-            <TouchableOpacity 
-              style={[styles.supportBtn, { backgroundColor: roleTheme.primary }]}
+            <TouchableOpacity
+              style={[
+                styles.supportBtn,
+                { backgroundColor: roleTheme.primary },
+              ]}
               activeOpacity={0.8}
-              onPress={() => showAlert({
-                type: 'info',
-                title: t('Support Helpdesk'),
-                message: t('Our helpline is active. Connecting you to a support agent shortly.'),
-                buttons: [{ text: t('OK') }]
-              })}
+              onPress={() =>
+                showAlert({
+                  type: 'info',
+                  title: t('Support Helpdesk'),
+                  message: t(
+                    'Our helpline is active. Connecting you to a support agent shortly.',
+                  ),
+                  buttons: [{ text: t('OK') }],
+                })
+              }
             >
-              <Text style={styles.supportBtnText}>{t("Contact")}</Text>
+              <Text style={styles.supportBtnText}>{t('Contact')}</Text>
             </TouchableOpacity>
           </View>
         </View>
       </ScrollView>
 
-      <RequirementBottomSheet 
-        visible={showRequirementModal} 
+      <RequirementBottomSheet
+        visible={showRequirementModal}
         onClose={() => setShowRequirementModal(false)}
         onSubmit={handleRequirementSubmit}
       />
@@ -607,7 +788,6 @@ const styles = StyleSheet.create({
   requirementCard: {
     backgroundColor: COLORS.white,
     borderRadius: 16,
-    padding: w(16),
     marginBottom: h(12),
     borderWidth: 1,
     borderColor: '#E2E8F0',
@@ -616,12 +796,45 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.04,
     shadowRadius: 4,
+    overflow: 'hidden',
   },
-  reqHeaderRow: {
+  reqAccordionHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: h(10),
+    padding: w(16),
+    paddingBottom: h(8),
+  },
+  reqHeaderLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: w(8),
+    flex: 1,
+  },
+  reqSummaryRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: w(10),
+    paddingHorizontal: w(16),
+    paddingBottom: h(12),
+  },
+  reqExpandedBody: {
+    borderTopWidth: 1,
+    borderTopColor: '#F1F5F9',
+    paddingHorizontal: w(16),
+    paddingTop: h(10),
+    paddingBottom: h(12),
+  },
+  reqViewQuotesBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: w(6),
+    marginTop: h(10),
+    borderWidth: 1,
+    borderRadius: 8,
+    paddingHorizontal: w(12),
+    paddingVertical: h(8),
+    alignSelf: 'flex-start',
   },
   reqCommodity: {
     fontSize: f(15),
@@ -639,11 +852,23 @@ const styles = StyleSheet.create({
   },
   reqDetailsRow: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     flexWrap: 'wrap',
+    gap: w(10),
   },
   reqDetailText: {
     fontSize: f(12),
     color: '#64748B',
+    marginRight: w(10),
+    marginBottom: h(4),
+  },
+  reqFooterRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: w(6),
+    marginTop: h(10),
+  },
+  reqFooterText: {
+    fontSize: f(12),
+    fontWeight: '800',
   },
 });

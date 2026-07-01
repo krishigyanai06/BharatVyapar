@@ -2,6 +2,7 @@ import React, { useMemo } from 'react';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { useSelector } from 'react-redux';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { selectResolvedRole, selectRoleColor } from '../../store/authSelectors';
 import { useTranslation } from '../../hook/useTranslation';
 
@@ -21,13 +22,6 @@ const TAB_ICONS = {
   Trades:  { focused: 'handshake',     unfocused: 'handshake-outline'     },
   Sell:    { focused: 'plus-circle',   unfocused: 'plus-circle-outline'   },
   Profile: { focused: 'account',       unfocused: 'account-outline'       },
-};
-
-// ─── Stable tab-bar style — defined once at module level ─────────────────────
-const TAB_BAR_STYLE = {
-  backgroundColor: COLORS.white || '#FFFFFF',
-  borderTopWidth: 1,
-  borderTopColor: '#E9ECEF',
 };
 
 const TAB_LABEL_STYLE = {
@@ -57,18 +51,26 @@ export default function AppTabs() {
   const resolvedRole = useSelector(selectResolvedRole);
   const stateColor   = useSelector(selectRoleColor);
   const { t }        = useTranslation();
+  const insets       = useSafeAreaInsets();
 
   const selectedRole = getNormalizedRole(resolvedRole);
 
   const roleColor = stateColor || ROLE_FALLBACK_COLORS[selectedRole] || COLORS.fpoPrimary;
 
-  // ─── KEY FIX: screenOptions is memoised on roleColor only. ─────────────────
-  // Previously, getScreenOptions(roleColor) was called as an inline expression
-  // on every render. Since useTranslation subscribes to state.language.appTranslations
-  // (updated on every background translation dispatch), AppTabs re-rendered
-  // frequently → new screenOptions function reference each time → Tab.Navigator
-  // registered a fresh LatestCallback listener per tab → old chain accumulated
-  // → the "+9 delta" LatestCallback nesting seen in DevTools.
+  const tabBarStyle = useMemo(() => {
+    // If the system navigation/gesture bar is off (insets.bottom is 0),
+    // add a fallback padding at the bottom so the buttons aren't flush with the physical edge.
+    const paddingBottom = insets.bottom > 0 ? insets.bottom : 10;
+    const height = 54 + paddingBottom;
+    return {
+      backgroundColor: COLORS.white || '#FFFFFF',
+      borderTopWidth: 1,
+      borderTopColor: '#E9ECEF',
+      height: height,
+      paddingBottom: paddingBottom,
+    };
+  }, [insets.bottom]);
+
   const screenOptions = useMemo(() => ({ route }) => ({
     tabBarActiveTintColor:   roleColor,
     tabBarInactiveTintColor: COLORS.textMuted || '#6C757D',
@@ -84,9 +86,9 @@ export default function AppTabs() {
       );
     },
     headerShown:      false,
-    tabBarStyle:      TAB_BAR_STYLE,
+    tabBarStyle:      tabBarStyle,
     tabBarLabelStyle: TAB_LABEL_STYLE,
-  }), [roleColor]);
+  }), [roleColor, tabBarStyle]);
 
   // ─── Tab labels: stable, only change when language switches ─────────────────
   const labels = useMemo(() => ({

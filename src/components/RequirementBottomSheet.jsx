@@ -1,23 +1,46 @@
 import React, { useState } from 'react';
-import { Modal, View, Text, TextInput, TouchableOpacity, StyleSheet, ActivityIndicator } from 'react-native';
+import { Modal, View, Text, TextInput, TouchableOpacity, StyleSheet, ActivityIndicator, ScrollView } from 'react-native';
 
 export default function RequirementBottomSheet({ visible, onClose, onSubmit }) {
   const [commodity, setCommodity] = useState('');
   const [quantity, setQuantity] = useState('');
-  const [targetPrice, setTargetPrice] = useState('');
+  const [unit, setUnit] = useState('Qt');
+  const [expectedPrice, setExpectedPrice] = useState('');
   const [location, setLocation] = useState('');
+  const [grade, setGrade] = useState('');
+  const [moisture, setMoisture] = useState('');
+  const [harvestYear, setHarvestYear] = useState('');
+  const [deliveryDate, setDeliveryDate] = useState('');
+  const [remarks, setRemarks] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const handleSubmit = async () => {
-    if (!commodity || !quantity || !targetPrice || !location) return;
+    if (!commodity || !quantity || !unit || !expectedPrice || !location) return;
     
     setIsSubmitting(true);
     try {
-      await onSubmit({ commodity, quantity: Number(quantity), targetPrice: Number(targetPrice), location });
+      await onSubmit({
+        commodity,
+        quantity: Number(quantity),
+        unit,
+        expectedPrice: Number(expectedPrice),
+        location,
+        grade,
+        moisture,
+        harvestYear,
+        deliveryDate,
+        remarks,
+      });
       setCommodity('');
       setQuantity('');
-      setTargetPrice('');
+      setUnit('Qt');
+      setExpectedPrice('');
       setLocation('');
+      setGrade('');
+      setMoisture('');
+      setHarvestYear('');
+      setDeliveryDate('');
+      setRemarks('');
       onClose();
     } catch (e) {
       console.error(e);
@@ -42,48 +65,101 @@ export default function RequirementBottomSheet({ visible, onClose, onSubmit }) {
             </TouchableOpacity>
           </View>
 
-          <TextInput
-            style={styles.input}
-            placeholder="Commodity (e.g. Wheat, Rice)"
-            value={commodity}
-            onChangeText={setCommodity}
-            placeholderTextColor="#999"
-          />
-          <TextInput
-            style={styles.input}
-            placeholder="Quantity (in Quintals)"
-            keyboardType="numeric"
-            value={quantity}
-            onChangeText={setQuantity}
-            placeholderTextColor="#999"
-          />
-          <TextInput
-            style={styles.input}
-            placeholder="Target Price (per Quintal)"
-            keyboardType="numeric"
-            value={targetPrice}
-            onChangeText={setTargetPrice}
-            placeholderTextColor="#999"
-          />
-          <TextInput
-            style={styles.input}
-            placeholder="Delivery Location"
-            value={location}
-            onChangeText={setLocation}
-            placeholderTextColor="#999"
-          />
+          <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+            <TextInput
+              style={styles.input}
+              placeholder="Commodity (e.g. Wheat, Rice)"
+              value={commodity}
+              onChangeText={setCommodity}
+              placeholderTextColor="#999"
+            />
+            <View style={styles.row}>
+              <TextInput
+                style={[styles.input, styles.rowInput]}
+                placeholder="Quantity"
+                keyboardType="numeric"
+                value={quantity}
+                onChangeText={setQuantity}
+                placeholderTextColor="#999"
+              />
+              <TextInput
+                style={[styles.input, styles.rowInput]}
+                placeholder="Unit"
+                value={unit}
+                onChangeText={setUnit}
+                placeholderTextColor="#999"
+              />
+            </View>
+            <TextInput
+              style={styles.input}
+              placeholder="Expected Price (per unit)"
+              keyboardType="numeric"
+              value={expectedPrice}
+              onChangeText={setExpectedPrice}
+              placeholderTextColor="#999"
+            />
+            <TextInput
+              style={styles.input}
+              placeholder="Location"
+              value={location}
+              onChangeText={setLocation}
+              placeholderTextColor="#999"
+            />
+            <View style={styles.row}>
+              <TextInput
+                style={[styles.input, styles.rowInput]}
+                placeholder="Grade"
+                value={grade}
+                onChangeText={setGrade}
+                placeholderTextColor="#999"
+              />
+              <TextInput
+                style={[styles.input, styles.rowInput]}
+                placeholder="Moisture"
+                value={moisture}
+                onChangeText={setMoisture}
+                placeholderTextColor="#999"
+              />
+            </View>
+            <View style={styles.row}>
+              <TextInput
+                style={[styles.input, styles.rowInput]}
+                placeholder="Harvest Year"
+                keyboardType="numeric"
+                value={harvestYear}
+                onChangeText={setHarvestYear}
+                placeholderTextColor="#999"
+              />
+              <TextInput
+                style={[styles.input, styles.rowInput]}
+                placeholder="Delivery Date"
+                value={deliveryDate}
+                onChangeText={setDeliveryDate}
+                placeholderTextColor="#999"
+              />
+            </View>
+            <TextInput
+              style={[styles.input, styles.textArea]}
+              placeholder="Remarks"
+              value={remarks}
+              onChangeText={setRemarks}
+              placeholderTextColor="#999"
+              multiline
+              numberOfLines={3}
+            />
 
-          <TouchableOpacity 
-            style={[styles.submitButton, isSubmitting && styles.submitButtonDisabled]} 
-            onPress={handleSubmit}
-            disabled={isSubmitting}
-          >
-            {isSubmitting ? (
-              <ActivityIndicator color="#fff" />
-            ) : (
-              <Text style={styles.submitText}>Submit Requirement</Text>
-            )}
-          </TouchableOpacity>
+            <TouchableOpacity 
+              style={[styles.submitButton, isSubmitting && styles.submitButtonDisabled]} 
+              onPress={handleSubmit}
+              disabled={isSubmitting}
+            >
+              {isSubmitting ? (
+                <ActivityIndicator color="#fff" />
+              ) : (
+                <Text style={styles.submitText}>Submit Requirement</Text>
+              )}
+            </TouchableOpacity>
+          </ScrollView>
         </View>
       </View>
     </Modal>
@@ -126,6 +202,17 @@ const styles = StyleSheet.create({
     marginBottom: 15,
     fontSize: 16,
     color: '#333',
+  },
+  row: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  rowInput: {
+    flex: 1,
+  },
+  textArea: {
+    minHeight: 80,
+    textAlignVertical: 'top',
   },
   submitButton: {
     backgroundColor: '#007bff',

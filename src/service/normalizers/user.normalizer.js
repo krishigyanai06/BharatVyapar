@@ -18,8 +18,9 @@
  *   role     → role ('FPO' | 'Trader' | 'Miller' | 'Corporate')
  *
  * REDUX BENEFIT:
- *   Backend user object has 30+ keys. Redux stores only the 14 we actually
- *   use in the UI. Memory stays lean, re-renders stay predictable.
+ *   Backend user object has 30+ keys. Redux stores only the fields we actually
+ *   use in the UI (basic details, documents, and KYC info). Memory stays lean,
+ *   re-renders stay predictable.
  */
 
 const VALID_ROLES = ['FPO', 'Trader', 'Miller', 'Corporate'];
@@ -212,7 +213,7 @@ export function normalizeUser(raw) {
   // Role — validate against known app roles
   const role = VALID_ROLES.includes(raw.role) ? raw.role : 'FPO';
 
-  // Return ONLY the 14 fields the UI uses.
+  // Return ONLY the fields the UI uses.
   // Everything else (fcmToken, loginHistory, passwordHash, etc.) is dropped.
   return {
     id:          id ? String(id) : null,
@@ -229,6 +230,13 @@ export function normalizeUser(raw) {
     isVerified:  raw.isVerified  ?? false,
     kycStatus:   raw.kycStatus   || 'pending',
     rating:      typeof raw.rating === 'number' ? raw.rating : null,
+    profileImage: raw.profileImage || null,
+    shopLicense:  raw.shopLicense  || null,
+    GSTCertificate: raw.GSTCertificate || raw.gstCertificate || null,
+    PANCard:      raw.PANCard || raw.panCard || null,
+    panDetails:   raw.panDetails || null,
+    panName:      raw.panName || '',
+    panNumber:    raw.panNumber || '',
   };
 }
 

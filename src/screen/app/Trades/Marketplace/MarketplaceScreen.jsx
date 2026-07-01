@@ -313,7 +313,7 @@ const OfferCard = React.memo(function OfferCard({ offer, theme, onPress, onEditP
         </View>
         <View style={[styles.roleBadge, { backgroundColor: roleTheme.primary + '18' }]}>
           <Text style={[styles.roleBadgeText, { color: roleTheme.primary }]}>
-            {offer.sellerRole || t('Seller')}
+            {t(offer.sellerRole) || t('Seller')}
           </Text>
         </View>
       </View>
@@ -327,7 +327,7 @@ const OfferCard = React.memo(function OfferCard({ offer, theme, onPress, onEditP
           </Text>
           <View style={styles.locationRow}>
             <Icon name="map-marker-outline" size={12} color={COLORS.textMuted} />
-            <Text style={styles.offerLocation}>{offer.location || '—'}</Text>
+            <Text style={styles.offerLocation}>{t(offer.location) || '—'}</Text>
           </View>
         </View>
 
@@ -344,11 +344,13 @@ const OfferCard = React.memo(function OfferCard({ offer, theme, onPress, onEditP
       <View style={styles.detailsRow}>
         <View style={styles.detailCol}>
           <Text style={styles.detailLabel}>{t('Quantity')}</Text>
-          <Text style={styles.detailVal}>{offer.quantityLabel || '—'}</Text>
+          <Text style={styles.detailVal}>
+            {offer.quantityLabel ? offer.quantityLabel.split(' ').map(word => t(word)).join(' ') : '—'}
+          </Text>
         </View>
 
         <View style={[styles.detailCol, styles.detailColCenter]}>
-          <Text style={styles.detailLabel}>{t('Price')} / {offer.priceUnit || 'Qt'}</Text>
+          <Text style={styles.detailLabel}>{t('Price')} / {t(offer.priceUnit || 'Qt')}</Text>
           <Text style={[styles.detailVal, { color: theme.primary }]}>
             {priceDisplay ? `₹${priceDisplay}` : t('N/A')}
           </Text>
@@ -437,70 +439,120 @@ const OfferCard = React.memo(function OfferCard({ offer, theme, onPress, onEditP
 
 // ─── Demand Card ───────────────────────────────────────────────────────────────
 const demandCardPropsAreEqual = (prev, next) => {
+  const pd = prev.demand;
+  const nd = next.demand;
+  if (!pd || !nd) return pd === nd;
   return (
-    prev.demand?.id === next.demand?.id &&
+    pd.id === nd.id &&
+    pd.commodity === nd.commodity &&
+    pd.location === nd.location &&
+    pd.quantity === nd.quantity &&
+    pd.unit === nd.unit &&
+    pd.targetPrice === nd.targetPrice &&
+    pd.status === nd.status &&
     prev.theme?.primary === next.theme?.primary
   );
 };
 
 const DemandCard = React.memo(({ demand, theme, t, onFulfillPress }) => {
   if (!demand) return null;
+  
+  const buyerObj = demand.buyerId;
+  const shopName = typeof buyerObj === 'object' && buyerObj?.shopName ? buyerObj.shopName : '';
+  const contactPerson = typeof buyerObj === 'object'
+    ? [buyerObj.firstName, buyerObj.lastName].filter(Boolean).join(' ')
+    : (typeof buyerObj === 'string' && buyerObj ? buyerObj : '');
+  
+  const displayName = shopName || contactPerson || t('Buyer');
+  const subName = shopName && contactPerson ? contactPerson : '';
+  const avatarChar = displayName.substring(0, 1).toUpperCase();
+  const postedTime = formatDemandPostedTime(demand.createdAt, t);
+
   return (
-    <View style={[styles.offerCard, { borderLeftColor: theme.primary }]}>
+    <View style={[styles.offerCard, { borderLeftColor: theme.primary, borderLeftWidth: 4 }]}>
+      {/* Header with Avatar and Status Badge */}
       <View style={styles.cardHeader}>
         <View style={styles.userRow}>
-          <View style={[styles.avatarBox, { backgroundColor: theme.primary + '20' }]}>
-            <Text style={[styles.avatarInitial, { color: theme.primary }]}>
-              {demand.buyerName ? demand.buyerName.substring(0, 1).toUpperCase() : 'B'}
+          <View style={[styles.avatarBox, { backgroundColor: theme.primary + '15', borderWidth: 1, borderColor: theme.primary + '30' }]}>
+            <Text style={[styles.avatarInitial, { color: theme.primary, fontWeight: '800' }]}>
+              {avatarChar}
             </Text>
           </View>
-          <Text style={styles.userName} numberOfLines={1}>
-            {demand.buyerName || t('Buyer')}
-          </Text>
+          <View>
+            <Text style={[styles.userName, { fontSize: f(13), fontWeight: '700' }]} numberOfLines={1}>
+              {displayName}{subName ? ` (${subName})` : ''}
+            </Text>
+            <Text style={{ fontSize: f(10), color: COLORS.textMuted }}>{postedTime}</Text>
+          </View>
         </View>
-        <View style={[styles.roleBadge, { backgroundColor: '#F3F4F6' }]}>
-          <Text style={[styles.roleBadgeText, { color: '#4B5563' }]}>Demand</Text>
+        <View style={[styles.roleBadge, { backgroundColor: theme.primary + '10', borderWidth: 1, borderColor: theme.primary + '20' }]}>
+          <Text style={[styles.roleBadgeText, { color: theme.primary, fontSize: f(9), fontWeight: '800' }]}>{t('Demand')}</Text>
         </View>
       </View>
 
-      <View style={styles.offerHeader}>
+      {/* Commodity Info */}
+      <View style={[styles.offerHeader, { marginTop: h(4) }]}>
         <View style={styles.cropInfoWrapper}>
-          <Text style={styles.offerCrop} numberOfLines={1}>
+          <Text style={[styles.offerCrop, { fontSize: f(16), fontWeight: '800', color: COLORS.text }]}>
             {t(demand.commodity) || '—'}
           </Text>
           <View style={styles.locationRow}>
-            <Icon name="map-marker-outline" size={12} color={COLORS.textMuted} />
-            <Text style={styles.offerLocation}>{demand.location || '—'}</Text>
+            <Icon name="map-marker" size={14} color={theme.primary} />
+            <Text style={[styles.offerLocation, { color: COLORS.text, fontWeight: '500' }]}>{t(demand.location) || '—'}</Text>
           </View>
         </View>
+        {demand.grade ? (
+          <View style={{ backgroundColor: '#F3F4F6', paddingHorizontal: w(8), paddingVertical: h(4), borderRadius: 6, borderWidth: 1, borderColor: '#E5E7EB' }}>
+            <Text style={{ fontSize: f(10), fontWeight: '700', color: '#4B5563' }}>{t('Grade')}: {t(demand.grade)}</Text>
+          </View>
+        ) : null}
       </View>
 
-      <View style={styles.detailsRow}>
+      {/* Grid details (Quantity and Target Price) */}
+      <View style={[styles.detailsRow, { backgroundColor: '#F8FAFC', borderRadius: mw(12), padding: w(12), borderColor: '#F1F5F9' }]}>
         <View style={styles.detailCol}>
-          <Text style={styles.detailLabel}>{t('Req Qty')}</Text>
-          <Text style={styles.detailVal}>{demand.quantity || '—'} Qt</Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: w(4), marginBottom: h(2) }}>
+            <Icon name="scale-balance" size={13} color={COLORS.textMuted} />
+            <Text style={styles.detailLabel}>{t('Req Qty')}</Text>
+          </View>
+          <Text style={[styles.detailVal, { fontSize: f(14) }]}>{demand.quantity || '—'} {t(demand.unit || 'Qt')}</Text>
         </View>
+
         <View style={[styles.detailCol, styles.detailColCenter]}>
-          <Text style={styles.detailLabel}>{t('Target Price')}</Text>
-          <Text style={[styles.detailVal, { color: theme.primary }]}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: w(4), marginBottom: h(2) }}>
+            <Icon name="tag-outline" size={13} color={COLORS.textMuted} />
+            <Text style={styles.detailLabel}>{t('Target Price')}</Text>
+          </View>
+          <Text style={[styles.detailVal, { color: theme.primary, fontSize: f(14), fontWeight: '800' }]}>
             ₹{demand.targetPrice || 'N/A'}
           </Text>
         </View>
       </View>
 
+      {/* CTA Button */}
       <View style={styles.actionButtonsRow}>
         <TouchableOpacity
-          style={[styles.actionBtn, styles.viewBtn, { backgroundColor: theme.primary, flex: 1, marginTop: 10 }]}
+          style={[styles.actionBtn, styles.viewBtn, { backgroundColor: theme.primary, flex: 1, height: h(40), borderRadius: mw(10), marginTop: h(4) }]}
           onPress={() => onFulfillPress && onFulfillPress(demand)}
           activeOpacity={0.8}
         >
-          <Icon name="handshake-outline" size={16} color={COLORS.white} />
-          <Text style={styles.viewBtnText}>{t('Quote / Fulfill')}</Text>
+          <Icon name="handshake-outline" size={18} color={COLORS.white} />
+          <Text style={[styles.viewBtnText, { fontSize: f(12), fontWeight: '700' }]}>{t('Quote / Fulfill')}</Text>
         </TouchableOpacity>
       </View>
     </View>
   );
 }, demandCardPropsAreEqual);
+
+function formatDemandPostedTime(dateStr, t) {
+  if (!dateStr) return t('Just now');
+  const diffMs = Date.now() - new Date(dateStr).getTime();
+  if (!Number.isFinite(diffMs) || diffMs < 0) return t('Just now');
+  const hours = Math.floor(diffMs / 3600000);
+  if (hours < 1) return t('Just now');
+  if (hours < 24) return t('{hours}h ago').replace('{hours}', String(hours));
+  return t('{days}d ago').replace('{days}', String(Math.floor(hours / 24)));
+}
 
 // Fallback helpers for requestIdleCallback / cancelIdleCallback
 const requestIdle = typeof requestIdleCallback !== 'undefined' ? requestIdleCallback : (cb) => setTimeout(cb, 50);
@@ -513,7 +565,7 @@ function MarketplaceScreenInner({ route, navigation }) {
   const selectedRole = useSelector(selectResolvedRole);
   const currentUserId = useSelector(state => {
     const raw = state.auth.user?._id || state.auth.user?.id;
-    return raw ? String(raw).trim() : '';
+    return raw ? String(raw).trim() : 'buyer_001';
   });
   const theme = ROLE_THEMES[selectedRole] || ROLE_THEMES.FPO;
   const { t } = useTranslation();
@@ -607,7 +659,7 @@ function MarketplaceScreenInner({ route, navigation }) {
 
       let response;
       if (tab === 'DEMANDS') {
-        response = await requirementService.getAllRequirements(); // Fetch from requirement service
+        response = await requirementService.getMarketplaceRequirements({ excludeBuyerId: currentUserId }); // Fetch from requirement service
       } else {
         response = await getSellCommodities(params, { signal: controller.signal });
       }
@@ -1653,5 +1705,34 @@ const styles = StyleSheet.create({
   tabText: {
     fontSize: f(13),
     color: '#6B7280',
+  },
+  cardHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: h(10),
+    borderBottomWidth: 1,
+    borderBottomColor: '#F1F3F5',
+    paddingBottom: h(8),
+  },
+  userRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: w(8),
+    flex: 1,
+    paddingRight: w(8),
+  },
+  avatarBox: {
+    width: w(32),
+    height: w(32),
+    borderRadius: w(16),
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  avatarInitial: {
+    fontSize: f(14),
+  },
+  userName: {
+    color: COLORS.text,
   },
 });
