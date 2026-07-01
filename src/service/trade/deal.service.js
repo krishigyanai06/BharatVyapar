@@ -1,4 +1,5 @@
 import { USE_DUMMY_API } from '../../config';
+import { rfqWorkflowService } from './rfqWorkflow.service';
 
 const delay = (ms) => new Promise((res) => setTimeout(res, ms));
 
@@ -92,61 +93,37 @@ export const dealService = {
 
 // Simulate submitting a quote (bid) against a buyer's requirement
 export const submitQuoteAgainstRequirement = async (requirementId, payload) => {
-  await delay(1200);
-  if (!USE_DUMMY_API) {
-    throw new Error('Not implemented for real backend yet');
-  }
-  return {
-    success: true,
-    message: 'Quote submitted successfully',
-    quoteId: `quote_${Date.now()}`
-  };
+  return rfqWorkflowService.submitOrUpdateQuote(requirementId, payload);
 };
 
 // Simulate getting submitted quotes (for the seller)
 export const getMySubmittedQuotes = async (sellerId) => {
-  await delay(800);
-  if (!USE_DUMMY_API) {
-    return [];
-  }
-  // Mock data representing bids the seller has placed on buyer demands
-  return [
-    {
-      id: 'quote_1',
-      requirementId: 'req_1',
-      buyerId: 'buyer_123',
-      commodity: { commodityName: 'Wheat' }, // Normalizing to match OfferCard shape
-      quantity: 50,
-      price: 2500,
-      priceUnit: 'Qt',
-      status: 'pending',
-      displayStatus: 'pending',
-      currentTurn: 'buyer',
-      createdAt: new Date().toISOString()
-    }
-  ];
+  return rfqWorkflowService.getSubmittedQuotes(sellerId);
 };
 
 // Simulate getting received quotes (for the buyer)
-export const getReceivedQuotesOnRequirements = async (buyerId) => {
-  await delay(800);
-  if (!USE_DUMMY_API) {
-    return [];
-  }
-  return [
-    {
-      id: 'quote_2',
-      requirementId: 'req_2',
-      sellerId: 'seller_456',
-      commodity: { commodityName: 'Soybean' }, 
-      quantity: 100,
-      price: 4600,
-      priceUnit: 'Qt',
-      status: 'in_negotiation',
-      displayStatus: 'in_negotiation',
-      currentTurn: 'buyer',
-      createdAt: new Date().toISOString()
-    }
-  ];
+export const getReceivedQuotesOnRequirements = async (_buyerId = null, options = {}) => {
+  return rfqWorkflowService.getReceivedQuotes({
+    requirementId: options.requirementId || null,
+  });
 };
 
+export const acceptRequirementQuote = async (quoteId) => {
+  return rfqWorkflowService.acceptQuote(quoteId);
+};
+
+export const rejectRequirementQuote = async (quoteId) => {
+  return rfqWorkflowService.rejectQuote(quoteId);
+};
+
+export const getSellerPurchaseOrders = async () => {
+  return rfqWorkflowService.getSellerOrders();
+};
+
+export const getBuyerPurchaseOrders = async () => {
+  return rfqWorkflowService.getBuyerOrders();
+};
+
+export const updatePurchaseOrderStatus = async (orderId, status) => {
+  return rfqWorkflowService.updateOrderStatus(orderId, status);
+};

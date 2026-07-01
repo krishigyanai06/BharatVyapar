@@ -4,13 +4,14 @@ import { Modal, View, Text, TextInput, TouchableOpacity, StyleSheet, ActivityInd
 export default function FulfillRequirementBottomSheet({ visible, requirement, onClose, onSubmit }) {
   const [quantity, setQuantity] = useState('');
   const [price, setPrice] = useState('');
-  const [notes, setNotes] = useState('');
+  const [dispatchTime, setDispatchTime] = useState('');
+  const [remarks, setRemarks] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
     if (requirement) {
-      setQuantity(String(requirement.quantity || ''));
-      setPrice(String(requirement.targetPrice || ''));
+      setQuantity(String(requirement.remainingQuantity || requirement.quantity || ''));
+      setPrice(String(requirement.expectedPrice || requirement.targetPrice || ''));
     }
   }, [requirement]);
 
@@ -22,12 +23,15 @@ export default function FulfillRequirementBottomSheet({ visible, requirement, on
       await onSubmit({ 
         requirementId: requirement?.id || requirement?._id,
         offeredQuantity: Number(quantity), 
-        offeredPrice: Number(price), 
-        notes 
+        quotePrice: Number(price),
+        offeredPrice: Number(price),
+        dispatchTime,
+        remarks,
       });
       setQuantity('');
       setPrice('');
-      setNotes('');
+      setDispatchTime('');
+      setRemarks('');
       onClose();
     } catch (e) {
       console.error(e);
@@ -46,7 +50,7 @@ export default function FulfillRequirementBottomSheet({ visible, requirement, on
       <View style={styles.overlay}>
         <View style={styles.sheet}>
           <View style={styles.header}>
-            <Text style={styles.title}>Submit Quote / Bid</Text>
+            <Text style={styles.title}>Submit Quote</Text>
             <TouchableOpacity onPress={onClose} disabled={isSubmitting}>
               <Text style={styles.closeText}>Close</Text>
             </TouchableOpacity>
@@ -55,21 +59,23 @@ export default function FulfillRequirementBottomSheet({ visible, requirement, on
           {requirement && (
             <View style={styles.reqSummary}>
               <Text style={styles.reqCommodity}>{requirement.commodity}</Text>
-              <Text style={styles.reqDetail}>Target: ₹{requirement.targetPrice} | Qty: {requirement.quantity} Qt</Text>
+              <Text style={styles.reqDetail}>
+                Expected: ₹{requirement.expectedPrice || requirement.targetPrice} | Remaining: {requirement.remainingQuantity || requirement.quantity} {requirement.unit || 'Qt'}
+              </Text>
             </View>
           )}
 
-          <Text style={styles.label}>Quantity you can supply (Qt)</Text>
+          <Text style={styles.label}>Offered Quantity</Text>
           <TextInput
             style={styles.input}
-            placeholder="Quantity (in Quintals)"
+            placeholder="Quantity"
             keyboardType="numeric"
             value={quantity}
             onChangeText={setQuantity}
             placeholderTextColor="#999"
           />
 
-          <Text style={styles.label}>Your Quoted Price (₹ per Qt)</Text>
+          <Text style={styles.label}>Quote Price</Text>
           <TextInput
             style={styles.input}
             placeholder="Price"
@@ -79,12 +85,21 @@ export default function FulfillRequirementBottomSheet({ visible, requirement, on
             placeholderTextColor="#999"
           />
 
-          <Text style={styles.label}>Logistics / Delivery Notes (Optional)</Text>
+          <Text style={styles.label}>Dispatch Time</Text>
+          <TextInput
+            style={styles.input}
+            placeholder="e.g., 3 days"
+            value={dispatchTime}
+            onChangeText={setDispatchTime}
+            placeholderTextColor="#999"
+          />
+
+          <Text style={styles.label}>Remarks</Text>
           <TextInput
             style={[styles.input, styles.textArea]}
-            placeholder="e.g., Available next week, can arrange transport"
-            value={notes}
-            onChangeText={setNotes}
+            placeholder="Optional remarks"
+            value={remarks}
+            onChangeText={setRemarks}
             placeholderTextColor="#999"
             multiline
             numberOfLines={3}

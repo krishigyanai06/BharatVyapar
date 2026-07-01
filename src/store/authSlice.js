@@ -19,7 +19,7 @@ export const checkStoredToken = createAsyncThunk(
     try {
       const session = await getStoredAuthSession();
       if (session?.user) {
-        // normalizeUser trims to 14 clean fields + fixes shopname/email inconsistencies
+        // normalizeUser trims to clean UI fields + fixes shopname/email inconsistencies
         session.user = normalizeUser(session.user);
       }
       return session;
@@ -62,7 +62,7 @@ export const verifyOtp = createAsyncThunk(
 
         const rawUser = response.user || response.data || null;
         // mergeWithLocalProfile: fills missing fields from local cache, then normalizes
-        // Result: clean 14-field object, shopname/email fixed, 30+ extra keys stripped
+        // Result: clean UI user object, shopname/email fixed, 30+ extra keys stripped
         const localProfile = rawUser?.phone ? await getLocalProfile(rawUser.phone || mobile) : null;
         const user = mergeWithLocalProfile(rawUser, localProfile);
 
@@ -96,7 +96,7 @@ export const getUserDetails = createAsyncThunk(
       const phone = rawUser?.phone || stateUser?.phone;
       const localProfile = phone ? await getLocalProfile(phone) : null;
 
-      // mergeWithLocalProfile fills missing fields, normalizeUser trims to 14 fields
+      // mergeWithLocalProfile fills missing fields, normalizeUser trims to UI fields
       const user = mergeWithLocalProfile(rawUser, localProfile);
 
       if (__DEV__) {
@@ -125,7 +125,7 @@ export const updateProfile = createAsyncThunk(
       const backendUser = response?.data || null;
 
       // Merge order: currentUser (base) → backendUser (server truth) → clientUpdatedUser (optimistic)
-      // normalizeUser trims to 14 fields + fixes shopname/email — no manual patching needed
+      // normalizeUser trims to UI fields + fixes shopname/email — no manual patching needed
       const rawMerged = { ...currentUser, ...backendUser, ...clientUpdatedUser };
       const mergedUser = normalizeUser(rawMerged);
 

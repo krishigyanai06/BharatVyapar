@@ -223,10 +223,14 @@ const languageSlice = createSlice({
       }
     },
     loadCache: (state, action) => {
-      state.appTranslations = {
-        ...state.appTranslations,
-        ...action.payload,
-      };
+      // Merge cached translations into the Redux store on top of the bundled translations
+      // to prevent cached translations from overwriting the entire language dictionary.
+      Object.keys(action.payload).forEach(lang => {
+        state.appTranslations[lang] = {
+          ...(state.appTranslations[lang] || {}),
+          ...action.payload[lang],
+        };
+      });
     },
   },
   extraReducers: (builder) => {

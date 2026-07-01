@@ -8,6 +8,9 @@ import FinanceScreen from '../../screen/app/FinanceScreen';
 import CommodityDetailsScreen from '../../screen/app/Trades/Marketplace/CommodityDetailsScreen';
 import NegotiationDetailsScreen from '../../screen/app/Trades/NegotiationDetailsScreen';
 import DealDetailsScreen from '../../screen/app/Trades/DealDetailsScreen';
+import BuyerQuoteDashboard from '../../screen/app/Trades/BuyerQuoteDashboard';
+import SellerOrdersScreen from '../../screen/app/Trades/SellerOrdersScreen';
+import BuyerOrdersScreen from '../../screen/app/Trades/BuyerOrdersScreen';
 
 const Stack = createNativeStackNavigator();
 
@@ -24,6 +27,9 @@ export default function AppStack() {
       <Stack.Screen name="CommodityDetails" component={CommodityDetailsScreen} />
       <Stack.Screen name="NegotiationDetails" component={NegotiationDetailsScreen} />
       <Stack.Screen name="DealDetails" component={DealDetailsScreen} />
+      <Stack.Screen name="BuyerQuoteDashboard" component={BuyerQuoteDashboard} />
+      <Stack.Screen name="SellerOrders" component={SellerOrdersScreen} />
+      <Stack.Screen name="BuyerOrders" component={BuyerOrdersScreen} />
     </Stack.Navigator>
   );
 }
