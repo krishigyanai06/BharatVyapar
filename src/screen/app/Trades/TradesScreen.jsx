@@ -762,11 +762,11 @@ export default function TradesScreen({ navigation }) {
             activeOpacity={0.7}
             accessible={true}
             accessibilityRole="button"
-            accessibilityLabel={t('My Offers (Buying)')}
+            accessibilityLabel={t('My Bids (Buying)')}
             accessibilityState={{ selected: tradeMode === 'buy' }}
           >
             <Text style={[styles.switcherText, tradeMode === 'buy' && styles.switcherTextActive]}>
-              {t('My Offers (Buying)')}
+              {t('My Bids (Buying)')}
             </Text>
           </TouchableOpacity>
           <TouchableOpacity
@@ -775,11 +775,11 @@ export default function TradesScreen({ navigation }) {
             activeOpacity={0.7}
             accessible={true}
             accessibilityRole="button"
-            accessibilityLabel={t('My Listings (Selling)')}
+            accessibilityLabel={t('My Listings & Quotes')}
             accessibilityState={{ selected: tradeMode === 'sell' }}
           >
             <Text style={[styles.switcherText, tradeMode === 'sell' && styles.switcherTextActive]}>
-              {t('My Listings (Selling)')}
+              {t('My Listings & Quotes')}
             </Text>
           </TouchableOpacity>
         </View>
