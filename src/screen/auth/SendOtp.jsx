@@ -50,6 +50,22 @@ export default function SendOtp({ route, navigation }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  useEffect(() => {
+    const unsubscribe = navigation.addListener('beforeRemove', (e) => {
+      if (!sendOtpLoading) {
+        return;
+      }
+      e.preventDefault();
+    });
+    return unsubscribe;
+  }, [navigation, sendOtpLoading]);
+
+  useEffect(() => {
+    if (sendOtpError) {
+      setFormError(t(sendOtpError));
+    }
+  }, [sendOtpError, t]);
+
   const handleMobileChange = value => {
     const digitsOnly = value.replace(/[^0-9]/g, '');
     setMobile(digitsOnly);

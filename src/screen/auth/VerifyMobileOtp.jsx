@@ -60,6 +60,22 @@ export default function VerifyMobileOtp({ route, navigation }) {
   }, []);
 
   useEffect(() => {
+    const unsubscribe = navigation.addListener('beforeRemove', (e) => {
+      if (!verifyOtpLoading) {
+        return;
+      }
+      e.preventDefault();
+    });
+    return unsubscribe;
+  }, [navigation, verifyOtpLoading]);
+
+  useEffect(() => {
+    if (verifyOtpError) {
+      setError(t(verifyOtpError));
+    }
+  }, [verifyOtpError, t]);
+
+  useEffect(() => {
     const showSub = Keyboard.addListener('keyboardDidShow', () => {
       scrollViewRef.current?.scrollTo({ y: 80, animated: true });
     });
