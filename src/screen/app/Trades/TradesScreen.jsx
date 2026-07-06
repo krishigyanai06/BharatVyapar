@@ -779,7 +779,17 @@ export default function TradesScreen({ navigation }) {
 
         <View style={styles.switcherContainer}>
           <TouchableOpacity
-            style={[styles.switcherBtn, tradeMode === 'buy' && { backgroundColor: theme.primary }]}
+            style={[
+              styles.switcherBtn,
+              tradeMode === 'buy' && {
+                backgroundColor: theme.primary,
+                shadowColor: theme.primary,
+                shadowOffset: { width: 0, height: 2 },
+                shadowOpacity: 0.15,
+                shadowRadius: 4,
+                elevation: 3,
+              },
+            ]}
             onPress={() => dispatch({ type: 'SET_MODE', mode: 'buy' })}
             activeOpacity={0.7}
             accessible={true}
@@ -792,7 +802,17 @@ export default function TradesScreen({ navigation }) {
             </Text>
           </TouchableOpacity>
           <TouchableOpacity
-            style={[styles.switcherBtn, tradeMode === 'sell' && { backgroundColor: theme.primary }]}
+            style={[
+              styles.switcherBtn,
+              tradeMode === 'sell' && {
+                backgroundColor: theme.primary,
+                shadowColor: theme.primary,
+                shadowOffset: { width: 0, height: 2 },
+                shadowOpacity: 0.15,
+                shadowRadius: 4,
+                elevation: 3,
+              },
+            ]}
             onPress={() => dispatch({ type: 'SET_MODE', mode: 'sell' })}
             activeOpacity={0.7}
             accessible={true}
@@ -809,7 +829,7 @@ export default function TradesScreen({ navigation }) {
         <View style={styles.orderShortcutRow}>
           {tradeMode === 'buy' ? (
             <TouchableOpacity
-              style={[styles.orderShortcutBtn, { borderColor: theme.primary + '30' }]}
+              style={[styles.orderShortcutBtn, { borderColor: theme.primary + '30', backgroundColor: theme.primary + '05' }]}
               onPress={() => navigation.navigate('BuyerOrders')}
               activeOpacity={0.75}
             >
@@ -818,7 +838,7 @@ export default function TradesScreen({ navigation }) {
             </TouchableOpacity>
           ) : (
             <TouchableOpacity
-              style={[styles.orderShortcutBtn, { borderColor: theme.primary + '30' }]}
+              style={[styles.orderShortcutBtn, { borderColor: theme.primary + '30', backgroundColor: theme.primary + '05' }]}
               onPress={() => navigation.navigate('SellerOrders')}
               activeOpacity={0.75}
             >
@@ -841,7 +861,7 @@ export default function TradesScreen({ navigation }) {
                       key={tab}
                       style={[
                         styles.tabChip,
-                        isActive && { backgroundColor: theme.primary },
+                        isActive && { backgroundColor: theme.primary, borderColor: theme.primary },
                         inNegBadge && { flexDirection: 'row', alignItems: 'center', gap: w(4) }
                       ]}
                       onPress={() => dispatch({ type: 'SET_TAB', tab })}
@@ -1064,19 +1084,19 @@ const styles = StyleSheet.create({
   // Tab Bar
   tabBar: {
     backgroundColor: COLORS.white,
+    paddingVertical: h(12),
     borderBottomWidth: 1,
-    borderBottomColor: '#E9ECEF',
-    paddingVertical: h(10),
+    borderBottomColor: '#F1F5F9',
   },
   tabBarContent: {
     paddingHorizontal: w(16),
     gap: w(8),
   },
   tabChip: {
-    paddingHorizontal: w(18),
+    paddingHorizontal: w(16),
     paddingVertical: h(8),
-    borderRadius: 24,
-    backgroundColor: '#F8FAFC',
+    borderRadius: 20,
+    backgroundColor: '#F1F5F9',
     borderWidth: 1,
     borderColor: '#E2E8F0',
   },
@@ -1131,20 +1151,20 @@ const styles = StyleSheet.create({
   // Offer Card
   offerCard: {
     backgroundColor: COLORS.white,
-    borderRadius: 20,
+    borderRadius: 16,
     marginBottom: h(16),
-    elevation: 4,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.08,
-    shadowRadius: 12,
+    elevation: 3,
+    shadowColor: '#0F172A',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
     borderWidth: 1,
-    borderColor: '#F1F5F9',
+    borderColor: '#E2E8F0',
     overflow: 'hidden',
   },
   yourTurnBanner: {
     paddingHorizontal: w(16),
-    paddingVertical: h(6),
+    paddingVertical: h(8),
     flexDirection: 'row',
     alignItems: 'center',
     gap: w(6),
@@ -1153,6 +1173,7 @@ const styles = StyleSheet.create({
     color: COLORS.white,
     fontSize: f(11),
     fontWeight: '800',
+    letterSpacing: 0.3,
   },
   cardHeader: {
     flexDirection: 'row',
@@ -1163,19 +1184,20 @@ const styles = StyleSheet.create({
   },
   cropTitle: {
     fontSize: f(16),
-    fontWeight: '900',
-    color: COLORS.text,
-    letterSpacing: -0.3,
+    fontWeight: '800',
+    color: '#0F172A',
+    letterSpacing: -0.2,
   },
   locationRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: w(3),
-    marginTop: h(2),
+    gap: w(4),
+    marginTop: h(4),
   },
   locationText: {
     fontSize: f(11),
-    color: COLORS.textMuted,
+    color: '#64748B',
+    fontWeight: '500',
   },
   statusBadge: {
     flexDirection: 'row',
@@ -1183,12 +1205,14 @@ const styles = StyleSheet.create({
     gap: w(4),
     paddingHorizontal: w(8),
     paddingVertical: h(4),
-    borderRadius: 8,
+    borderRadius: 6,
     marginLeft: w(8),
   },
   statusText: {
     fontSize: f(10),
     fontWeight: '700',
+    textTransform: 'uppercase',
+    letterSpacing: 0.3,
   },
   // Price Strip
   priceStrip: {
@@ -1196,11 +1220,12 @@ const styles = StyleSheet.create({
     backgroundColor: '#F8FAFC',
     marginHorizontal: w(16),
     marginBottom: h(12),
-    marginTop: h(4),
+    marginTop: h(6),
     borderRadius: 12,
-    padding: w(12),
+    paddingVertical: h(10),
+    paddingHorizontal: w(8),
     borderWidth: 1,
-    borderColor: '#F1F5F9',
+    borderColor: '#E2E8F0',
   },
   priceItem: {
     flex: 1,
@@ -1210,18 +1235,22 @@ const styles = StyleSheet.create({
   priceDivider: {
     width: 1,
     backgroundColor: '#E2E8F0',
+    height: '60%',
+    alignSelf: 'center',
   },
   priceLabel: {
     fontSize: f(10),
-    color: COLORS.textMuted,
+    color: '#64748B',
     textAlign: 'center',
-    fontWeight: '500',
+    fontWeight: '600',
+    textTransform: 'uppercase',
+    letterSpacing: 0.3,
   },
   priceVal: {
-    fontSize: f(13),
+    fontSize: f(14),
     fontWeight: '800',
-    color: COLORS.text,
-    marginTop: h(2),
+    color: '#0F172A',
+    marginTop: h(4),
     textAlign: 'center',
   },
   // Meta Row
@@ -1229,76 +1258,85 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: w(6),
-    paddingHorizontal: w(14),
-    marginBottom: h(10),
+    paddingHorizontal: w(16),
+    marginBottom: h(12),
   },
   metaChip: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: w(4),
-    backgroundColor: '#F8FAFC',
+    backgroundColor: '#F1F5F9',
     paddingHorizontal: w(10),
     paddingVertical: h(4),
-    borderRadius: 20,
+    borderRadius: 12,
     borderWidth: 1,
-    borderColor: '#F1F5F9',
+    borderColor: '#E2E8F0',
   },
   metaChipText: {
     fontSize: f(10),
-    color: COLORS.textMuted,
+    color: '#475569',
     fontWeight: '700',
   },
   // Deal block for accepted offers
   dealBlock: {
-    marginHorizontal: w(14),
-    marginBottom: h(10),
+    marginHorizontal: w(16),
+    marginBottom: h(12),
     backgroundColor: '#F0FFF4',
-    borderRadius: 8,
-    padding: w(10),
+    borderRadius: 12,
+    padding: w(12),
     borderWidth: 1,
-    borderColor: '#9AE6B4',
+    borderColor: '#A7F3D0',
   },
   dealHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: w(6),
-    marginBottom: h(6),
+    marginBottom: h(8),
   },
   dealStatus: {
     fontSize: f(12),
     fontWeight: '700',
+    color: '#065F46',
   },
   progressTrack: {
-    height: h(6),
-    backgroundColor: '#E9ECEF',
-    borderRadius: 3,
+    height: h(8),
+    backgroundColor: '#E2E8F0',
+    borderRadius: 4,
     overflow: 'hidden',
   },
   progressBar: {
     height: '100%',
-    borderRadius: 3,
+    borderRadius: 4,
   },
   // CTA Row
   ctaRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: h(10),
-    gap: w(4),
-    paddingHorizontal: w(14),
+    paddingVertical: h(12),
+    gap: w(6),
+    paddingHorizontal: w(16),
+    borderTopWidth: 1,
+    borderTopColor: '#F1F5F9',
   },
   ctaText: {
     fontSize: f(12),
-    fontWeight: '700',
+    fontWeight: '800',
+    letterSpacing: 0.2,
   },
   // Buy/Sell switcher styles
   switcherContainer: {
     flexDirection: 'row',
-    backgroundColor: '#F1F5F9',
-    borderRadius: 12,
+    backgroundColor: '#E2E8F0',
+    borderRadius: 14,
     marginHorizontal: w(16),
     marginTop: h(14),
     padding: w(4),
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.04,
+    shadowRadius: 3,
+    elevation: 1,
   },
   orderShortcutRow: {
     flexDirection: 'row',
@@ -1311,16 +1349,16 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: w(6),
-    borderWidth: 1,
-    borderRadius: 12,
-    paddingVertical: h(10),
+    gap: w(8),
+    borderWidth: 1.5,
+    borderRadius: 14,
+    paddingVertical: h(11),
     backgroundColor: COLORS.white,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.04,
-    shadowRadius: 2,
-    elevation: 1,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 2,
   },
   orderShortcutText: {
     fontSize: f(12),
@@ -1345,7 +1383,7 @@ const styles = StyleSheet.create({
   // Crop Chips filter styles
   cropChipsBar: {
     backgroundColor: COLORS.white,
-    paddingVertical: h(6),
+    paddingVertical: h(8),
     borderBottomWidth: 1,
     borderBottomColor: '#E9ECEF',
   },
@@ -1354,16 +1392,17 @@ const styles = StyleSheet.create({
     gap: w(6),
   },
   cropChip: {
-    paddingHorizontal: w(10),
-    paddingVertical: h(4),
-    borderRadius: 6,
+    paddingHorizontal: w(12),
+    paddingVertical: h(6),
+    borderRadius: 16,
     borderWidth: 1,
     borderColor: '#E2E8F0',
-    backgroundColor: COLORS.white,
+    backgroundColor: '#F8FAFC',
   },
   cropChipText: {
     fontSize: f(11),
-    color: COLORS.textMuted,
+    color: COLORS.textLight,
+    fontWeight: '500',
   },
   // Interned helpers — prevent new JSObject allocation every renderItem call
   cardFlex: {

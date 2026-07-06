@@ -53,7 +53,11 @@ const ROLE_THEMES = {
 
 const ROLE_CONFIGS = {
   FPO: {
-    stats: [],
+    stats: [
+      { label: 'Member Stock', value: '1,250 MT', icon: 'warehouse' },
+      { label: 'Procured Val', value: '₹28.4 L', icon: 'cash-multiple' },
+      { label: 'Active Deals', value: '8 Deals', icon: 'check-all' },
+    ],
     actions: [
       {
         name: 'Buy',
@@ -72,7 +76,11 @@ const ROLE_CONFIGS = {
     ],
   },
   Trader: {
-    stats: [],
+    stats: [
+      { label: 'Purchased Stock', value: '3,400 MT', icon: 'warehouse' },
+      { label: 'Trade Finance', value: '₹45.0 L', icon: 'cash-multiple' },
+      { label: 'Active Bids', value: '12 Bids', icon: 'gavel' },
+    ],
     actions: [
       {
         name: 'Buy',
@@ -91,7 +99,11 @@ const ROLE_CONFIGS = {
     ],
   },
   Miller: {
-    stats: [],
+    stats: [
+      { label: 'Milling Stock', value: '2,100 MT', icon: 'warehouse' },
+      { label: 'Material Loans', value: '₹30.0 L', icon: 'cash-multiple' },
+      { label: 'Buy Indents', value: '4 Active', icon: 'clipboard-list' },
+    ],
     actions: [
       {
         name: 'Buy',
@@ -110,7 +122,11 @@ const ROLE_CONFIGS = {
     ],
   },
   Corporate: {
-    stats: [],
+    stats: [
+      { label: 'Bulk Inventory', value: '12,500 MT', icon: 'warehouse' },
+      { label: 'Corporate Credit', value: '₹1.2 Cr', icon: 'cash-multiple' },
+      { label: 'Open Tenders', value: '6 Bids', icon: 'file-document-outline' },
+    ],
     actions: [
       {
         name: 'Buy',
@@ -291,7 +307,7 @@ function HomeScreen({ navigation }) {
       >
         {/* Welcome Section */}
         <View
-          style={styles.welcomeHeader}
+          style={[styles.welcomeHeader, { borderLeftColor: roleTheme.primary }]}
           accessible={true}
           accessibilityRole="header"
           accessibilityLabel={`${t('Welcome back,')} ${welcomeText}. ${t(
@@ -324,7 +340,7 @@ function HomeScreen({ navigation }) {
           <TouchableOpacity
             style={[
               styles.welcomeHeader,
-              { backgroundColor: roleTheme.light, borderColor: roleTheme.primary },
+              { backgroundColor: roleTheme.light, borderColor: roleTheme.primary, borderLeftColor: roleTheme.primary },
             ]}
             onPress={() => setShowRequirementModal(true)}
           >
@@ -487,7 +503,7 @@ function HomeScreen({ navigation }) {
         <View
           style={[
             styles.supportCard,
-            { borderColor: roleTheme.primary + '15' },
+            { borderColor: roleTheme.primary + '15', borderLeftColor: roleTheme.primary },
           ]}
         >
           <View style={styles.supportRow}>
@@ -512,7 +528,7 @@ function HomeScreen({ navigation }) {
             <TouchableOpacity
               style={[
                 styles.supportBtn,
-                { backgroundColor: roleTheme.primary },
+                { backgroundColor: roleTheme.primary, shadowColor: roleTheme.primary },
               ]}
               activeOpacity={0.8}
               onPress={() =>
@@ -555,8 +571,8 @@ const styles = StyleSheet.create({
   },
   welcomeHeader: {
     backgroundColor: COLORS.white,
-    borderRadius: 20,
-    padding: w(16),
+    borderRadius: 16,
+    padding: w(18),
     marginBottom: h(16),
     borderWidth: 1,
     borderColor: '#E2E8F0',
@@ -565,6 +581,8 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.04,
     shadowRadius: 8,
+    borderLeftWidth: 4,
+    borderLeftColor: '#E2E8F0',
   },
   welcomeRow: {
     flexDirection: 'row',
@@ -576,37 +594,42 @@ const styles = StyleSheet.create({
     paddingRight: w(12),
   },
   welcomeTitle: {
-    fontSize: f(13),
+    fontSize: f(12),
     color: '#64748B',
-    fontWeight: '600',
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
   },
   userName: {
-    fontSize: f(20),
+    fontSize: f(22),
     fontWeight: '800',
-    marginTop: h(2),
-    letterSpacing: -0.3,
+    color: '#0F172A',
+    marginTop: h(4),
+    letterSpacing: -0.4,
   },
   welcomeSubtitle: {
-    fontSize: f(11),
-    color: '#94A3B8',
-    marginTop: h(4),
-    lineHeight: h(15),
+    fontSize: f(12),
+    color: '#64748B',
+    marginTop: h(6),
+    lineHeight: h(17),
     fontWeight: '500',
   },
   avatarCircle: {
-    width: w(50),
-    height: w(50),
-    borderRadius: mw(25),
+    width: w(52),
+    height: w(52),
+    borderRadius: mw(26),
     alignItems: 'center',
     justifyContent: 'center',
-    elevation: 2,
+    borderWidth: 2,
+    borderColor: '#FFFFFF',
+    elevation: 3,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.15,
     shadowRadius: 4,
   },
   avatarText: {
-    fontSize: f(20),
+    fontSize: f(22),
     color: COLORS.white,
     fontWeight: '800',
   },
@@ -614,41 +637,41 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     marginBottom: h(20),
-    gap: w(10),
+    gap: w(12),
   },
   statCard: {
     flex: 1,
     backgroundColor: COLORS.white,
-    borderRadius: 18,
-    paddingVertical: h(14),
+    borderRadius: 16,
+    paddingVertical: h(16),
     paddingHorizontal: w(8),
     alignItems: 'center',
     borderWidth: 1,
     borderColor: '#E2E8F0',
-    elevation: 4,
+    elevation: 3,
     shadowColor: '#0F172A',
-    shadowOffset: { width: 0, height: 6 },
+    shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.04,
-    shadowRadius: 10,
+    shadowRadius: 8,
   },
   statIconWrapper: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: h(8),
+    marginBottom: h(10),
   },
   statValue: {
-    fontSize: f(14),
+    fontSize: f(16),
     fontWeight: '800',
     color: '#0F172A',
   },
   statLabel: {
-    fontSize: f(10),
+    fontSize: f(11),
     fontWeight: '700',
     color: '#64748B',
-    marginTop: h(2),
+    marginTop: h(4),
     textAlign: 'center',
   },
   sectionHeader: {
@@ -673,42 +696,42 @@ const styles = StyleSheet.create({
   actionButton: {
     flex: 1,
     backgroundColor: COLORS.white,
-    borderRadius: 20,
-    paddingVertical: h(20),
+    borderRadius: 16,
+    paddingVertical: h(22),
     paddingHorizontal: w(12),
     alignItems: 'center',
     borderWidth: 1,
     borderColor: '#E2E8F0',
-    elevation: 4,
+    elevation: 3,
     shadowColor: '#0F172A',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.05,
-    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.04,
+    shadowRadius: 8,
   },
   actionIconCircle: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
+    width: 52,
+    height: 52,
+    borderRadius: 26,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: h(10),
+    marginBottom: h(12),
   },
   actionText: {
-    fontSize: f(15),
+    fontSize: f(16),
     fontWeight: '800',
-    marginBottom: h(4),
+    marginBottom: h(6),
   },
   actionDescription: {
-    fontSize: f(10),
+    fontSize: f(11),
     fontWeight: '500',
     textAlign: 'center',
-    lineHeight: h(14),
+    lineHeight: h(15),
     paddingHorizontal: w(4),
     color: '#64748B',
   },
   supportCard: {
     backgroundColor: COLORS.white,
-    borderRadius: 20,
+    borderRadius: 16,
     borderWidth: 1,
     padding: w(16),
     marginTop: h(8),
@@ -717,15 +740,17 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.04,
     shadowRadius: 8,
+    borderLeftWidth: 4,
+    borderLeftColor: '#E2E8F0',
   },
   supportRow: {
     flexDirection: 'row',
     alignItems: 'center',
   },
   supportIconContainer: {
-    width: 40,
-    height: 40,
-    borderRadius: 12,
+    width: 42,
+    height: 42,
+    borderRadius: 10,
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: w(12),
@@ -737,20 +762,25 @@ const styles = StyleSheet.create({
   supportTitle: {
     fontSize: f(14),
     fontWeight: '800',
-    marginBottom: h(2),
+    color: '#0F172A',
+    marginBottom: h(4),
   },
   supportDesc: {
     fontSize: f(11),
     color: '#64748B',
-    lineHeight: h(15),
+    lineHeight: h(16),
     fontWeight: '500',
   },
   supportBtn: {
-    paddingHorizontal: w(14),
-    paddingVertical: h(8),
+    paddingHorizontal: w(16),
+    paddingVertical: h(9),
     borderRadius: 10,
     alignItems: 'center',
     justifyContent: 'center',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 3,
+    elevation: 2,
   },
   supportBtnText: {
     color: COLORS.white,
@@ -779,18 +809,19 @@ const styles = StyleSheet.create({
     marginBottom: h(12),
     borderWidth: 1,
     borderColor: '#E2E8F0',
-    elevation: 2,
+    elevation: 3,
     shadowColor: '#0F172A',
-    shadowOffset: { width: 0, height: 2 },
+    shadowOffset: { width: 0, height: 3 },
     shadowOpacity: 0.04,
-    shadowRadius: 4,
+    shadowRadius: 6,
     overflow: 'hidden',
   },
   reqAccordionHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    padding: w(16),
+    paddingHorizontal: w(16),
+    paddingTop: h(14),
     paddingBottom: h(8),
   },
   reqHeaderLeft: {
@@ -802,32 +833,40 @@ const styles = StyleSheet.create({
   reqSummaryRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: w(10),
+    gap: w(12),
     paddingHorizontal: w(16),
-    paddingBottom: h(12),
+    paddingBottom: h(14),
   },
   reqExpandedBody: {
     borderTopWidth: 1,
-    borderTopColor: '#F1F5F9',
+    borderTopColor: '#E2E8F0',
     paddingHorizontal: w(16),
-    paddingTop: h(10),
-    paddingBottom: h(12),
+    paddingTop: h(12),
+    paddingBottom: h(14),
+    backgroundColor: '#F8FAFC',
   },
   reqViewQuotesBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: w(6),
-    marginTop: h(10),
-    borderWidth: 1,
-    borderRadius: 8,
-    paddingHorizontal: w(12),
-    paddingVertical: h(8),
+    gap: w(8),
+    marginTop: h(12),
+    borderWidth: 1.5,
+    borderRadius: 10,
+    paddingHorizontal: w(14),
+    paddingVertical: h(9),
     alignSelf: 'flex-start',
+    backgroundColor: COLORS.white,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.02,
+    shadowRadius: 2,
+    elevation: 1,
   },
   reqCommodity: {
-    fontSize: f(15),
+    fontSize: f(16),
     fontWeight: '800',
     color: '#0F172A',
+    letterSpacing: -0.2,
   },
   reqBadge: {
     paddingHorizontal: w(8),
@@ -837,6 +876,8 @@ const styles = StyleSheet.create({
   reqBadgeText: {
     fontSize: f(10),
     fontWeight: '700',
+    textTransform: 'uppercase',
+    letterSpacing: 0.3,
   },
   reqDetailsRow: {
     flexDirection: 'row',
@@ -845,9 +886,10 @@ const styles = StyleSheet.create({
   },
   reqDetailText: {
     fontSize: f(12),
-    color: '#64748B',
-    marginRight: w(10),
+    color: '#475569',
+    marginRight: w(12),
     marginBottom: h(4),
+    fontWeight: '500',
   },
   reqFooterRow: {
     flexDirection: 'row',
