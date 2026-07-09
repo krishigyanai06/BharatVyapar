@@ -790,7 +790,7 @@ export default function ProfileScreen() {
               </TouchableOpacity>
             </View>
 
-            <ScrollView contentContainerStyle={styles.modalBody} showsVerticalScrollIndicator={false}>
+            <ScrollView style={{ flex: 1 }} contentContainerStyle={styles.modalBody} showsVerticalScrollIndicator={false}>
 
               {user?.kycStatus === 'VERIFIED' && (
                 <View style={styles.kycLockBanner}>
@@ -1278,7 +1278,7 @@ const styles = StyleSheet.create({
   modalHeader:     { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: w(24), paddingVertical: h(20), borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.1)' },
   modalTitle:      { fontSize: f(18), fontWeight: '800', color: COLORS.white, letterSpacing: 0.5 },
   closeBtn:        { padding: w(4), backgroundColor: 'rgba(255,255,255,0.2)', borderRadius: mw(14) },
-  modalBody:       { padding: w(24), paddingBottom: h(40) },
+  modalBody:       { padding: w(24), paddingBottom: h(16) },
   row:             { flexDirection: 'row', justifyContent: 'space-between', marginBottom: h(18), gap: w(14) },
   flex1:           { flex: 1 },
   halfCol:         { flex: 1 },
