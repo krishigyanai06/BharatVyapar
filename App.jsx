@@ -4,8 +4,9 @@ import store from './src/store';
 import RootNavigator from './src/navigation/RootNavigator';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { StatusBar } from 'react-native';
-import { CustomAlertBox } from './src/components/CustomAlertBox';
-import { NetworkProvider } from './src/components/NetworkProvider';
+import { CustomAlertBox } from './src/shared/components/CustomAlertBox';
+import { NetworkProvider } from './src/shared/components/NetworkProvider';
+
 
 export default function App() {
   return (
