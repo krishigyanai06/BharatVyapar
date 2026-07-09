@@ -1,16 +1,16 @@
 import React from 'react';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import AppTabs from './AppTabs';
-import WarehouseScreen from '../../screen/app/WarehouseScreen';
-import FinanceScreen from '../../screen/app/FinanceScreen';
+import WarehouseScreen from '../../features/warehouse/screens/WarehouseScreen';
+import FinanceScreen from '../../features/finance/screens/FinanceScreen';
 
 // New static screens for Marketplace & Trades flow
-import CommodityDetailsScreen from '../../screen/app/Trades/Marketplace/CommodityDetailsScreen';
-import NegotiationDetailsScreen from '../../screen/app/Trades/NegotiationDetailsScreen';
-import DealDetailsScreen from '../../screen/app/Trades/DealDetailsScreen';
-import BuyerQuoteDashboard from '../../screen/app/Trades/BuyerQuoteDashboard';
-import SellerOrdersScreen from '../../screen/app/Trades/SellerOrdersScreen';
-import BuyerOrdersScreen from '../../screen/app/Trades/BuyerOrdersScreen';
+import CommodityDetailsScreen from '../../features/marketplace/screens/CommodityDetailsScreen';
+import NegotiationDetailsScreen from '../../features/orders/screens/NegotiationDetailsScreen';
+import DealDetailsScreen from '../../features/orders/screens/DealDetailsScreen';
+import BuyerQuoteDashboard from '../../features/orders/screens/BuyerQuoteDashboard';
+import SellerOrdersScreen from '../../features/orders/screens/SellerOrdersScreen';
+import BuyerOrdersScreen from '../../features/orders/screens/BuyerOrdersScreen';
 
 const Stack = createNativeStackNavigator();
 
@@ -33,4 +33,3 @@ export default function AppStack() {
     </Stack.Navigator>
   );
 }
-

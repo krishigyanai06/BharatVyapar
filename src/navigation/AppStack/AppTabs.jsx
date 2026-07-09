@@ -6,12 +6,13 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { selectResolvedRole, selectRoleColor } from '../../store/authSelectors';
 import { useTranslation } from '../../hook/useTranslation';
 
-import HomeScreen from '../../screen/app/BottomTabs/HomeScreen';
-import MarketplaceScreen from '../../screen/app/Trades/Marketplace/MarketplaceScreen';
-import TradesScreen from '../../screen/app/Trades/TradesScreen';
-import SellCommodities from '../../screen/app/Trades/SellCommodities';
-import ProfileScreen from '../../screen/app/BottomTabs/ProfileScreen';
-import COLORS from '../../constant/colors';
+import HomeScreen from '../../features/home/screens/HomeScreen';
+import MarketplaceScreen from '../../features/marketplace/screens/MarketplaceScreen';
+import TradesScreen from '../../features/orders/screens/TradesScreen';
+import SellCommodities from '../../features/marketplace/screens/SellCommodities';
+import ProfileScreen from '../../features/profile/screens/ProfileScreen';
+import COLORS from '../../theme/colors';
+
 
 const Tab = createBottomTabNavigator();
 
