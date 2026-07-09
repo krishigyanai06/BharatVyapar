@@ -682,7 +682,9 @@ const styles = StyleSheet.create({
     fontSize: f(16),
     fontWeight: '800',
     color: '#0F172A',
+    textAlign: 'center',
   },
+
   statLabel: {
     fontSize: f(11),
     fontWeight: '700',
