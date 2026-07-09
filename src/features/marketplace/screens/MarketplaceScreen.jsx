@@ -16,17 +16,18 @@ import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
 import { useFocusEffect } from '@react-navigation/native';
 import { selectResolvedRole, selectUser } from '../../../store/authSelectors';
 import { useTranslation } from '../../../shared/hooks/useTranslation';
-import { SafeScreen } from '../../../components/SafeScreen';
-import AppHeader from '../../../components/AppHeader';
+import { SafeScreen } from '../../../shared/components/SafeScreen';
+import AppHeader from '../../../shared/components/AppHeader';
 import COLORS from '../../../theme/colors';
 import { w, h, f, mw } from '../../../shared/utils/responsive';
-import { showAlert } from '../../../components/CustomAlertBox';
+import { showAlert } from '../../../shared/components/CustomAlertBox';
 import { getSellCommodities, deleteSellCommodity, getReceivedOffers } from '../marketplace.api';
 import { getFriendlyErrorMessage } from '../../../shared/utils/errorUtils';
 import { normalizeCommodity } from '../marketplace.normalizer';
 import { requirementService } from '../../orders/orders.requirements';
 import { submitQuoteAgainstRequirement } from '../../orders/orders.service';
-import FulfillRequirementBottomSheet from '../../../components/FulfillRequirementBottomSheet';
+import FulfillRequirementBottomSheet from '../../orders/components/FulfillRequirementBottomSheet';
+
 
 const ROLE_THEMES = {
   FPO:       { primary: COLORS.fpoPrimary,       secondary: COLORS.fpoSecondary,       light: COLORS.fpoLight,       text: COLORS.fpoText },

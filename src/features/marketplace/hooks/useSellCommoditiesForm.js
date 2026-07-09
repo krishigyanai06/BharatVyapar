@@ -38,9 +38,10 @@ import { useSelector } from 'react-redux';
 import { selectUser } from '../../../store/authSelectors';
 import { launchImageLibrary } from 'react-native-image-picker';
 import { pick, types, isCancel } from '@react-native-documents/picker';
-import { showAlert } from '../../../components/CustomAlertBox';
+import { showAlert } from '../../../shared/components/CustomAlertBox';
 import { getFriendlyErrorMessage } from '../../../shared/utils/errorUtils';
 import { submitSellListing } from '../marketplace.service';
+
 
 
 

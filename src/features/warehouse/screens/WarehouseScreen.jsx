@@ -14,10 +14,11 @@ import { useSelector } from 'react-redux';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import COLORS from '../../../theme/colors';
 import { w, h, mw, f } from '../../../shared/utils/responsive';
-import { showAlert } from '../../../components/CustomAlertBox';
-import { SafeScreen } from '../../../components/SafeScreen';
+import { showAlert } from '../../../shared/components/CustomAlertBox';
+import { SafeScreen } from '../../../shared/components/SafeScreen';
 import { selectUser } from '../../../store/authSelectors';
 import { useTranslation } from '../../../shared/hooks/useTranslation';
+
 
 
 const WAREHOUSES = [

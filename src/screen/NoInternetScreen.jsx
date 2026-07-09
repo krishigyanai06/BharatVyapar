@@ -9,9 +9,10 @@ import {
   StatusBar,
   useWindowDimensions,
 } from 'react-native';
-import COLORS from '../constant/colors';
+import COLORS from '../theme/colors';
 import Images from '../assets';
-import { f } from '../utils/responsive';
+import { f } from '../shared/utils/responsive';
+
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 
 const NoInternetScreen = ({ isChecking, onReconnect }) => {

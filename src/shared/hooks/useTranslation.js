@@ -1,7 +1,8 @@
 import { useCallback } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { translateTextThunk } from '../../store/languageSlice';
-import { storage } from '../../service/storage';
+import { storage } from '../utils/storage';
+
 
 // Module-level registry to track translation request status across all component instances
 // key format: `${targetLang}_${text}`

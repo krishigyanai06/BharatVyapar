@@ -9,7 +9,8 @@ import {
   saveAuthSession,
   removeAuthSession,
   getStoredAuthSession,
-} from '../service/auth/authStorage';
+} from '../features/auth/auth.storage';
+
 
 // ─────────────────────────────────────────────
 // 1. TYPED ERROR CATALOGUE

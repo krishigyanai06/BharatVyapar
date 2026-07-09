@@ -1,14 +1,15 @@
 // features/profile/profile.service.js
 // Migrated from: service/user/userService.js
 import userApi from './profile.api';
-import { showAlert } from '../../components/CustomAlertBox';
+import { showAlert } from '../../shared/components/CustomAlertBox';
 import {
   normalizeFileUri,
   pickDocumentOrImage,
   viewDocument,
-} from '../../utils/documentUtils';
+} from '../../shared/utils/documentUtils';
 import { validateProfileForm, validateProfileField } from '../../shared/utils/validators';
 import COLORS from '../../theme/colors';
+
 
 export const ROLE_THEMES = {
   FPO:       { primary: COLORS.fpoPrimary,       secondary: COLORS.fpoSecondary,       light: COLORS.fpoLight,       text: COLORS.fpoText },

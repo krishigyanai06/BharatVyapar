@@ -8,15 +8,16 @@ import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
 import { launchImageLibrary, launchCamera } from 'react-native-image-picker';
 import { useDispatch, useSelector } from 'react-redux';
-import { SafeScreen } from '../../../components/SafeScreen';
-import AppHeader from '../../../components/AppHeader';
+import { SafeScreen } from '../../../shared/components/SafeScreen';
+import AppHeader from '../../../shared/components/AppHeader';
 import COLORS from '../../../theme/colors';
 import { w, h, mw, f } from '../../../shared/utils/responsive';
 import { logoutUser, getUserDetails, updateProfile } from '../../../store/authSlice';
 import { selectUser, selectSelectedRole, selectProfileLoading } from '../../../store/authSelectors';
-import { showAlert } from '../../../components/CustomAlertBox';
+import { showAlert } from '../../../shared/components/CustomAlertBox';
 import userApi from '../profile.api';
 import { useTranslation } from '../../../shared/hooks/useTranslation';
+
 import {
   ROLE_THEMES,
   GENDER_OPTIONS,
