@@ -13,6 +13,8 @@ import {
   StyleSheet,
   Animated,
   Dimensions,
+  TouchableWithoutFeedback,
+  Image,
 } from 'react-native';
 import Icon from 'react-native-vector-icons/Ionicons';
 import COLORS from '../constant/colors';
@@ -78,6 +80,8 @@ const CustomAlertInner = forwardRef((_, ref) => {
     title: '',
     message: '',
     buttons: [],
+    themeColor: null,
+    imageUrl: null,
   });
 
   const scaleAnim = useRef(new Animated.Value(0.8)).current;
@@ -93,7 +97,7 @@ const CustomAlertInner = forwardRef((_, ref) => {
       scaleAnim.stopAnimation();
       opacityAnim.stopAnimation();
     };
-  }, []);
+  }, [opacityAnim, scaleAnim]);
 
   useImperativeHandle(ref, () => ({
     show(options) {
@@ -105,6 +109,8 @@ const CustomAlertInner = forwardRef((_, ref) => {
           options.buttons && options.buttons.length > 0
             ? options.buttons
             : [{ text: 'OK', style: 'default' }],
+        themeColor: options.themeColor || null,
+        imageUrl: options.imageUrl || null,
       });
       setVisible(true);
       animRef.current = Animated.parallel([
@@ -145,7 +151,15 @@ const CustomAlertInner = forwardRef((_, ref) => {
     });
   };
 
-  const typeConf = TYPE_CONFIG[config.type] || DEFAULT;
+  const baseConf = TYPE_CONFIG[config.type] || DEFAULT;
+  const typeConf = {
+    ...baseConf,
+    ...(config.themeColor ? {
+      color: config.themeColor,
+      bg: config.themeColor + '08',
+      iconBg: config.themeColor + '15',
+    } : {}),
+  };
 
   const getButtonStyle = style => {
     if (style === 'destructive') return styles.btnDestructive;
@@ -186,19 +200,36 @@ const CustomAlertInner = forwardRef((_, ref) => {
       statusBarTranslucent
       onRequestClose={() => handleClose(null)}
     >
-      <View style={styles.overlay}>
-        <Animated.View
-          style={[
-            styles.card,
-            { backgroundColor: typeConf.bg },
-            { transform: [{ scale: scaleAnim }], opacity: opacityAnim },
-          ]}
-        >
-          {/* ── Icon ── */}
-          <View
-            style={[styles.iconWrapper, { backgroundColor: typeConf.iconBg }]}
+      <TouchableOpacity
+        style={styles.overlay}
+        activeOpacity={1}
+        onPress={() => handleClose(null)}
+      >
+        <TouchableWithoutFeedback>
+          <Animated.View
+            style={[
+              styles.card,
+              { backgroundColor: COLORS.white },
+              { transform: [{ scale: scaleAnim }], opacity: opacityAnim },
+            ]}
           >
-            <Icon name={typeConf.icon} size={38} color={typeConf.color} />
+          {/* ── Icon / Image Preview ── */}
+          <View
+            style={[
+              styles.iconWrapper,
+              { backgroundColor: typeConf.iconBg },
+              config.imageUrl && { overflow: 'hidden', borderWidth: 1, borderColor: typeConf.color + '30' }
+            ]}
+          >
+            {config.imageUrl ? (
+              <Image
+                source={{ uri: config.imageUrl }}
+                style={styles.previewImage}
+                resizeMode="cover"
+              />
+            ) : (
+              <Icon name={typeConf.icon} size={38} color={typeConf.color} />
+            )}
           </View>
 
           {/* ── Title ── */}
@@ -220,7 +251,7 @@ const CustomAlertInner = forwardRef((_, ref) => {
 
           {/* ── Buttons ── */}
           {(() => {
-            const isVertical = config.buttons.length > 3 || config.buttons.some(btn => btn.text && btn.text.length > 16);
+            const isVertical = config.buttons.length >= 3 || config.buttons.some(btn => btn.text && btn.text.length > 12);
             return (
               <View
                 style={[
@@ -250,8 +281,9 @@ const CustomAlertInner = forwardRef((_, ref) => {
               </View>
             );
           })()}
-        </Animated.View>
-      </View>
+          </Animated.View>
+        </TouchableWithoutFeedback>
+      </TouchableOpacity>
     </Modal>
   );
 });
@@ -300,6 +332,10 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 16,
+  },
+  previewImage: {
+    width: '100%',
+    height: '100%',
   },
   title: {
     fontSize: 20,

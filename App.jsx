@@ -5,6 +5,7 @@ import RootNavigator from './src/navigation/RootNavigator';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { StatusBar } from 'react-native';
 import { CustomAlertBox } from './src/components/CustomAlertBox';
+import { NetworkProvider } from './src/components/NetworkProvider';
 
 export default function App() {
   return (
@@ -16,8 +17,10 @@ export default function App() {
       />
 
       <Provider store={store}>
-        <CustomAlertBox />
-        <RootNavigator />
+        <NetworkProvider>
+          <CustomAlertBox />
+          <RootNavigator />
+        </NetworkProvider>
       </Provider>
     </SafeAreaProvider>
   );

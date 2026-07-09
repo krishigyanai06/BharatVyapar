@@ -15,10 +15,12 @@ export default function RootNavigator() {
   const dispatch = useDispatch();
   // PERFORMANCE FIX: Three separate subscriptions instead of one whole-slice
   // selector. Each only re-renders RootNavigator when its specific field changes.
+  const AUTH_CHECK_DELAY = 5500;
   const isAuthenticated = useSelector(selectIsAuthenticated);
   const isAuthChecked   = useSelector(selectIsAuthChecked);
 
   const [isLangInitialized, setIsLangInitialized] = useState(false);
+  const [progress, setProgress] = useState(0);
 
   useEffect(() => {
     dispatch(initializeLanguageThunk())
@@ -33,10 +35,43 @@ export default function RootNavigator() {
     // Small delay before checking token
     const timer = setTimeout(() => {
       dispatch(checkStoredToken());
-    }, 1500);
+    }, AUTH_CHECK_DELAY);
 
     return () => clearTimeout(timer);
   }, [dispatch]);
+
+  // Update progress state based on load stage
+  useEffect(() => {
+    if (isLangInitialized && progress < 0.3) {
+      setProgress(0.3);
+    }
+  }, [isLangInitialized, progress]);
+
+  useEffect(() => {
+    if (!isLangInitialized) return;
+
+    const intervalTime = 100;
+    const totalSteps = AUTH_CHECK_DELAY / intervalTime;
+    const stepSize = 0.6 / totalSteps;
+
+    const progressInterval = setInterval(() => {
+      setProgress((prev) => {
+        if (prev >= 0.9) {
+          clearInterval(progressInterval);
+          return prev;
+        }
+        return Math.min(prev + stepSize, 0.9);
+      });
+    }, intervalTime);
+
+    return () => clearInterval(progressInterval);
+  }, [isLangInitialized]);
+
+  useEffect(() => {
+    if (isAuthChecked) {
+      setProgress(1.0);
+    }
+  }, [isAuthChecked]);
 
   useEffect(() => {
     setUnauthorizedCallback(() => {
@@ -49,7 +84,7 @@ export default function RootNavigator() {
   }, [dispatch]);
 
   if (!isAuthChecked || !isLangInitialized) {
-    return <SplashScreen />;
+    return <SplashScreen progress={progress} />;
   }
 
   return (

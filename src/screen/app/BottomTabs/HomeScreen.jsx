@@ -5,6 +5,7 @@ import {
   StyleSheet,
   TouchableOpacity,
   ScrollView,
+  Image,
 } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useSelector } from 'react-redux';
@@ -328,9 +329,17 @@ function HomeScreen({ navigation }) {
                 { backgroundColor: roleTheme.primary },
               ]}
             >
-              <Text style={styles.avatarText}>
-                {welcomeText ? welcomeText.substring(0, 1).toUpperCase() : 'B'}
-              </Text>
+              {displayData.profileImage ? (
+                <Image
+                  source={{ uri: displayData.profileImage }}
+                  style={styles.avatarImage}
+                  resizeMode="cover"
+                />
+              ) : (
+                <Text style={styles.avatarText}>
+                  {welcomeText ? welcomeText.substring(0, 1).toUpperCase() : 'B'}
+                </Text>
+              )}
             </View>
           </View>
         </View>
@@ -627,6 +636,11 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 3 },
     shadowOpacity: 0.15,
     shadowRadius: 4,
+    overflow: 'hidden',
+  },
+  avatarImage: {
+    width: '100%',
+    height: '100%',
   },
   avatarText: {
     fontSize: f(22),

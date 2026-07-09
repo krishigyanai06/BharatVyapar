@@ -88,6 +88,20 @@ export default function RoleSelectionScreen({ navigation }) {
             style={styles.headerPlaceholder}
             resizeMode="cover"
           />
+          {/* LOGO TEXT OVERLAY MASK */}
+          <View style={styles.logoMaskContainer}>
+            <View style={styles.logoTextRow}>
+              <Text style={styles.greenLogoText}>Bharat </Text>
+              <Text style={styles.orangeLogoText}>FPO</Text>
+            </View>
+            <View style={styles.dividerRow}>
+              <View style={styles.dividerLine} />
+              <View style={styles.dividerDot} />
+              <View style={styles.dividerLine} />
+            </View>
+            <Text style={styles.greenLogoText}>Vyapar</Text>
+            <Text style={styles.subtext}>{t('Kisan ki Mehnat, Desh ki Samriddhi')}</Text>
+          </View>
         </View>
 
         <View style={styles.contentContainer}>
@@ -257,5 +271,57 @@ const styles = StyleSheet.create({
   },
   continueIcon: {
     marginLeft: w(8),
+  },
+  logoMaskContainer: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: '#FAFAF8',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: h(12),
+  },
+  logoTextRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  greenLogoText: {
+    fontSize: f(26),
+    fontWeight: 'bold',
+    color: '#0F6938',
+    letterSpacing: 0.5,
+  },
+  orangeLogoText: {
+    fontSize: f(26),
+    fontWeight: 'bold',
+    color: '#F16F22',
+    letterSpacing: 0.5,
+  },
+  dividerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginVertical: h(2),
+    width: w(100),
+  },
+  dividerLine: {
+    flex: 1,
+    height: 1.5,
+    backgroundColor: '#0F6938',
+  },
+  dividerDot: {
+    width: 4,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: '#000000',
+    marginHorizontal: w(6),
+  },
+  subtext: {
+    fontSize: f(10),
+    fontWeight: '600',
+    color: '#1C3E2A',
+    marginTop: h(4),
+    letterSpacing: 0.2,
   },
 });
