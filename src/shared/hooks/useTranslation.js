@@ -1,8 +1,7 @@
-// SHIM — Migrated to src/shared/hooks/useTranslation.js
-// All imports from this path still work via this re-export.
-// Prefer importing from: import { useTranslation } from '../shared/hooks/useTranslation';
-export { useTranslation } from '../shared/hooks/useTranslation';
-
+import { useCallback } from 'react';
+import { useDispatch, useSelector } from 'react-redux';
+import { translateTextThunk } from '../../store/languageSlice';
+import { storage } from '../../service/storage';
 
 // Module-level registry to track translation request status across all component instances
 // key format: `${targetLang}_${text}`
@@ -20,7 +19,7 @@ export const useTranslation = () => {
   const dispatch = useDispatch();
   const currentLanguage = useSelector(state => state.language.currentLanguage);
 
-  // Directly consume translations from Redux. 
+  // Directly consume translations from Redux.
   // Redux already initializes synchronously from MMKV in languageSlice.js.
   const reduxTranslations = useSelector(
     state => state.language.appTranslations[currentLanguage],
@@ -81,4 +80,3 @@ export const useTranslation = () => {
 
   return { t, currentLanguage };
 };
-

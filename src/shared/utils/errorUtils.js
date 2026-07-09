@@ -1,7 +1,19 @@
-// SHIM — Migrated to src/shared/utils/errorUtils.js
-// All imports from this path still work via this re-export.
-export { extractErrorMessage, getFriendlyErrorMessage } from '../shared/utils/errorUtils';
-
+/**
+ * Extracts the raw backend error message safely from any API response error object.
+ * Reusable across all Redux thunks and API call catch blocks.
+ *
+ * @param {any} err - The error object caught in try-catch
+ * @returns {string} The raw message sent by the server or standard network message
+ */
+export const extractErrorMessage = (err) => {
+  if (!err) return 'An unexpected error occurred';
+  return err?.backendError?.message ||
+         err?.backendError?.error?.message ||
+         err?.response?.data?.message ||
+         err?.response?.data?.error?.message ||
+         err?.message ||
+         'An unexpected error occurred';
+};
 
 /**
  * Maps raw backend/technical errors to user-friendly messages.
@@ -58,7 +70,7 @@ export const getFriendlyErrorMessage = (errorMsg) => {
     return 'Could not connect to the server. Please check your internet connection and try again.';
   }
 
-  // 4. Technical System & Server Crash errors (Generic Database, Server status, JS Exceptions)
+  // 4. Technical System & Server Crash errors
   if (
     /mongo/i.test(message) ||
     /cast to objectid/i.test(message) ||

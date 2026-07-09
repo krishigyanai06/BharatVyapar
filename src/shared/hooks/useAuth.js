@@ -1,8 +1,19 @@
-// SHIM — Migrated to src/shared/hooks/useAuth.js
-// All imports from this path still work via this re-export.
-// Prefer importing from: import { useAuth } from '../shared/hooks/useAuth';
-export { useAuth } from '../shared/hooks/useAuth';
-
+/**
+ * useAuth.js
+ *
+ * PERFORMANCE FIX:
+ *   The original implementation selected the entire auth slice as a single object:
+ *     const auth = useSelector(state => state.auth || {});
+ *   This caused every consumer of useAuth() to re-render whenever ANY auth field
+ *   changed (profileLoading, sendOtpError, etc.), not just the fields they use.
+ *
+ *   FIX: Each field is now selected with a separate granular selector. react-redux
+ *   v9 runs each selector independently and only re-renders if the specific
+ *   selected value changes (strict === comparison).
+ *   Components that consume useAuth() and only use `token` will now only
+ *   re-render when `token` changes.
+ */
+import { useSelector } from 'react-redux';
 import {
   selectAuthToken,
   selectUser,
@@ -14,7 +25,7 @@ import {
   selectVerifyOtpLoading,
   selectVerifyOtpError,
   selectIsAuthenticated,
-} from '../store/authSelectors';
+} from '../../store/authSelectors';
 
 export const useAuth = () => {
   const token           = useSelector(selectAuthToken);
