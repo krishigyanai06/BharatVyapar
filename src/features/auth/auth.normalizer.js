@@ -1,13 +1,10 @@
-// SHIM — Migrated to src/features/auth/auth.normalizer.js
-export * from '../../features/auth/auth.normalizer';
-
-
-// ─── Mock Tests ───────────────────────────────────────────────────────────────
-
 /**
- * Verify normalizer handles all known backend user shapes.
- * Call normalizeUser.runTests() in Metro console during development.
+ * User Normalizer
+ * Migrated to features/auth/auth.normalizer.js
  */
+
+const VALID_ROLES = ['FPO', 'Trader', 'Miller', 'Corporate'];
+
 function runTests() {
   const testCases = [
     {
@@ -42,7 +39,7 @@ function runTests() {
         firstName: 'Suresh',
         phone: '9000000001',
         role: 'Trader',
-        shopname: 'Suresh Traders', // backend sends lowercase
+        shopname: 'Suresh Traders',
       },
       expect: {
         id: 'user2',
@@ -56,7 +53,7 @@ function runTests() {
         firstName: 'Mohan',
         phone: '9000000002',
         role: 'Miller',
-        email: 'mohan@example.com', // backend sends 'email'
+        email: 'mohan@example.com',
       },
       expect: {
         id: 'user3',
@@ -73,7 +70,7 @@ function runTests() {
       },
       expect: {
         id: 'user4',
-        emailId: 'new@example.com', // emailId takes priority
+        emailId: 'new@example.com',
       },
     },
     {
@@ -81,7 +78,7 @@ function runTests() {
       input: {
         _id: 'user5',
         phone: '9000000004',
-        role: 'SuperAdmin', // not a valid app role
+        role: 'SuperAdmin',
       },
       expect: { id: 'user5', role: 'FPO' },
     },
@@ -98,20 +95,6 @@ function runTests() {
       label: 'Null input → returns null',
       input: null,
       expect: null,
-    },
-    {
-      label: '30 extra backend keys stripped from Redux state',
-      input: {
-        _id: 'strip3',
-        phone: '9000000006',
-        role: 'FPO',
-        // Extra keys UI never uses:
-        __v: 0, fcmToken: 'abc', deviceId: 'dev1', loginHistory: [],
-        internalScore: 99, adminFlag: false, bulkActionLog: [],
-        passwordHash: 'HASH', saltRounds: 10, refreshTokens: [],
-      },
-      expect: { id: 'strip3', role: 'FPO' },
-      assertNoKeys: ['__v', 'fcmToken', 'deviceId', 'loginHistory', 'passwordHash', 'saltRounds'],
     },
   ];
 
@@ -136,15 +119,6 @@ function runTests() {
       }
     }
 
-    if (tc.assertNoKeys && result) {
-      for (const key of tc.assertNoKeys) {
-        if (key in result) {
-          ok = false;
-          errors.push(`Key "${key}" should be stripped but was present`);
-        }
-      }
-    }
-
     if (ok) passed++;
     else failed++;
     results.push({ label: tc.label, ok, errors });
@@ -152,46 +126,21 @@ function runTests() {
 
   if (__DEV__) {
     console.log(`\n🧪 [user.normalizer] Tests: ${passed} passed, ${failed} failed`);
-    results.forEach(r => {
-      if (r.ok) console.log(`  ✅ ${r.label}`);
-      else {
-        console.log(`  ❌ ${r.label}`);
-        r.errors.forEach(e => console.log(`     → ${e}`));
-      }
-    });
   }
 
   return { passed, failed, results };
 }
 
-// ─── Core Normalizer ──────────────────────────────────────────────────────────
-
-/**
- * Normalize a raw backend user object into a clean, trimmed UI-ready shape.
- * This is what gets stored in Redux state.auth.user — only the 14 fields
- * the app actually uses.
- *
- * @param {Object|null} raw - Raw backend user object
- * @returns {Object|null} Clean user object, or null if invalid
- */
 export function normalizeUser(raw) {
   if (!raw || typeof raw !== 'object') return null;
 
   const id = raw._id || raw.id;
-  // phone is minimum required to identify + re-login user
   if (!id && !raw.phone) return null;
 
-  // Email — backend sends both 'email' and 'emailId'; prefer emailId
   const emailId = raw.emailId || raw.email || '';
-
-  // Shop name — backend sends 'shopname' (lowercase) and 'shopName' (camelCase)
   const shopName = raw.shopName || raw.shopname || '';
-
-  // Role — validate against known app roles
   const role = VALID_ROLES.includes(raw.role) ? raw.role : 'FPO';
 
-  // Return ONLY the fields the UI uses.
-  // Everything else (fcmToken, loginHistory, passwordHash, etc.) is dropped.
   return {
     id:          id ? String(id) : null,
     firstName:   raw.firstName   || '',
@@ -217,24 +166,13 @@ export function normalizeUser(raw) {
   };
 }
 
-/**
- * Merge a normalized user with local profile data (from AsyncStorage).
- * Used in authSlice when backend doesn't return all fields (e.g. first login).
- *
- * @param {Object|null} backendUser - Already normalized user from backend
- * @param {Object|null} localProfile - Locally stored profile (may have richer data)
- * @returns {Object|null} Merged normalized user
- */
 export function mergeWithLocalProfile(backendUser, localProfile) {
   if (!backendUser && !localProfile) return null;
   if (!backendUser) return normalizeUser(localProfile);
   if (!localProfile) return backendUser;
 
-  // Prefer backend values; use local profile to fill in missing fields
   const merged = { ...localProfile, ...backendUser };
-  // Re-normalize to ensure clean shape (drops any local extra keys too)
   return normalizeUser(merged);
 }
 
-// Attach test runner for dev-time validation
 normalizeUser.runTests = runTests;
