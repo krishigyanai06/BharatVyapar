@@ -13,11 +13,12 @@ import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useSelector } from 'react-redux';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
-import { selectUser, selectSelectedRole } from '../../../../store/authSelectors';
-import COLORS from '../../../../theme/colors';
-import { w, h, f } from '../../../../shared/utils/responsive';
+import { selectUser, selectSelectedRole } from '../../../store/authSelectors';
+import COLORS from '../../../theme/colors';
+import { w, h, f } from '../../../shared/utils/responsive';
 import { getReceivedOffers } from '../marketplace.api';
-import { useTranslation } from '../../../../shared/hooks/useTranslation';
+import { useTranslation } from '../../../shared/hooks/useTranslation';
+
 
 
 const ROLE_THEMES = {
