@@ -6,12 +6,13 @@ import {
   removeAuthSession,
   saveLocalProfile,
   getLocalProfile,
-} from '../service/auth/authStorage';
-import authApi from '../service/auth/authApi';
-import userApi from '../service/user/userApi';
-import COLORS from '../constant/colors';
-import { normalizeUser, mergeWithLocalProfile } from '../service/normalizers/user.normalizer';
-import { extractErrorMessage } from '../utils/errorUtils';
+} from '../features/auth/auth.storage';
+import authApi from '../features/auth/auth.api';
+import userApi from '../features/profile/profile.api';
+import COLORS from '../theme/colors';
+import { normalizeUser, mergeWithLocalProfile } from '../features/auth/auth.normalizer';
+import { extractErrorMessage } from '../shared/utils/errorUtils';
+
 
 // THUNK: App start pe disk check
 export const checkStoredToken = createAsyncThunk(
