@@ -1,7 +1,7 @@
-// SHIM — Migrated to src/shared/utils/validators.js
-// All imports from this path still work via this re-export.
-export { validateProfileForm, validateProfileField, isProfileFormValid } from '../../shared/utils/validators';
+// ─── Helpers ────────────────────────────────────────────────────────────────
 
+/** Coerce any input to a trimmed string; returns '' for null/undefined. */
+const str = v => (v == null ? '' : String(v).trim());
 
 /**
  * Strip characters that could be used for XSS / HTML injection.
