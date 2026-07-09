@@ -1274,7 +1274,7 @@ const styles = StyleSheet.create({
   logoutText:      { fontSize: f(17), fontWeight: '800', color: '#E53E3E', letterSpacing: 0.3 },
   
   modalOverlay:    { flex: 1, backgroundColor: 'rgba(15, 23, 42, 0.75)', justifyContent: 'flex-end' },
-  modalContainer:  { backgroundColor: COLORS.white, borderTopLeftRadius: mw(32), borderTopRightRadius: mw(32), overflow: 'hidden', maxHeight: '92%', elevation: 20, shadowColor: '#000', shadowOffset: { width: 0, height: -10 }, shadowOpacity: 0.15, shadowRadius: 20 },
+  modalContainer:  { backgroundColor: COLORS.white, borderTopLeftRadius: mw(32), borderTopRightRadius: mw(32), overflow: 'hidden', maxHeight: '80%', elevation: 20, shadowColor: '#000', shadowOffset: { width: 0, height: -10 }, shadowOpacity: 0.15, shadowRadius: 20 },
   modalHeader:     { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: w(24), paddingVertical: h(20), borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.1)' },
   modalTitle:      { fontSize: f(18), fontWeight: '800', color: COLORS.white, letterSpacing: 0.5 },
   closeBtn:        { padding: w(4), backgroundColor: 'rgba(255,255,255,0.2)', borderRadius: mw(14) },
