@@ -2,9 +2,10 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, FlatList, RefreshControl, StyleSheet, Text, View } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useSelector } from 'react-redux';
-import AppHeader from '../../../components/AppHeader';
-import { SafeScreen } from '../../../components/SafeScreen';
-import { showAlert } from '../../../components/CustomAlertBox';
+import AppHeader from '../../../shared/components/AppHeader';
+import { SafeScreen } from '../../../shared/components/SafeScreen';
+import { showAlert } from '../../../shared/components/CustomAlertBox';
+
 import COLORS from '../../../theme/colors';
 import { useTranslation } from '../../../shared/hooks/useTranslation';
 import { selectSelectedRole, selectUser } from '../../../store/authSelectors';

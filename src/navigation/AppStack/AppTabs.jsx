@@ -4,7 +4,8 @@ import { useSelector } from 'react-redux';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { selectResolvedRole, selectRoleColor } from '../../store/authSelectors';
-import { useTranslation } from '../../hook/useTranslation';
+import { useTranslation } from '../../shared/hooks/useTranslation';
+
 
 import HomeScreen from '../../features/home/screens/HomeScreen';
 import MarketplaceScreen from '../../features/marketplace/screens/MarketplaceScreen';

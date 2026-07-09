@@ -12,15 +12,16 @@ import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useSelector } from 'react-redux';
 import { useFocusEffect } from '@react-navigation/native';
 import { selectUser, selectSelectedRole } from '../../../store/authSelectors';
-import { SafeScreen } from '../../../components/SafeScreen';
-import AppHeader from '../../../components/AppHeader';
+import { SafeScreen } from '../../../shared/components/SafeScreen';
+import AppHeader from '../../../shared/components/AppHeader';
 import COLORS from '../../../theme/colors';
 import { w, h, f } from '../../../shared/utils/responsive';
-import { showAlert } from '../../../components/CustomAlertBox';
+import { showAlert } from '../../../shared/components/CustomAlertBox';
 import { getDealDetails, updateEscrowStatus } from '../../marketplace/marketplace.api';
 import { useTranslation } from '../../../shared/hooks/useTranslation';
-import DynamicDocumentUploader from '../../../components/DynamicDocumentUploader';
-import DebitNoteBottomSheet from '../../../components/DebitNoteBottomSheet';
+import DynamicDocumentUploader from '../../../shared/components/DynamicDocumentUploader';
+import DebitNoteBottomSheet from '../components/DebitNoteBottomSheet';
+
 import { dealService } from '../orders.service';
 
 

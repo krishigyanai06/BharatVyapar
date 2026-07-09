@@ -19,7 +19,8 @@ import { useAuth } from '../../../shared/hooks/useAuth';
 import COLORS from '../../../theme/colors';
 import { w, h, mw, f } from '../../../shared/utils/responsive';
 import { useTranslation } from '../../../shared/hooks/useTranslation';
-import { showAlert } from '../../../components/CustomAlertBox';
+import { showAlert } from '../../../shared/components/CustomAlertBox';
+
 
 
 export default function VerifyMobileOtp({ route, navigation }) {

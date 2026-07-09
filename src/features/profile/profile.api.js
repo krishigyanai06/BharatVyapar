@@ -1,6 +1,7 @@
 // Service layer: user-specific API operations.
 // Migrated to features/profile/profile.api.js
-import apiClient from '../../service/api';
+import apiClient from '../../api/client';
+
 
 const profileApi = {
   updateProfile: async (formData, type, signal) => {

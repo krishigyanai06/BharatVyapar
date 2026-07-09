@@ -1,7 +1,8 @@
 import React, { useEffect } from 'react';
 import { View, Text, ImageBackground, StyleSheet, StatusBar, BackHandler, NativeModules } from 'react-native';
 import Images from '../assets';
-import COLORS from '../constant/colors';
+import COLORS from '../theme/colors';
+
 
 const SplashScreen = ({ navigation, progress = 0 }) => {
   useEffect(() => {

@@ -1,6 +1,7 @@
 // features/orders/orders.workflow.js
 // Migrated from: service/trade/rfqWorkflow.service.js
-import api from '../../service/api';
+import api from '../../api/client';
+
 import { USE_DUMMY_API } from '../../config';
 const FORCE_DUMMY = true;
 

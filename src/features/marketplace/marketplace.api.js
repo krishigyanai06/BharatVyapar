@@ -1,6 +1,7 @@
 // features/marketplace/marketplace.api.js
 // Merged from service/buy/buyCommodityService.js and service/sell/sellCommodity.js
-import api from '../../service/api';
+import api from '../../api/client';
+
 import {
   normalizeCommodity,
   normalizeCommodityList,

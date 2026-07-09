@@ -5,7 +5,8 @@ import { selectIsAuthenticated, selectIsAuthChecked } from '../store/authSelecto
 
 import { checkStoredToken, clearAuth } from '../store/authSlice';
 import { initializeLanguageThunk } from '../store/languageSlice';
-import { setUnauthorizedCallback } from '../service/api';
+import { setUnauthorizedCallback } from '../api/client';
+
 
 import SplashScreen from '../screen/SplashScreen';
 import AuthStack from './AuthStack/AuthStack';

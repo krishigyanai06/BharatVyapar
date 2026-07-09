@@ -1,6 +1,7 @@
 // features/auth/auth.api.js
 // Migrated from: service/auth/authApi.js
-import apiClient from '../../service/api';
+import apiClient from '../../api/client';
+
 
 const normalizeRole = role => {
   if (typeof role !== 'string') {
