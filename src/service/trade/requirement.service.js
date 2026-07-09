@@ -1,15 +1,2 @@
-import { rfqWorkflowService } from './rfqWorkflow.service';
-
-export const requirementService = {
-  getAllRequirements: async (options = {}) => {
-    return rfqWorkflowService.getRequirements(options);
-  },
-
-  getMarketplaceRequirements: async ({ excludeBuyerId = null } = {}) => {
-    return rfqWorkflowService.getRequirements({ marketplaceOnly: true, excludeBuyerId });
-  },
-
-  submitRequirement: async (payload) => {
-    return rfqWorkflowService.createRequirement(payload);
-  },
-};
+// SHIM — Migrated to src/features/orders/orders.requirements.js
+export * from '../../features/orders/orders.requirements';
