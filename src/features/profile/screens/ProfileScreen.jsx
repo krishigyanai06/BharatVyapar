@@ -877,17 +877,18 @@ export default function ProfileScreen() {
               </View>
 
               {/* Location row */}
+              <View style={styles.fullCol}>
+                <FormField label="Village"  fieldKey="village"  form={modalForm} errors={fieldErrors} onChangeText={setField} placeholder="Village" />
+              </View>
               <View style={styles.row}>
-                <View style={styles.thirdCol}>
-                  <FormField label="Village"  fieldKey="village"  form={modalForm} errors={fieldErrors} onChangeText={setField} placeholder="Village" />
-                </View>
-                <View style={styles.thirdCol}>
+                <View style={styles.halfCol}>
                   <FormField label="District" fieldKey="district" form={modalForm} errors={fieldErrors} onChangeText={setField} placeholder="District" />
                 </View>
-                <View style={styles.thirdCol}>
+                <View style={styles.halfCol}>
                   <FormField label="State"    fieldKey="state"    form={modalForm} errors={fieldErrors} onChangeText={setField} placeholder="State" />
                 </View>
               </View>
+
 
               <TouchableOpacity 
                 style={[styles.saveBtn, saveBtnBg]} 
