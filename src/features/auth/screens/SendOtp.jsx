@@ -13,11 +13,12 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useDispatch } from 'react-redux';
-import { sendOtp } from '../../store/authSlice';
-import { useAuth } from '../../hook/useAuth';
-import COLORS from '../../constant/colors';
-import { w, h, mw, f } from '../../utils/responsive';
-import { useTranslation } from '../../hook/useTranslation';
+import { sendOtp } from '../../../store/authSlice';
+import { useAuth } from '../../../shared/hooks/useAuth';
+import COLORS from '../../../theme/colors';
+import { w, h, mw, f } from '../../../shared/utils/responsive';
+import { useTranslation } from '../../../shared/hooks/useTranslation';
+
 
 export default function SendOtp({ route, navigation }) {
   const dispatch = useDispatch();

@@ -12,12 +12,13 @@ import {
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useSelector } from 'react-redux';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import COLORS from '../../constant/colors';
-import { w, h, mw, f } from '../../utils/responsive';
-import { showAlert } from '../../components/CustomAlertBox';
-import { SafeScreen } from '../../components/SafeScreen';
-import { selectUser } from '../../store/authSelectors';
-import { useTranslation } from '../../hook/useTranslation';
+import COLORS from '../../../theme/colors';
+import { w, h, mw, f } from '../../../shared/utils/responsive';
+import { showAlert } from '../../../components/CustomAlertBox';
+import { SafeScreen } from '../../../components/SafeScreen';
+import { selectUser } from '../../../store/authSelectors';
+import { useTranslation } from '../../../shared/hooks/useTranslation';
+
 
 const LENDING_PARTNERS = [
   { name: 'State Bank of India', rate: '8.40% p.a.', processing: '0.5%' },

@@ -13,13 +13,14 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { selectUser, selectSelectedRole } from '../../../store/authSelectors';
 import { SafeScreen } from '../../../components/SafeScreen';
 import AppHeader from '../../../components/AppHeader';
-import COLORS from '../../../constant/colors';
-import { w, h, f, mw } from '../../../utils/responsive';
-import { syncUserToDisplayData } from '../../../service/user/userService';
+import COLORS from '../../../theme/colors';
+import { w, h, f, mw } from '../../../shared/utils/responsive';
+import { syncUserToDisplayData } from '../../profile/profile.service';
 import { showAlert } from '../../../components/CustomAlertBox';
-import { useTranslation } from '../../../hook/useTranslation';
+import { useTranslation } from '../../../shared/hooks/useTranslation';
 import RequirementBottomSheet from '../../../components/RequirementBottomSheet';
-import { requirementService } from '../../../service/trade/requirement.service';
+import { requirementService } from '../../orders/orders.requirements';
+
 
 const ROLE_THEMES = {
   FPO: {

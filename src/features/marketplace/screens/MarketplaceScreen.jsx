@@ -14,20 +14,20 @@ import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useSelector } from 'react-redux';
 import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
 import { useFocusEffect } from '@react-navigation/native';
-import { selectResolvedRole, selectUser } from '../../../../store/authSelectors';
-import { useTranslation } from '../../../../hook/useTranslation';
-import { SafeScreen } from '../../../../components/SafeScreen';
-import AppHeader from '../../../../components/AppHeader';
-import COLORS from '../../../../constant/colors';
-import { w, h, f, mw } from '../../../../utils/responsive';
-import { showAlert } from '../../../../components/CustomAlertBox';
-import { getSellCommodities, deleteSellCommodity } from '../../../../service/sell/sellCommodity';
-import { getReceivedOffers } from '../../../../service/buy/buyCommodityService';
-import { getFriendlyErrorMessage } from '../../../../utils/errorUtils';
-import { normalizeCommodity } from '../../../../service/normalizers/commodity.normalizer';
-import { requirementService } from '../../../../service/trade/requirement.service';
-import { submitQuoteAgainstRequirement } from '../../../../service/trade/deal.service';
-import FulfillRequirementBottomSheet from '../../../../components/FulfillRequirementBottomSheet';
+import { selectResolvedRole, selectUser } from '../../../store/authSelectors';
+import { useTranslation } from '../../../shared/hooks/useTranslation';
+import { SafeScreen } from '../../../components/SafeScreen';
+import AppHeader from '../../../components/AppHeader';
+import COLORS from '../../../theme/colors';
+import { w, h, f, mw } from '../../../shared/utils/responsive';
+import { showAlert } from '../../../components/CustomAlertBox';
+import { getSellCommodities, deleteSellCommodity, getReceivedOffers } from '../marketplace.api';
+import { getFriendlyErrorMessage } from '../../../shared/utils/errorUtils';
+import { normalizeCommodity } from '../marketplace.normalizer';
+import { requirementService } from '../../orders/orders.requirements';
+import { submitQuoteAgainstRequirement } from '../../orders/orders.service';
+import FulfillRequirementBottomSheet from '../../../components/FulfillRequirementBottomSheet';
+
 const ROLE_THEMES = {
   FPO:       { primary: COLORS.fpoPrimary,       secondary: COLORS.fpoSecondary,       light: COLORS.fpoLight,       text: COLORS.fpoText },
   Trader:    { primary: COLORS.traderPrimary,    secondary: COLORS.traderSecondary,    light: COLORS.traderLight,    text: COLORS.traderText },

@@ -16,18 +16,19 @@ import {
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useSelector } from 'react-redux';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { selectUser, selectSelectedRole } from '../../../../store/authSelectors';
-import { SafeScreen } from '../../../../components/SafeScreen';
-import AppHeader from '../../../../components/AppHeader';
-import COLORS from '../../../../constant/colors';
-import { w, h, f,mw } from '../../../../utils/responsive';
-import { showAlert } from '../../../../components/CustomAlertBox';
-import { getOffers, submitOffer, getReceivedOffers } from '../../../../service/buy/buyCommodityService';
-import KycBanner from '../../../../components/KycBanner';
-import PlaceBuyOfferModal from './components/PlaceBuyOfferModal';
-import ReceivedOffersModal from './components/ReceivedOffersModal';
-import { viewDocument, downloadFile } from '../../../../utils/documentUtils'; // Force Metro reload after build completion
-import { useTranslation } from '../../../../hook/useTranslation';
+import { selectUser, selectSelectedRole } from '../../../store/authSelectors';
+import { SafeScreen } from '../../../components/SafeScreen';
+import AppHeader from '../../../components/AppHeader';
+import COLORS from '../../../theme/colors';
+import { w, h, f, mw } from '../../../shared/utils/responsive';
+import { showAlert } from '../../../components/CustomAlertBox';
+import { getOffers, submitOffer, getReceivedOffers } from '../marketplace.api';
+import KycBanner from '../../../components/KycBanner';
+import PlaceBuyOfferModal from '../components/PlaceBuyOfferModal';
+import ReceivedOffersModal from '../components/ReceivedOffersModal';
+import { viewDocument, downloadFile } from '../../../utils/documentUtils';
+import { useTranslation } from '../../../shared/hooks/useTranslation';
+
 
 const ROLE_THEMES = {
   FPO: { primary: COLORS.fpoPrimary, secondary: COLORS.fpoSecondary, light: COLORS.fpoLight, text: COLORS.fpoText },

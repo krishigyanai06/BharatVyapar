@@ -10,13 +10,13 @@ import { launchImageLibrary, launchCamera } from 'react-native-image-picker';
 import { useDispatch, useSelector } from 'react-redux';
 import { SafeScreen } from '../../../components/SafeScreen';
 import AppHeader from '../../../components/AppHeader';
-import COLORS from '../../../constant/colors';
-import { w, h, mw, f } from '../../../utils/responsive';
+import COLORS from '../../../theme/colors';
+import { w, h, mw, f } from '../../../shared/utils/responsive';
 import { logoutUser, getUserDetails, updateProfile } from '../../../store/authSlice';
 import { selectUser, selectSelectedRole, selectProfileLoading } from '../../../store/authSelectors';
 import { showAlert } from '../../../components/CustomAlertBox';
-import userApi from '../../../service/user/userApi';
-import { useTranslation } from '../../../hook/useTranslation';
+import userApi from '../profile.api';
+import { useTranslation } from '../../../shared/hooks/useTranslation';
 import {
   ROLE_THEMES,
   GENDER_OPTIONS,
@@ -29,7 +29,8 @@ import {
   pickFileForUpload,
   buildDocumentFormData,
   validateProfileField,
-} from '../../../service/user/userService';
+} from '../profile.service';
+
 
 /* ─── State Reducer ───────────────────────────────────────── */
 
