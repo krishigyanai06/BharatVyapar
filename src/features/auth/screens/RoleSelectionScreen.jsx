@@ -3,11 +3,12 @@ import { View, Text, TouchableOpacity, StyleSheet, Image } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useDispatch } from 'react-redux';
-import { setSelectedRole as setSelectedRoleAction } from '../../store/authSlice';
-import { w, h, mw, f } from '../../utils/responsive';
-import COLORS from '../../constant/colors';
-import Images from '../../assets';
-import { useTranslation } from '../../hook/useTranslation';
+import { setSelectedRole as setSelectedRoleAction } from '../../../store/authSlice';
+import { w, h, mw, f } from '../../../shared/utils/responsive';
+import COLORS from '../../../theme/colors';
+import Images from '../../../assets';
+import { useTranslation } from '../../../shared/hooks/useTranslation';
+
 
 const ROLES = [
   {

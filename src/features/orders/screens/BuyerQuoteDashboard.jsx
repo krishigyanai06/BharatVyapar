@@ -5,15 +5,16 @@ import { useSelector } from 'react-redux';
 import AppHeader from '../../../components/AppHeader';
 import { SafeScreen } from '../../../components/SafeScreen';
 import { showAlert } from '../../../components/CustomAlertBox';
-import COLORS from '../../../constant/colors';
-import { useTranslation } from '../../../hook/useTranslation';
+import COLORS from '../../../theme/colors';
+import { useTranslation } from '../../../shared/hooks/useTranslation';
 import { selectSelectedRole, selectUser } from '../../../store/authSelectors';
-import { w, h, f } from '../../../utils/responsive';
+import { w, h, f } from '../../../shared/utils/responsive';
 import {
   acceptRequirementQuote,
   getReceivedQuotesOnRequirements,
   rejectRequirementQuote,
-} from '../../../service/trade/deal.service';
+} from '../orders.service';
+
 
 const ROLE_THEMES = {
   FPO:       { primary: COLORS.fpoPrimary,       light: COLORS.fpoLight },

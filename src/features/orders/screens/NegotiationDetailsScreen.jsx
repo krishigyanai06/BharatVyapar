@@ -17,18 +17,20 @@ import { useFocusEffect } from '@react-navigation/native';
 import { selectUser, selectSelectedRole } from '../../../store/authSelectors';
 import { SafeScreen } from '../../../components/SafeScreen';
 import AppHeader from '../../../components/AppHeader';
-import COLORS from '../../../constant/colors';
-import { w, h, f } from '../../../utils/responsive';
+import COLORS from '../../../theme/colors';
+import { w, h, f } from '../../../shared/utils/responsive';
 import { showAlert } from '../../../components/CustomAlertBox';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useTranslation } from '../../../hook/useTranslation';
+import { useTranslation } from '../../../shared/hooks/useTranslation';
 import {
   getOfferDetails,
   submitCounterOffer,
   acceptOffer,
   rejectOffer,
-} from '../../../service/buy/buyCommodityService';
-import { getSellCommodityById } from '../../../service/sell/sellCommodity';
+} from '../../marketplace/marketplace.api';
+
+import { getSellCommodityById } from '../../marketplace/marketplace.api';
+
 
 const ROLE_THEMES = {
   FPO: { primary: COLORS.fpoPrimary, secondary: COLORS.fpoSecondary, light: COLORS.fpoLight, text: COLORS.fpoText },

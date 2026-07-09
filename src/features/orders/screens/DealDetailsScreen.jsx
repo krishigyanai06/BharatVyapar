@@ -14,14 +14,15 @@ import { useFocusEffect } from '@react-navigation/native';
 import { selectUser, selectSelectedRole } from '../../../store/authSelectors';
 import { SafeScreen } from '../../../components/SafeScreen';
 import AppHeader from '../../../components/AppHeader';
-import COLORS from '../../../constant/colors';
-import { w, h, f } from '../../../utils/responsive';
+import COLORS from '../../../theme/colors';
+import { w, h, f } from '../../../shared/utils/responsive';
 import { showAlert } from '../../../components/CustomAlertBox';
-import { getDealDetails, updateEscrowStatus } from '../../../service/buy/buyCommodityService';
-import { useTranslation } from '../../../hook/useTranslation';
+import { getDealDetails, updateEscrowStatus } from '../../marketplace/marketplace.api';
+import { useTranslation } from '../../../shared/hooks/useTranslation';
 import DynamicDocumentUploader from '../../../components/DynamicDocumentUploader';
 import DebitNoteBottomSheet from '../../../components/DebitNoteBottomSheet';
-import { dealService } from '../../../service/trade/deal.service';
+import { dealService } from '../orders.service';
+
 
 const ROLE_THEMES = {
   FPO:       { primary: COLORS.fpoPrimary,       secondary: COLORS.fpoSecondary,       light: COLORS.fpoLight,       text: COLORS.fpoText },

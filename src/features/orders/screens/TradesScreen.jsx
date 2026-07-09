@@ -15,15 +15,15 @@ import { useFocusEffect } from '@react-navigation/native';
 import { selectUser, selectSelectedRole } from '../../../store/authSelectors';
 import { SafeScreen } from '../../../components/SafeScreen';
 import AppHeader from '../../../components/AppHeader';
-import COLORS from '../../../constant/colors';
-import ReceivedOffersModal from './Marketplace/components/ReceivedOffersModal';
-import { w, h, f } from '../../../utils/responsive';
-import { getOffers, getReceivedOffers } from '../../../service/buy/buyCommodityService';
-import { getSellCommodities } from '../../../service/sell/sellCommodity';
-import { getMySubmittedQuotes } from '../../../service/trade/deal.service';
+import COLORS from '../../../theme/colors';
+import ReceivedOffersModal from '../../marketplace/components/ReceivedOffersModal';
+import { w, h, f } from '../../../shared/utils/responsive';
+import { getOffers, getReceivedOffers, getSellCommodities } from '../../marketplace/marketplace.api';
+import { getMySubmittedQuotes } from '../orders.service';
 import { showAlert } from '../../../components/CustomAlertBox';
-import { getFriendlyErrorMessage } from '../../../utils/errorUtils';
-import { useTranslation } from '../../../hook/useTranslation';
+import { getFriendlyErrorMessage } from '../../../shared/utils/errorUtils';
+import { useTranslation } from '../../../shared/hooks/useTranslation';
+
 
 const ROLE_THEMES = {
   FPO:       { primary: COLORS.fpoPrimary,       secondary: COLORS.fpoSecondary,       light: COLORS.fpoLight,       text: COLORS.fpoText },

@@ -39,8 +39,9 @@ import { selectUser } from '../../../../store/authSelectors';
 import { launchImageLibrary } from 'react-native-image-picker';
 import { pick, types, isCancel } from '@react-native-documents/picker';
 import { showAlert } from '../../../../components/CustomAlertBox';
-import { getFriendlyErrorMessage } from '../../../../utils/errorUtils';
-import { submitSellListing } from '../../../../service/sell/sellService';
+import { getFriendlyErrorMessage } from '../../../../shared/utils/errorUtils';
+import { submitSellListing } from '../marketplace.service';
+
 
 export const IMAGE_MAX_SIZE_MB = 5;
 export const UNIT_TO_PRICE_UNIT = { Ton: 'Ton', Quintal: 'Qt', Kg: 'Kg' };

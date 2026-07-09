@@ -18,12 +18,13 @@ import { selectUser, selectSelectedRole } from '../../../store/authSelectors';
 import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
 import { SafeScreen } from '../../../components/SafeScreen';
 import AppHeader from '../../../components/AppHeader';
-import COLORS from '../../../constant/colors';
-import { w, h, mw, f } from '../../../utils/responsive';
+import COLORS from '../../../theme/colors';
+import { w, h, mw, f } from '../../../shared/utils/responsive';
 import { showAlert } from '../../../components/CustomAlertBox';
 import KycBanner from '../../../components/KycBanner';
-import { useSellCommoditiesForm, IMAGE_MAX_SIZE_MB, UNIT_TO_PRICE_UNIT } from './hooks/useSellCommoditiesForm';
-import { useTranslation } from '../../../hook/useTranslation';
+import { useSellCommoditiesForm, IMAGE_MAX_SIZE_MB, UNIT_TO_PRICE_UNIT } from '../hooks/useSellCommoditiesForm';
+import { useTranslation } from '../../../shared/hooks/useTranslation';
+
 
 const ROLE_THEMES = {
   FPO: { primary: COLORS.fpoPrimary, secondary: COLORS.fpoSecondary, light: COLORS.fpoLight, text: COLORS.fpoText },

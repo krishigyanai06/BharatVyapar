@@ -13,11 +13,12 @@ import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useSelector } from 'react-redux';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
-import { selectUser, selectSelectedRole } from '../../../../../store/authSelectors';
-import COLORS from '../../../../../constant/colors';
-import { w, h, f } from '../../../../../utils/responsive';
-import { getReceivedOffers } from '../../../../../service/buy/buyCommodityService';
-import { useTranslation } from '../../../../../hook/useTranslation';
+import { selectUser, selectSelectedRole } from '../../../../store/authSelectors';
+import COLORS from '../../../../theme/colors';
+import { w, h, f } from '../../../../shared/utils/responsive';
+import { getReceivedOffers } from '../marketplace.api';
+import { useTranslation } from '../../../../shared/hooks/useTranslation';
+
 
 const ROLE_THEMES = {
   FPO:       { primary: COLORS.fpoPrimary,       secondary: COLORS.fpoSecondary,       light: COLORS.fpoLight,       text: COLORS.fpoText },
