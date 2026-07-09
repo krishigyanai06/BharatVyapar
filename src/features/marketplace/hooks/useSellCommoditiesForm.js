@@ -35,12 +35,13 @@
 
 import { useReducer, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useSelector } from 'react-redux';
-import { selectUser } from '../../../../store/authSelectors';
+import { selectUser } from '../../../store/authSelectors';
 import { launchImageLibrary } from 'react-native-image-picker';
 import { pick, types, isCancel } from '@react-native-documents/picker';
-import { showAlert } from '../../../../components/CustomAlertBox';
-import { getFriendlyErrorMessage } from '../../../../shared/utils/errorUtils';
+import { showAlert } from '../../../components/CustomAlertBox';
+import { getFriendlyErrorMessage } from '../../../shared/utils/errorUtils';
 import { submitSellListing } from '../marketplace.service';
+
 
 
 export const IMAGE_MAX_SIZE_MB = 5;
