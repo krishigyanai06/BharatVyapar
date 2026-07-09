@@ -19,6 +19,7 @@ import { useAuth } from '../../hook/useAuth';
 import COLORS from '../../constant/colors';
 import { w, h, mw, f } from '../../utils/responsive';
 import { useTranslation } from '../../hook/useTranslation';
+import { showAlert } from '../../components/CustomAlertBox';
 
 export default function VerifyMobileOtp({ route, navigation }) {
   const {
@@ -184,8 +185,14 @@ export default function VerifyMobileOtp({ route, navigation }) {
     );
 
     if (verifyOtp.rejected.match(action)) {
-      setError(t(action.payload || 'Verify OTP failed'));
+      const errorMsg = action.payload || 'Verify OTP failed';
+      setError(t(errorMsg));
       shakeError();
+      showAlert({
+        type: 'error',
+        title: t('Verification Failed'),
+        message: errorMsg,
+      });
     }
   };
 

@@ -72,6 +72,38 @@ __test__/
 *.md
 *.txt
 
+# Recordings & Screenshots (local dev artifacts)
+recordings/
+screenshots/
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.webp
+*.mp4
+*.webm
+*.mov
+
+# Keep Android app icons & splash screen (required for build)
+!android/app/src/main/res/**/*.png
+!src/assets/*.png
+!src/assets/**/*.png
+
+# Temporary / generated folders
+temp_docx/
+temp_docx.zip
+Downloads/
+
+# AI Agent config (local only)
+.agent/
+.agents/
+
+# Local storage / cache
+RKStorage
+
+# VS Code workspace settings
+.vscode/
+
 # Yarn
 .yarn/*
 !.yarn/patches

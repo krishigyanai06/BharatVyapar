@@ -11,6 +11,7 @@ import authApi from '../service/auth/authApi';
 import userApi from '../service/user/userApi';
 import COLORS from '../constant/colors';
 import { normalizeUser, mergeWithLocalProfile } from '../service/normalizers/user.normalizer';
+import { extractErrorMessage } from '../utils/errorUtils';
 
 // THUNK: App start pe disk check
 export const checkStoredToken = createAsyncThunk(
@@ -41,7 +42,7 @@ export const sendOtp = createAsyncThunk(
 
       return rejectWithValue(response?.message || 'Failed to send OTP');
     } catch (err) {
-      return rejectWithValue(err?.message || 'Send OTP failed');
+      return rejectWithValue(extractErrorMessage(err));
     }
   },
 );
@@ -80,7 +81,7 @@ export const verifyOtp = createAsyncThunk(
 
       return rejectWithValue(response?.message || 'OTP verification failed');
     } catch (err) {
-      return rejectWithValue(err?.message || 'Verify OTP failed');
+      return rejectWithValue(extractErrorMessage(err));
     }
   },
 );
@@ -178,13 +179,17 @@ export const logoutUser = createAsyncThunk(
   async (_, { rejectWithValue }) => {
     try {
       console.log('🔄 [LOGOUT] Logging out...');
-      await userApi.logout();
+      // Clear local session first so the user gets logged out instantly
       await removeAuthSession();
-      console.log('✅ [LOGOUT] Logout successful');
+      // Call backend logout asynchronously without awaiting it (fire-and-forget)
+      userApi.logout().catch(err => {
+        console.warn('⚠️ [LOGOUT] Backend api logout failed:', err?.message || err);
+      });
+      console.log('✅ [LOGOUT] Local session cleared, backend notified');
       return true;
     } catch (err) {
-      console.warn('⚠️ [LOGOUT] API failed, clearing session anyway');
-      await removeAuthSession();
+      console.warn('⚠️ [LOGOUT] Session removal failed, fallback successful');
+      await removeAuthSession().catch(() => {});
       return true;
     }
   },

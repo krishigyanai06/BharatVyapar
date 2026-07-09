@@ -1,7 +1,8 @@
 import React, { useEffect, useRef, useMemo, useCallback, useReducer } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
-  TextInput, Image, Modal, KeyboardAvoidingView, Platform, ActivityIndicator
+  TextInput, Image, Modal, KeyboardAvoidingView, Platform, ActivityIndicator,
+  TouchableWithoutFeedback
 } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
@@ -45,6 +46,7 @@ const initialState = {
   uploadingDoc: null,
   documentPreviews: {},
   uploadedDocuments: {},
+  photoSheetVisible: false,
 };
 
 function profileReducer(state, action) {
@@ -60,6 +62,16 @@ function profileReducer(state, action) {
       return {
         ...state,
         modalVisible: false,
+      };
+    case 'OPEN_PHOTO_SHEET':
+      return {
+        ...state,
+        photoSheetVisible: true,
+      };
+    case 'CLOSE_PHOTO_SHEET':
+      return {
+        ...state,
+        photoSheetVisible: false,
       };
     case 'SET_FIELD':
       return {
@@ -190,7 +202,8 @@ export default function ProfileScreen() {
     viewingDoc,
     uploadingDoc,
     documentPreviews,
-    uploadedDocuments
+    uploadedDocuments,
+    photoSheetVisible,
   } = state;
 
   const uploadAbortRef = useRef(null);
@@ -440,18 +453,28 @@ export default function ProfileScreen() {
     }
   }, [dispatch, t]);
 
+  const profileProgress = useMemo(() => {
+    const fields = [
+      displayData.firstName,
+      displayData.lastName,
+      displayData.shopName,
+      displayData.gender,
+      displayData.phone,
+      displayData.emailId,
+      displayData.village,
+      displayData.district,
+      displayData.state,
+      displayData.profileImage,
+    ];
+    const filledCount = fields.filter(Boolean).length;
+    const kycBonus = user?.kycStatus === 'VERIFIED' ? 2 : 0;
+    const totalWeight = fields.length + 2;
+    return Math.round(((filledCount + kycBonus) / totalWeight) * 100);
+  }, [displayData, user?.kycStatus]);
+
   const handleProfileImagePick = useCallback(() => {
-    showAlert({
-      type: 'confirm',
-      title: t('Update Profile Picture'),
-      message: t('Choose an option to upload your profile image'),
-      buttons: [
-        { text: t('Take Photo'), style: 'default', onPress: () => openImagePicker('camera') },
-        { text: t('Choose Gallery'), style: 'default', onPress: () => openImagePicker('gallery') },
-        { text: t('Cancel'), style: 'cancel' }
-      ]
-    });
-  }, [openImagePicker, t]);
+    dispatchAction({ type: 'OPEN_PHOTO_SHEET' });
+  }, []);
 
   const handleUploadDoc = useCallback(async (type) => {
     const uploadTask = { type, cancelled: false, promise: null };
@@ -544,6 +567,25 @@ export default function ProfileScreen() {
             <Text style={[styles.roleBadgeText, roleBadgeTextCol]}>
               {t('Role: {role}').replace('{role}', t(selectedRole))}
             </Text>
+          </View>
+
+          {/* Integrated Compact Progress Bar */}
+          <View style={styles.compactProgressContainer}>
+            <View style={styles.compactProgressDivider} />
+            <View style={styles.compactProgressRow}>
+              <View style={styles.compactProgressLabelCol}>
+                <Icon name="check-decagram" size={14} color={theme.primary} />
+                <Text style={[styles.compactProgressLabel, { color: theme.text }]}>
+                  {t('Profile Completeness')}
+                </Text>
+              </View>
+              <Text style={[styles.compactProgressPercentText, { color: theme.primary }]}>
+                {profileProgress}%
+              </Text>
+            </View>
+            <View style={styles.compactProgressBarBg}>
+              <View style={[styles.compactProgressBarFill, { width: `${profileProgress}%`, backgroundColor: theme.primary }]} />
+            </View>
           </View>
         </View>
 
@@ -718,6 +760,14 @@ export default function ProfileScreen() {
           <Text style={styles.logoutText}>{t('Logout')}</Text>
         </TouchableOpacity>
 
+        {/* Footer branding to beautifully occupy empty space */}
+        <View style={styles.footerBranding}>
+          <Icon name="leaf" size={20} color={theme.primary} style={styles.footerIcon} />
+          <Text style={styles.footerText}>Bharat Vyapar</Text>
+          <Text style={styles.footerSubText}>{t('Version 1.0.0')}</Text>
+          <Text style={styles.footerMotto}>🇮🇳 {t('Kisan ki Mehnat, Desh ki Samriddhi')}</Text>
+        </View>
+
       </ScrollView>
 
       {/* Edit Modal */}
@@ -740,13 +790,38 @@ export default function ProfileScreen() {
 
             <ScrollView contentContainerStyle={styles.modalBody} showsVerticalScrollIndicator={false}>
 
+              {user?.kycStatus === 'VERIFIED' && (
+                <View style={styles.kycLockBanner}>
+                  <Icon name="shield-lock" size={16} color="#319795" />
+                  <Text style={styles.kycLockText}>
+                    {t('Name editing is locked as your KYC is verified.')}
+                  </Text>
+                </View>
+              )}
+
               {/* Name row */}
               <View style={styles.row}>
                 <View style={styles.halfCol}>
-                  <FormField label="First Name" fieldKey="firstName" form={modalForm} errors={fieldErrors} onChangeText={setField} placeholder="First Name" />
+                  <FormField 
+                    label="First Name" 
+                    fieldKey="firstName" 
+                    form={modalForm} 
+                    errors={fieldErrors} 
+                    onChangeText={setField} 
+                    placeholder="First Name" 
+                    editable={user?.kycStatus !== 'VERIFIED'} 
+                  />
                 </View>
                 <View style={styles.halfCol}>
-                  <FormField label="Last Name" fieldKey="lastName" form={modalForm} errors={fieldErrors} onChangeText={setField} placeholder="Last Name" />
+                  <FormField 
+                    label="Last Name" 
+                    fieldKey="lastName" 
+                    form={modalForm} 
+                    errors={fieldErrors} 
+                    onChangeText={setField} 
+                    placeholder="Last Name" 
+                    editable={user?.kycStatus !== 'VERIFIED'} 
+                  />
                 </View>
               </View>
 
@@ -972,6 +1047,74 @@ export default function ProfileScreen() {
           </View>
         </KeyboardAvoidingView>
       </Modal>
+
+      {/* Bottom Sheet for profile photo selection */}
+      <Modal
+        visible={photoSheetVisible}
+        animationType="slide"
+        transparent
+        onRequestClose={() => dispatchAction({ type: 'CLOSE_PHOTO_SHEET' })}
+      >
+        <TouchableOpacity
+          style={styles.bottomSheetOverlay}
+          activeOpacity={1}
+          onPress={() => dispatchAction({ type: 'CLOSE_PHOTO_SHEET' })}
+        >
+          <TouchableWithoutFeedback>
+            <View style={styles.bottomSheetContainer}>
+              <View style={styles.bottomSheetDragHandle} />
+              
+              <Text style={styles.bottomSheetTitle}>
+                {hasAvatar ? t('Replace Profile Picture') : t('Upload Profile Picture')}
+              </Text>
+              <Text style={styles.bottomSheetSubtitle}>
+                {t('Select an option to update your profile image')}
+              </Text>
+
+              <View style={styles.bottomSheetOptions}>
+                <TouchableOpacity
+                  style={styles.bottomSheetOptionRow}
+                  onPress={() => {
+                    dispatchAction({ type: 'CLOSE_PHOTO_SHEET' });
+                    openImagePicker('gallery');
+                  }}
+                >
+                  <View style={[styles.bottomSheetIconBg, { backgroundColor: theme.primary + '15' }]}>
+                    <Icon name="image-multiple" size={22} color={theme.primary} />
+                  </View>
+                  <Text style={styles.bottomSheetOptionText}>
+                    {hasAvatar ? t('Replace from Gallery') : t('Choose Gallery')}
+                  </Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={styles.bottomSheetOptionRow}
+                  onPress={() => {
+                    dispatchAction({ type: 'CLOSE_PHOTO_SHEET' });
+                    openImagePicker('camera');
+                  }}
+                >
+                  <View style={[styles.bottomSheetIconBg, { backgroundColor: theme.primary + '15' }]}>
+                    <Icon name="camera" size={22} color={theme.primary} />
+                  </View>
+                  <Text style={styles.bottomSheetOptionText}>
+                    {hasAvatar ? t('Replace from Camera') : t('Take Photo')}
+                  </Text>
+                </TouchableOpacity>
+
+
+              </View>
+
+              <TouchableOpacity
+                style={styles.bottomSheetCancelBtn}
+                onPress={() => dispatchAction({ type: 'CLOSE_PHOTO_SHEET' })}
+              >
+                <Text style={styles.bottomSheetCancelText}>{t('Cancel')}</Text>
+              </TouchableOpacity>
+            </View>
+          </TouchableWithoutFeedback>
+        </TouchableOpacity>
+      </Modal>
     </SafeScreen>
   );
 }
@@ -988,10 +1131,10 @@ function FieldRow({ label, value, last }) {
   );
 }
 
-function FormField({ label, fieldKey, form, errors, onChangeText, placeholder, keyboardType, autoCapitalize }) {
+function FormField({ label, fieldKey, form, errors, onChangeText, placeholder, keyboardType, autoCapitalize, editable = true }) {
   const { t } = useTranslation();
   const hasError    = !!errors[fieldKey];
-  const inputStyle  = [styles.fieldInput, hasError && styles.inputError];
+  const inputStyle  = [styles.fieldInput, hasError && styles.inputError, !editable && { backgroundColor: '#F7FAFC', color: '#A0AEC0', borderColor: '#E2E8F0' }];
   return (
     <>
       <Text style={styles.fieldLabel}>{t(label)}</Text>
@@ -1003,6 +1146,7 @@ function FormField({ label, fieldKey, form, errors, onChangeText, placeholder, k
         placeholderTextColor="#A0AEC0"
         keyboardType={keyboardType}
         autoCapitalize={autoCapitalize}
+        editable={editable}
         accessible={true}
         accessibilityLabel={t(label)}
         accessibilityHint={t('Edit your {field}').replace('{field}', t(label))}
@@ -1077,9 +1221,9 @@ const styles = StyleSheet.create({
     position: 'absolute',
     bottom: h(-2),
     right: w(-2),
-    width: w(32),
-    height: w(32),
-    borderRadius: mw(16),
+    width: w(36),
+    height: w(36),
+    borderRadius: mw(18),
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 2.5,
@@ -1423,5 +1567,207 @@ const styles = StyleSheet.create({
     fontSize: f(12),
     fontWeight: '800',
     color: '#4A5568',
+  },
+  progressCard: {
+    backgroundColor: COLORS.white,
+    borderRadius: mw(24),
+    padding: w(20),
+    marginHorizontal: w(16),
+    marginBottom: h(20),
+    elevation: 4,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+  },
+  progressHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: h(12),
+  },
+  progressTitle: {
+    fontSize: f(14),
+    fontWeight: '700',
+    color: '#1A202C',
+  },
+  progressPercentage: {
+    fontSize: f(14),
+    fontWeight: '800',
+  },
+  progressBarBg: {
+    height: h(8),
+    backgroundColor: '#EDF2F7',
+    borderRadius: mw(4),
+    overflow: 'hidden',
+    marginBottom: h(10),
+  },
+  progressBarFill: {
+    height: '100%',
+    borderRadius: mw(4),
+  },
+  progressSubtitle: {
+    fontSize: f(11),
+    color: '#718096',
+    fontWeight: '600',
+  },
+  kycLockBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#E6FFFA',
+    borderWidth: 1,
+    borderColor: '#B2F5EA',
+    borderRadius: mw(12),
+    paddingHorizontal: w(16),
+    paddingVertical: h(10),
+    marginBottom: h(16),
+    gap: w(8),
+  },
+  kycLockText: {
+    fontSize: f(12),
+    color: '#234E52',
+    fontWeight: '600',
+    flex: 1,
+  },
+  compactProgressContainer: {
+    width: '100%',
+    paddingHorizontal: w(20),
+    paddingBottom: h(4),
+    marginTop: h(12),
+  },
+  compactProgressDivider: {
+    height: 1,
+    backgroundColor: '#EDF2F7',
+    width: '100%',
+    marginBottom: h(12),
+  },
+  compactProgressRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: h(6),
+  },
+  compactProgressLabelCol: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: w(6),
+  },
+  compactProgressLabel: {
+    fontSize: f(11),
+    fontWeight: '800',
+    color: '#4A5568',
+  },
+  compactProgressPercentText: {
+    fontSize: f(12),
+    fontWeight: '800',
+  },
+  compactProgressBarBg: {
+    width: '100%',
+    height: h(6),
+    backgroundColor: '#E2E8F0',
+    borderRadius: mw(3),
+    overflow: 'hidden',
+  },
+  compactProgressBarFill: {
+    height: '100%',
+    borderRadius: mw(3),
+  },
+  bottomSheetOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'flex-end',
+  },
+  bottomSheetContainer: {
+    backgroundColor: COLORS.white,
+    borderTopLeftRadius: mw(24),
+    borderTopRightRadius: mw(24),
+    paddingTop: h(10),
+    paddingBottom: h(34),
+    paddingHorizontal: w(24),
+    alignItems: 'center',
+  },
+  bottomSheetDragHandle: {
+    width: w(40),
+    height: h(4),
+    backgroundColor: '#CBD5E0',
+    borderRadius: mw(2),
+    marginBottom: h(16),
+  },
+  bottomSheetTitle: {
+    fontSize: f(18),
+    fontWeight: '800',
+    color: '#1A202C',
+    textAlign: 'center',
+    marginBottom: h(4),
+  },
+  bottomSheetSubtitle: {
+    fontSize: f(13),
+    color: '#718096',
+    textAlign: 'center',
+    marginBottom: h(24),
+    fontWeight: '500',
+  },
+  bottomSheetOptions: {
+    width: '100%',
+    marginBottom: h(16),
+  },
+  bottomSheetOptionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: h(12),
+    width: '100%',
+    gap: w(12),
+  },
+  bottomSheetIconBg: {
+    width: w(40),
+    height: w(40),
+    borderRadius: mw(20),
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  bottomSheetOptionText: {
+    fontSize: f(15),
+    fontWeight: '700',
+    color: '#2D3748',
+  },
+  bottomSheetCancelBtn: {
+    width: '100%',
+    paddingVertical: h(14),
+    borderRadius: mw(14),
+    backgroundColor: '#EDF2F7',
+    alignItems: 'center',
+    marginTop: h(10),
+  },
+  bottomSheetCancelText: {
+    fontSize: f(15),
+    fontWeight: '700',
+    color: '#4A5568',
+  },
+  footerBranding: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: h(32),
+    marginBottom: h(40),
+    gap: h(4),
+  },
+  footerText: {
+    fontSize: f(12),
+    fontWeight: '800',
+    color: '#4A5568',
+    letterSpacing: 0.5,
+  },
+  footerSubText: {
+    fontSize: f(10),
+    fontWeight: '600',
+    color: '#A0AEC0',
+  },
+  footerMotto: {
+    fontSize: f(10.5),
+    fontWeight: '700',
+    color: '#718096',
+    marginTop: h(2),
+  },
+  footerIcon: {
+    opacity: 0.6,
   },
 });
