@@ -15,6 +15,7 @@ import ProfileScreen from '../../features/profile/screens/ProfileScreen';
 import COLORS from '../../theme/colors';
 
 
+
 const Tab = createBottomTabNavigator();
 
 // ─── Icon map — static, never recreated ──────────────────────────────────────

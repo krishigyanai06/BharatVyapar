@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Modal, View, Text, TextInput, TouchableOpacity, StyleSheet, ActivityIndicator, ScrollView } from 'react-native';
 
-export default function RequirementBottomSheet({ visible, onClose, onSubmit }) {
+export default function AddYourRequirement({ visible, onClose, onSubmit }) {
   const [commodity, setCommodity] = useState('');
   const [quantity, setQuantity] = useState('');
   const [unit, setUnit] = useState('Qt');

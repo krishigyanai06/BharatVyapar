@@ -10,6 +10,8 @@ import {
   Switch,
   ActivityIndicator,
   RefreshControl,
+  Animated,
+  Easing,
 } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useSelector } from 'react-redux';
@@ -40,6 +42,74 @@ const ROLE_THEMES = {
   Corporate: { primary: COLORS.corporatePrimary, secondary: COLORS.corporateSecondary, light: COLORS.corporateLight, text: COLORS.corporateText },
 };
 
+// ─── Animated Waiting Icon ───────────────────────────────────────────────────
+function WaitingPulseIcon({ color, size = 20 }) {
+  const pulse = useRef(new Animated.Value(1)).current;
+  const rotate = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    // Pulse: scale up then back
+    const pulseAnim = Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulse, { toValue: 1.3, duration: 700, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
+        Animated.timing(pulse, { toValue: 1.0, duration: 700, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
+      ])
+    );
+    // Flip: 0→180° then pause then 180→360°, mimicking sand timer shake
+    const flipAnim = Animated.loop(
+      Animated.sequence([
+        Animated.timing(rotate, { toValue: 1, duration: 600, easing: Easing.back(1.5), useNativeDriver: true }),
+        Animated.delay(900),
+        Animated.timing(rotate, { toValue: 2, duration: 600, easing: Easing.back(1.5), useNativeDriver: true }),
+        Animated.delay(900),
+        Animated.timing(rotate, { toValue: 2, duration: 0, useNativeDriver: true }), // reset without visible jump
+        Animated.timing(rotate, { toValue: 0, duration: 0, useNativeDriver: true }),
+      ])
+    );
+    pulseAnim.start();
+    flipAnim.start();
+    return () => { pulseAnim.stop(); flipAnim.stop(); };
+  }, [pulse, rotate]);
+
+  const spin = rotate.interpolate({ inputRange: [0, 1, 2], outputRange: ['0deg', '180deg', '360deg'] });
+
+  return (
+    <Animated.View style={{ transform: [{ scale: pulse }, { rotate: spin }] }}>
+      <Icon name="timer-sand" size={size} color={color} />
+    </Animated.View>
+  );
+}
+
+// \u2500\u2500\u2500 Your Turn Pulse Indicator \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+function YourTurnPulse({ color }) {
+  const anim = useRef(new Animated.Value(1)).current;
+  useEffect(() => {
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(anim, { toValue: 1.6, duration: 700, easing: Easing.out(Easing.ease), useNativeDriver: true }),
+        Animated.timing(anim, { toValue: 1.0, duration: 700, easing: Easing.in(Easing.ease), useNativeDriver: true }),
+      ])
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [anim]);
+  return (
+    <View style={{ width: 16, height: 16, alignItems: 'center', justifyContent: 'center' }}>
+      <Animated.View
+        style={{
+          position: 'absolute',
+          width: 16,
+          height: 16,
+          borderRadius: 8,
+          backgroundColor: color + '50',
+          transform: [{ scale: anim }],
+        }}
+      />
+      <View style={{ width: 9, height: 9, borderRadius: 5, backgroundColor: color }} />
+    </View>
+  );
+}
+
 // Format seconds into mm:ss
 function formatCountdown(seconds) {
   if (seconds <= 0) return '00:00';
@@ -47,6 +117,7 @@ function formatCountdown(seconds) {
   const s = seconds % 60;
   return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
 }
+
 
 // Format expiry into Xh Ym
 function formatExpiry(expiresAt) {
@@ -101,11 +172,7 @@ export default function NegotiationDetailsScreen({ route, navigation }) {
   const [counterRemarks, setCounterRemarks] = useState('');
   const [isFinalOfferToggle, setIsFinalOfferToggle] = useState(false);
   const [counterPriceError, setCounterPriceError] = useState('');
-
-  // Mock Flow Simulator State
-  const [isMockMode, setIsMockMode] = useState(false);
-  const [mockRoleToggle, setMockRoleToggle] = useState(route?.params?.role || 'buyer');
-
+  const [historyOpen, setHistoryOpen] = useState(true);
   // Cooldown countdown (seconds remaining)
   const [cooldownSecs, setCooldownSecs] = useState(0);
   const cooldownTimer = useRef(null);
@@ -151,11 +218,9 @@ export default function NegotiationDetailsScreen({ route, navigation }) {
   const currentTurn = getComputedTurn();
 
   const routeRole = route?.params?.role;
-  const myRole = isMockMode ? mockRoleToggle : (
-    (userId && sellerId && String(userId) === String(sellerId)) ? 'seller' :
+  const myRole = (userId && sellerId && String(userId) === String(sellerId)) ? 'seller' :
     (userId && buyerId && String(userId) === String(buyerId)) ? 'buyer' :
-    (routeRole || 'buyer')
-  );
+    (routeRole || 'buyer');
 
   // Construct timeline rounds ensuring the initial offer round is present
   const displayRounds = React.useMemo(() => {
@@ -236,6 +301,12 @@ export default function NegotiationDetailsScreen({ route, navigation }) {
 
   const expiresAt = offer?.expiresAt || offer?.expires_at || (offer?.createdAt ? new Date(new Date(offer.createdAt).getTime() + 24 * 3600 * 1000).toISOString() : null);
 
+  const listedPrice = Number(item?.basePrice || item?.sellingPrice || 0);
+  const currentPrice = Number(lastRound?.price || offer?.price || 0);
+  const hasPrices = listedPrice > 0 && currentPrice > 0;
+  const priceGap = hasPrices ? Math.abs(listedPrice - currentPrice) : 0;
+  const gapPercent = hasPrices ? (priceGap / listedPrice) * 100 : 0;
+
   // ─── Load Offer Detail ────────────────────────────────────────────────
   const loadOfferDetails = useCallback(async (isRefresh = false, isBackground = false) => {
     if (!offerId) {
@@ -244,42 +315,7 @@ export default function NegotiationDetailsScreen({ route, navigation }) {
       return;
     }
 
-    // Auto-start mock flow if navigating from mock cards
-    if (String(offerId).startsWith('mock-')) {
-      if (!isBackground) setLoading(false);
-      setIsMockMode(true);
-      setApiError(null);
-      setOffer({
-        id: offerId,
-        buyerId: user?._id || 'b1',
-        sellerId: 's1',
-        status: 'countered',
-        currentTurn: 'seller',
-        roundCount: 1,
-        isFinalOffer: false,
-        price: 2200,
-        quantity: 50,
-        tradeType: 'FOR',
-        expiresAt: new Date(Date.now() + 86400000).toISOString(),
-        canCounter: true,
-        cooldownEndsAt: new Date(Date.now() - 1000).toISOString(),
-        rounds: [
-          {
-            roundNumber: 1,
-            proposedBy: 'buyer',
-            price: 2200,
-            quantity: 50,
-            remarks: 'Initial offer, need it delivered to Haryana',
-            isFinal: false,
-            createdAt: new Date(Date.now() - 3600000).toISOString(),
-          }
-        ],
-        buyer: { name: 'Mock Buyer Ramesh' },
-        seller: { name: 'Mock FPO Seller' }
-      });
-      setItem(routeItem || { commodityName: 'Mock Wheat Grade A', unit: 'Ton' });
-      return;
-    }
+
 
     try {
       if (!isBackground) {
@@ -391,14 +427,6 @@ export default function NegotiationDetailsScreen({ route, navigation }) {
         {
           text: t('Accept & Close Deal'),
           onPress: async () => {
-            if (isMockMode) {
-              setOffer(prev => ({ ...prev, status: 'accepted', dealId: 'mock-deal-123' }));
-              showAlert({
-                type: 'success', title: t('Deal Confirmed!'), message: t('Mock Escrow deal generated.'),
-                buttons: [{ text: t('View Deal'), onPress: () => navigation.navigate('DealDetails', { dealId: 'mock-deal-123', item, role: myRole }) }]
-              });
-              return;
-            }
             try {
               setSubmittingAction(true);
               const res = await acceptOffer(offerId);
@@ -411,8 +439,9 @@ export default function NegotiationDetailsScreen({ route, navigation }) {
                   {
                     text: t('View Deal'),
                     onPress: () => {
+                      // Backend API not ready yet — navigate without dealId
+                      // DealDetails will show 'Order Accepted' pending screen
                       navigation.navigate('DealDetails', {
-                        dealId: resolvedDealId,
                         item,
                         role: myRole,
                       });
@@ -450,11 +479,6 @@ export default function NegotiationDetailsScreen({ route, navigation }) {
           text: t('Reject Offer'),
           style: 'destructive',
           onPress: async () => {
-            if (isMockMode) {
-              setOffer(prev => ({ ...prev, status: 'rejected' }));
-              showAlert({ type: 'info', title: t('Offer Rejected'), message: t('Mock Negotiation ended.'), buttons: [{ text: t('Back'), onPress: () => navigation.goBack() }] });
-              return;
-            }
             try {
               setSubmittingAction(true);
               await rejectOffer(offerId, { reason: 'Rejected by user' });
@@ -503,33 +527,6 @@ export default function NegotiationDetailsScreen({ route, navigation }) {
         setCounterPriceError(t('Price must be within 5%. Allowed: ₹{min} – ₹{max}').replace('{min}', minAllowed).replace('{max}', maxAllowed));
         return;
       }
-    }
-
-    if (isMockMode) {
-      setOffer(prev => ({
-        ...prev,
-        currentTurn: myRole === 'buyer' ? 'seller' : 'buyer',
-        roundCount: (prev.roundCount || 0) + 1,
-        isFinalOffer: isFinalOfferToggle,
-        cooldownEndsAt: new Date(Date.now() + 1800000).toISOString(),
-        price: Number(counterPrice),
-        quantity: Number(counterQty),
-        rounds: [
-          ...(prev.rounds || []),
-          {
-            roundNumber: (prev.roundCount || 0) + 1,
-            proposedBy: myRole,
-            price: Number(counterPrice),
-            quantity: Number(counterQty),
-            remarks: counterRemarks,
-            isFinal: isFinalOfferToggle,
-            createdAt: new Date().toISOString()
-          }
-        ]
-      }));
-      setCounterModalVisible(false);
-      showAlert({ type: 'success', title: t('Counter Submitted'), message: t('Mock: Wait for other party response.') });
-      return;
     }
 
     try {
@@ -614,13 +611,17 @@ export default function NegotiationDetailsScreen({ route, navigation }) {
             {index < displayRounds.length - 1 && <View style={styles.line} />}
           </View>
 
-          <View style={[
-            styles.roundCard,
-            isMe
-              ? [styles.myRoundCard, { borderLeftColor: theme.primary }]
-              : styles.theirRoundCard,
-            rd.isFinal && styles.finalRoundCard,
-          ]}>
+          <View
+            style={[
+              styles.roundCard,
+              {
+                backgroundColor: isMe ? theme.light : COLORS.white,
+                borderColor: isMe ? theme.primary + '70' : '#3182CE70',
+                borderWidth: 1.5,
+              },
+              rd.isFinal && styles.finalRoundCard,
+            ]}
+          >
             <View style={styles.roundHeader}>
               <Text style={[styles.roundSender, { color: isMe ? theme.primary : '#3182CE' }]}>
                 {isMe ? t('You') : (myRole === 'buyer' ? sellerName : buyerName)}
@@ -635,7 +636,16 @@ export default function NegotiationDetailsScreen({ route, navigation }) {
                 {rd.isFinal ? t(' (FINAL OFFER)') : ''}
               </Text>
             )}
-            <View style={styles.roundSpecs}>
+            <View
+              style={[
+                styles.roundSpecs,
+                {
+                  backgroundColor: isMe ? COLORS.white : '#F8FAFC',
+                  borderWidth: 1,
+                  borderColor: isMe ? theme.primary + '12' : '#3182CE15',
+                },
+              ]}
+            >
               <View>
                 <Text style={styles.specLabel}>{t('Price')}</Text>
                 <Text style={[styles.specVal, { color: isMe ? theme.primary : '#3182CE' }]}>
@@ -697,53 +707,7 @@ export default function NegotiationDetailsScreen({ route, navigation }) {
           <TouchableOpacity style={[styles.retryBtn, { backgroundColor: theme.primary }]} onPress={() => loadOfferDetails()}>
             <Text style={styles.retryBtnText}>{t("Retry API")}</Text>
           </TouchableOpacity>
-          <TouchableOpacity 
-            style={[styles.retryBtn, { backgroundColor: '#3182CE', marginTop: h(12) }]} 
-            onPress={() => {
-              setIsMockMode(true);
-              setApiError(null);
-              setOffer({
-                id: 'mock-123',
-                buyerId: user?._id || 'b1',
-                sellerId: 's1',
-                status: 'countered',
-                currentTurn: 'buyer',
-                roundCount: 2,
-                isFinalOffer: false,
-                price: 2350,
-                quantity: 50,
-                tradeType: 'FOR',
-                expiresAt: new Date(Date.now() + 86400000).toISOString(),
-                canCounter: true,
-                cooldownEndsAt: new Date(Date.now() - 1000).toISOString(),
-                rounds: [
-                  {
-                    roundNumber: 1,
-                    proposedBy: 'buyer',
-                    price: 2200,
-                    quantity: 50,
-                    remarks: 'Initial offer, need it delivered to Haryana',
-                    isFinal: false,
-                    createdAt: new Date(Date.now() - 3600000).toISOString(),
-                  },
-                  {
-                    roundNumber: 2,
-                    proposedBy: 'seller',
-                    price: 2350,
-                    quantity: 50,
-                    remarks: 'Best price for this grade',
-                    isFinal: false,
-                    createdAt: new Date(Date.now() - 1800000).toISOString(),
-                  }
-                ],
-                buyer: { name: 'Mock Buyer Ramesh' },
-                seller: { name: 'Mock FPO Seller' }
-              });
-              setItem(routeItem || { commodityName: 'Mock Wheat Grade A', unit: 'Ton' });
-            }}
-          >
-            <Text style={styles.retryBtnText}>{t("Start Test Mock Flow")}</Text>
-          </TouchableOpacity>
+
         </View>
       </SafeScreen>
     );
@@ -775,20 +739,7 @@ export default function NegotiationDetailsScreen({ route, navigation }) {
         onBackPress={() => navigation.goBack()}
       />
 
-      {isMockMode && (
-        <View style={styles.mockBanner}>
-          <Text style={styles.mockBannerText}>🧪 {t('TEST MOCK FLOW ACTIVE')}</Text>
-          <TouchableOpacity
-            onPress={() => {
-              setMockRoleToggle(prev => prev === 'buyer' ? 'seller' : 'buyer');
-              setCooldownSecs(0);
-            }}
-            style={styles.swapRoleBtn}
-          >
-            <Text style={styles.swapRoleBtnText}>{t('Swap Role (Now: {role})').replace('{role}', t(mockRoleToggle))}</Text>
-          </TouchableOpacity>
-        </View>
-      )}
+
 
       {/* API Error Banner */}
       {apiError && (
@@ -822,7 +773,7 @@ export default function NegotiationDetailsScreen({ route, navigation }) {
                 {t(item?.name || item?.commodityName || 'Commodity')} {item?.grade ? `(${t('Grade')} ${item.grade})` : ''}
               </Text>
               <Text style={styles.commodityVariety}>{item?.type ? t(item.type) : (item?.description ? t(item.description) : '')}</Text>
-              <View style={[styles.partyRow, { alignItems: 'flex-start' }]}>
+              <View style={[styles.partyRow, { alignItems: 'flex-start', backgroundColor: theme.light + '50', borderWidth: 1, borderColor: theme.primary + '12' }]}>
                 <Icon name="account-multiple-outline" size={14} color={COLORS.textMuted} style={{ marginTop: 2 }} />
                 <View style={styles.partiesColumn}>
                   {myRole !== 'buyer' && (
@@ -844,7 +795,7 @@ export default function NegotiationDetailsScreen({ route, navigation }) {
           </View>
 
           {/* Price Strip */}
-          <View style={styles.pricingStrip}>
+          <View style={[styles.pricingStrip, { backgroundColor: theme.light, borderColor: theme.primary + '20', borderWidth: 1 }]}>
             <View style={styles.pricingItem}>
               <Text style={styles.pricingLabel}>
                 {myRole === 'seller' ? t("Buyer's Offer") : t("Original Ask")}
@@ -905,6 +856,36 @@ export default function NegotiationDetailsScreen({ route, navigation }) {
           </View>
         </View>
 
+
+        {/* Logistics Routing Widget */}
+        {(item?.location || offer?.location) && (
+          <View style={[styles.logisticsCard, { borderColor: theme.primary + '15', borderWidth: 1 }]}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: w(6), marginBottom: h(6) }}>
+              <Icon name="truck-delivery-outline" size={18} color={theme.primary} />
+              <Text style={[styles.logisticsTitle, { color: theme.text }]}>{t('Estimated Logistics Route')}</Text>
+            </View>
+            <View style={styles.routeContainer}>
+              <Text style={styles.routePoint} numberOfLines={1}>{t(offer?.location || 'Buyer Location')}</Text>
+              <View style={styles.routeLineContainer}>
+                <View style={[styles.routeLine, { backgroundColor: theme.primary + '30' }]} />
+                <Icon name="chevron-right" size={14} color={theme.primary} />
+              </View>
+              <Text style={styles.routePoint} numberOfLines={1}>{t(item?.location || 'Seller Location')}</Text>
+            </View>
+            <Text style={styles.logisticsMetaText}>
+              {t('Est. Distance: ~1,200 km | Transit Duration: 3 Days')}
+            </Text>
+          </View>
+        )}
+
+        {/* Bharat Escrow Trust Shield */}
+        <View style={styles.trustShieldContainer}>
+          <Icon name="shield-check" size={18} color="#38A169" />
+          <Text style={styles.trustShieldText}>
+            {t('Bharat Escrow Secure: Payment is locked in escrow and only released after quality verification at delivery.')}
+          </Text>
+        </View>
+
         {/* Terminal Status Banner */}
         {isTerminal && (
           <View style={[styles.terminalBanner, {
@@ -933,30 +914,108 @@ export default function NegotiationDetailsScreen({ route, navigation }) {
           </View>
         )}
 
-        {/* Round Limit Banner */}
-        {isNegotiable && roundsMaxed && !isTerminal && (
-          <View style={styles.roundLimitBanner}>
-            <Icon name="alert" size={18} color="#D69E2E" />
-            <Text style={styles.roundLimitText}>{t('Maximum {rounds} rounds reached — Accept or Reject only').replace('{rounds}', maxRounds)}</Text>
+        {/* ══════ TURN STATUS CARD (MVP Core) ══════ */}
+        {!isTerminal && (
+          isMyTurn ? (
+            /* ── YOUR TURN ── */
+            <View style={[styles.turnCard, {
+              backgroundColor: theme.primary,
+              shadowColor: theme.primary,
+              shadowOffset: { width: 0, height: 4 },
+              shadowOpacity: 0.35,
+              shadowRadius: 10,
+              elevation: 8,
+            }]}>
+              <View style={styles.turnCardLeft}>
+                <YourTurnPulse color="#FFFFFF" />
+                <View style={{ marginLeft: w(10) }}>
+                  <Text style={styles.turnCardTitle}>
+                    {roundsMaxed ? t('Final Decision Required') : t('Your Turn to Respond')}
+                  </Text>
+                  <Text style={styles.turnCardSub}>
+                    {roundsMaxed
+                      ? t('Max rounds reached — Accept or Decline')
+                      : t('Make your counter offer or accept')}
+                  </Text>
+                </View>
+              </View>
+              <View style={styles.turnCardArrow}>
+                <Icon name="chevron-right" size={22} color="#FFFFFF" />
+              </View>
+            </View>
+          ) : (
+            /* ── WAITING ── */
+            <View style={[styles.turnCard, {
+              backgroundColor: theme.light,
+              borderColor: theme.primary + '30',
+              borderWidth: 1.5,
+            }]}>
+              <View style={styles.turnCardLeft}>
+                <WaitingPulseIcon color={theme.primary} size={22} />
+                <View style={{ marginLeft: w(10) }}>
+                  <Text style={[styles.turnCardTitle, { color: theme.primary }]}>
+                    {t('Waiting for Response')}
+                  </Text>
+                  <Text style={[styles.turnCardSub, { color: theme.text }]}>
+                    <Text style={{ fontWeight: '800' }}>
+                      {currentTurn === 'buyer' ? buyerName : sellerName}
+                    </Text>
+                    {t(' is reviewing your offer')}
+                  </Text>
+                </View>
+              </View>
+            </View>
+          )
+        )}
+
+        {/* Price Gap / Delta Indicator */}
+        {hasPrices && priceGap > 0 && (
+          <View style={[styles.deltaContainer, { borderColor: theme.primary + '20', borderWidth: 1 }]}>
+            <View style={styles.deltaHeader}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: w(4) }}>
+                <Icon name="swap-horizontal-bold" size={15} color={theme.primary} />
+                <Text style={[styles.deltaLabelText, { color: theme.text }]}>{t('Negotiation Price Gap')}</Text>
+              </View>
+              <Text style={[styles.deltaValText, { color: gapPercent > 5 ? COLORS.error : '#E5A93B' }]}>
+                ₹{priceGap}/Qt ({gapPercent.toFixed(1)}%)
+              </Text>
+            </View>
+            <View style={styles.deltaTrack}>
+              <View style={[styles.deltaFill, { width: `${Math.min(100, Math.max(10, 100 - gapPercent * 10))}%`, backgroundColor: gapPercent > 5 ? COLORS.error : '#E5A93B' }]} />
+            </View>
           </View>
         )}
 
-        {/* Not My Turn Banner */}
-        {!isMyTurn && !isTerminal && (
-          <View style={styles.waitingBanner}>
-            <Icon name="timer-sand" size={18} color={COLORS.textMuted} />
-            <Text style={styles.waitingText}>
-              {t('Waiting for {party} to respond...').replace('{party}', currentTurn === 'buyer' ? buyerName : sellerName)}
-            </Text>
-          </View>
-        )}
+        {/* Negotiation History — Collapsible Wrapper */}
+        <View style={[styles.historyWrapper, { borderColor: theme.primary + '20', borderWidth: 1 }]}>
+          <TouchableOpacity
+            activeOpacity={0.7}
+            onPress={() => setHistoryOpen(prev => !prev)}
+            style={[styles.historyHeader, { backgroundColor: theme.light }]}
+          >
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: w(8) }}>
+              <Icon name="history" size={16} color={theme.primary} />
+              <Text style={[styles.sectionTitle, { color: theme.primary, marginBottom: 0 }]}>
+                {isNegotiable ? t('Negotiation History') : t('Offer Details')}
+              </Text>
+              {displayRounds.length > 0 && (
+                <View style={[styles.roundCountBadge, { backgroundColor: theme.primary }]}>
+                  <Text style={styles.roundCountText}>{displayRounds.length}</Text>
+                </View>
+              )}
+            </View>
+            <Icon
+              name={historyOpen ? 'chevron-up' : 'chevron-down'}
+              size={18}
+              color={theme.primary}
+            />
+          </TouchableOpacity>
 
-        {/* Negotiation History */}
-        <Text style={[styles.sectionTitle, { color: theme.primary }]}>
-          {isNegotiable ? t('Negotiation History') : t('Offer Details')}
-        </Text>
-        <View style={styles.timeline}>
-          {renderedTimeline}
+          {historyOpen && (
+            <View style={styles.timeline}>
+              {renderedTimeline}
+            </View>
+          )}
         </View>
 
         <View style={{ height: h(120) + insets.bottom }} />
@@ -991,14 +1050,7 @@ export default function NegotiationDetailsScreen({ route, navigation }) {
         ) : (
           // Active state (Negotiation in progress)
           <View>
-            {!isMyTurn && (
-              <View style={[styles.pendingContainer, { marginBottom: h(8) }]}>
-                <Icon name="timer-sand" size={16} color={COLORS.textMuted} />
-                <Text style={[styles.pendingText, { flex: 1, fontSize: f(11) }]}>
-                  {t('Waiting for {party} to respond...').replace('{party}', currentTurn === 'buyer' ? buyerName : sellerName)}
-                </Text>
-              </View>
-            )}
+
             <View style={styles.buttonRow}>
               {/* Decline: Visible when it is your turn and negotiation is active */}
               {isMyTurn && (
@@ -1225,6 +1277,8 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.05,
     shadowRadius: 10,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
   },
   dealHeaderTop: {
     flexDirection: 'row',
@@ -1399,7 +1453,7 @@ const styles = StyleSheet.create({
   roundCard: {
     flex: 1,
     backgroundColor: COLORS.white,
-    borderRadius: 12,
+    borderRadius: 14,
     padding: w(14),
     marginBottom: h(16),
     elevation: 2,
@@ -1409,13 +1463,6 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     borderWidth: 1,
     borderColor: '#E9ECEF',
-    borderLeftWidth: 4,
-  },
-  myRoundCard: {
-    borderLeftColor: COLORS.border,
-  },
-  theirRoundCard: {
-    borderLeftColor: '#3182CE',
   },
   finalRoundCard: {
     borderTopWidth: 2,
@@ -1672,28 +1719,234 @@ const styles = StyleSheet.create({
     gap: w(4),
     marginTop: h(8),
   },
-  mockBanner: {
-    backgroundColor: '#F6E05E',
-    paddingHorizontal: w(16),
-    paddingVertical: h(10),
+
+  // ─── Price Delta Styles ──────────────────────────────────────────
+  deltaContainer: {
+    backgroundColor: COLORS.white,
+    borderRadius: 12,
+    padding: w(12),
+    marginBottom: h(12),
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.03,
+    shadowRadius: 3,
+  },
+  deltaHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    marginBottom: h(8),
   },
-  mockBannerText: {
-    fontWeight: '800',
+  deltaLabelText: {
     fontSize: f(11),
-    color: '#744210',
-  },
-  swapRoleBtn: {
-    backgroundColor: '#000',
-    paddingHorizontal: w(12),
-    paddingVertical: h(6),
-    borderRadius: 6,
-  },
-  swapRoleBtnText: {
-    color: '#fff',
-    fontSize: f(10),
     fontWeight: '700',
   },
+  deltaValText: {
+    fontSize: f(12),
+    fontWeight: '800',
+  },
+  deltaTrack: {
+    height: h(6),
+    backgroundColor: '#EDF2F7',
+    borderRadius: 3,
+    overflow: 'hidden',
+  },
+  deltaFill: {
+    height: '100%',
+    borderRadius: 3,
+  },
+
+  // ─── Logistics Styles ────────────────────────────────────────────
+  logisticsCard: {
+    backgroundColor: COLORS.white,
+    borderRadius: 12,
+    padding: w(12),
+    marginBottom: h(12),
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.03,
+    shadowRadius: 3,
+  },
+  logisticsTitle: {
+    fontSize: f(11),
+    fontWeight: '800',
+  },
+  routeContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#F8FAFC',
+    borderRadius: 8,
+    paddingVertical: h(8),
+    paddingHorizontal: w(12),
+    marginBottom: h(6),
+    borderWidth: 1,
+    borderColor: '#F1F5F9',
+  },
+  routePoint: {
+    fontSize: f(11),
+    fontWeight: '700',
+    color: COLORS.text,
+    maxWidth: '42%',
+  },
+  routeLineContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+    justifyContent: 'center',
+    paddingHorizontal: w(4),
+  },
+  routeLine: {
+    height: 2,
+    flex: 1,
+  },
+  logisticsMetaText: {
+    fontSize: f(9.5),
+    color: COLORS.textMuted,
+    fontWeight: '600',
+    textAlign: 'center',
+    marginTop: h(2),
+  },
+
+  // ─── Trust Shield Banner Styles ──────────────────────────────────
+  trustShieldContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: w(8),
+    backgroundColor: '#F0FFF4',
+    borderColor: '#C6F6D5',
+    borderWidth: 1,
+    borderRadius: 12,
+    paddingVertical: h(10),
+    paddingHorizontal: w(12),
+    marginBottom: h(12),
+  },
+  trustShieldText: {
+    fontSize: f(10.5),
+    color: '#22543D',
+    fontWeight: '600',
+    flex: 1,
+    lineHeight: h(15),
+  },
+
+  // ─── Quality Specs Styles ────────────────────────────────────────
+  qualitySpecsCard: {
+    backgroundColor: COLORS.white,
+    borderRadius: 12,
+    padding: w(12),
+    marginBottom: h(12),
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.03,
+    shadowRadius: 3,
+  },
+  qualityTitle: {
+    fontSize: f(11),
+    fontWeight: '800',
+    marginBottom: h(8),
+  },
+  qualityGrid: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    backgroundColor: '#F8FAFC',
+    borderRadius: 8,
+    padding: w(10),
+    borderWidth: 1,
+    borderColor: '#F1F5F9',
+  },
+  qualityItem: {
+    flex: 1,
+  },
+  qualityLabel: {
+    fontSize: f(9),
+    color: COLORS.textMuted,
+    marginBottom: h(2),
+  },
+  qualityValText: {
+    fontSize: f(11),
+    fontWeight: '700',
+    color: COLORS.text,
+  },
+  qualityStatusBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: w(3),
+    backgroundColor: '#E8F5E9',
+    paddingHorizontal: w(5),
+    paddingVertical: h(1),
+    borderRadius: 4,
+  },
+  qualityStatusDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+  },
+  qualityStatusText: {
+    fontSize: f(8.5),
+    fontWeight: '800',
+    color: '#2E7D32',
+  },
+
+  // ─── Negotiation History Accordion Wrapper ──────────────────────
+  historyWrapper: {
+    borderRadius: 14,
+    overflow: 'hidden',
+    marginBottom: h(14),
+  },
+  historyHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: w(14),
+    paddingVertical: h(12),
+  },
+  roundCountBadge: {
+    minWidth: w(20),
+    height: w(20),
+    borderRadius: w(10),
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: w(5),
+  },
+  roundCountText: {
+    fontSize: f(10),
+    fontWeight: '800',
+    color: '#FFFFFF',
+  },
+
+  // ─── Turn Status Card ────────────────────────────────────────────
+  turnCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    borderRadius: 16,
+    paddingHorizontal: w(16),
+    paddingVertical: h(14),
+    marginBottom: h(14),
+  },
+  turnCardLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  turnCardTitle: {
+    fontSize: f(14),
+    fontWeight: '800',
+    color: '#FFFFFF',
+    letterSpacing: 0.2,
+  },
+  turnCardSub: {
+    fontSize: f(11),
+    fontWeight: '500',
+    color: 'rgba(255,255,255,0.80)',
+    marginTop: h(2),
+  },
+  turnCardArrow: {
+    marginLeft: w(8),
+    opacity: 0.9,
+  },
+
 });

@@ -333,6 +333,20 @@ export default function ProfileScreen() {
       return;
     }
 
+    if (user?.kycStatus === 'VERIFIED') {
+      const enteredFullName = `${modalForm.firstName || ''} ${modalForm.lastName || ''}`.trim().toLowerCase().replace(/\s+/g, ' ');
+      const kycName = (user?.panDetails?.name_provided || user?.panDetails?.registered_name || '').trim().toLowerCase().replace(/\s+/g, ' ');
+      if (enteredFullName !== kycName) {
+        showAlert({
+          type: 'error',
+          title: t('Validation Error'),
+          message: t('Profile name must match the verified KYC Cardholder Name ("{kycName}") exactly. Please correct your First Name and Last Name.').replace('{kycName}', user?.panDetails?.name_provided || user?.panDetails?.registered_name || ''),
+          buttons: [{ text: t('OK') }]
+        });
+        return;
+      }
+    }
+
     const formData          = buildProfileFormData(modalForm);
     const clientUpdatedUser = buildClientUpdatedUser(modalForm);
     console.log('[ProfileScreen] handleSave: profile payload built. Dispatching update...');
@@ -346,7 +360,7 @@ export default function ProfileScreen() {
     } else {
       showAlert({ type: 'error', title: t('Update Failed'), message: t(result.payload || 'Failed to update profile.'), buttons: [{ text: t('OK') }] });
     }
-  }, [dispatch, modalForm, profileLoading, closeModal, t]);
+  }, [dispatch, modalForm, profileLoading, closeModal, t, user]);
 
   const handleKycSubmit = useCallback(async () => {
     const panErr = validatePan(kycForm.pan);
@@ -474,6 +488,41 @@ export default function ProfileScreen() {
     return Math.round(((filledCount + kycBonus) / totalWeight) * 100);
   }, [displayData, user?.kycStatus]);
 
+  const missingFields = useMemo(() => {
+    const checklist = [
+      { key: 'profileImage', label: t('Profile Photo') },
+      { key: 'firstName',    label: t('First Name') },
+      { key: 'lastName',     label: t('Last Name') },
+      { key: 'gender',       label: t('Gender') },
+      { key: 'shopName',     label: t('Shop Name') },
+      { key: 'emailId',      label: t('Email') },
+      { key: 'village',      label: t('Village') },
+      { key: 'district',     label: t('District') },
+      { key: 'state',        label: t('State') },
+    ];
+    
+    const missing = [];
+    for (const item of checklist) {
+      const val = displayData[item.key];
+      if (!val || (typeof val === 'string' && !val.trim())) {
+        missing.push(item.label);
+      }
+    }
+    
+    if (user?.kycStatus !== 'VERIFIED') {
+      missing.push(t('KYC Verification'));
+    }
+    return missing;
+  }, [displayData, user?.kycStatus, t]);
+
+  const isKycNameMismatch = useMemo(() => {
+    if (user?.kycStatus !== 'VERIFIED') return false;
+    const profileName = `${displayData.firstName || ''} ${displayData.lastName || ''}`.trim().toLowerCase();
+    const kycName = (user?.panDetails?.name_provided || user?.panDetails?.registered_name || '').trim().toLowerCase();
+    if (!profileName || !kycName) return false;
+    return profileName.replace(/\s+/g, ' ') !== kycName.replace(/\s+/g, ' ');
+  }, [displayData.firstName, displayData.lastName, user?.panDetails?.name_provided, user?.panDetails?.registered_name, user?.kycStatus]);
+
   const handleProfileImagePick = useCallback(() => {
     dispatchAction({ type: 'OPEN_PHOTO_SHEET' });
   }, []);
@@ -588,6 +637,33 @@ export default function ProfileScreen() {
             <View style={styles.compactProgressBarBg}>
               <View style={[styles.compactProgressBarFill, { width: `${profileProgress}%`, backgroundColor: theme.primary }]} />
             </View>
+            {profileProgress < 100 && missingFields.length > 0 && (
+              <TouchableOpacity
+                activeOpacity={0.8}
+                onPress={() => {
+                  if (missingFields.length === 1 && missingFields[0] === t('KYC Verification')) {
+                    dispatchAction({ type: 'OPEN_KYC_MODAL' });
+                  } else {
+                    openEditModal();
+                  }
+                }}
+                style={[styles.missingFieldsBanner, { backgroundColor: theme.primary + '0A', borderColor: theme.primary + '18' }]}
+                accessible={true}
+                accessibilityRole="button"
+                accessibilityLabel={t('Complete profile details')}
+                accessibilityHint={t('Opens profile details edit window')}
+              >
+                <View style={styles.missingHeaderRow}>
+                  <Icon name="alert-circle-outline" size={14} color={theme.primary} />
+                  <Text style={[styles.missingHeaderText, { color: theme.primary }]}>
+                    {t('Complete your profile to reach 100%')}
+                  </Text>
+                </View>
+                <Text style={styles.missingListText}>
+                  {t('Pending:')} <Text style={[styles.missingBoldFields, { color: theme.primary }]}>{missingFields.join(', ')}</Text>
+                </Text>
+              </TouchableOpacity>
+            )}
           </View>
         </View>
 
@@ -637,6 +713,23 @@ export default function ProfileScreen() {
                     {t('Registered as: {name}').replace('{name}', user?.panDetails?.registered_name)}
                   </Text>
                 </View>
+              )}
+              {isKycNameMismatch && (
+                <TouchableOpacity
+                  activeOpacity={0.8}
+                  onPress={() => {
+                    dispatchAction({ type: 'OPEN_KYC_MODAL' });
+                  }}
+                  style={styles.kycMismatchWarningRow}
+                  accessible={true}
+                  accessibilityRole="button"
+                  accessibilityLabel={t('Name mismatch warning. Tap to redo KYC verification.')}
+                >
+                  <Icon name="alert-decagram" size={16} color="#E53E3E" style={{ marginTop: h(2) }} />
+                  <Text style={styles.kycMismatchWarningText}>
+                    {t('Strict Warning: Profile name "{profileName}" mismatch with KYC Cardholder name "{kycName}". Tap to verify/re-submit PAN card to prevent transaction holds.').replace('{profileName}', fullName).replace('{kycName}', user?.panDetails?.name_provided || user?.panDetails?.registered_name || '')}
+                  </Text>
+                </TouchableOpacity>
               )}
             </View>
           ) : (
@@ -767,7 +860,6 @@ export default function ProfileScreen() {
           <Icon name="leaf" size={20} color={theme.primary} style={styles.footerIcon} />
           <Text style={styles.footerText}>Bharat Vyapar</Text>
           <Text style={styles.footerSubText}>{t('Version 1.0.0')}</Text>
-          <Text style={styles.footerMotto}>🇮🇳 {t('Kisan ki Mehnat, Desh ki Samriddhi')}</Text>
         </View>
 
       </ScrollView>
@@ -790,15 +882,24 @@ export default function ProfileScreen() {
               </TouchableOpacity>
             </View>
 
-            <ScrollView contentContainerStyle={styles.modalBody} showsVerticalScrollIndicator={false}>
+            <ScrollView contentContainerStyle={styles.modalBody} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
 
               {user?.kycStatus === 'VERIFIED' && (
-                <View style={styles.kycLockBanner}>
-                  <Icon name="shield-lock" size={16} color="#319795" />
-                  <Text style={styles.kycLockText}>
-                    {t('Name editing is locked as your KYC is verified.')}
-                  </Text>
-                </View>
+                isKycNameMismatch ? (
+                  <View style={[styles.kycLockBanner, { backgroundColor: '#FFF5F5', borderColor: '#FED7D7' }]}>
+                    <Icon name="alert-decagram" size={16} color="#E53E3E" />
+                    <Text style={[styles.kycLockText, { color: '#C53030' }]}>
+                      {t('Action Required: Please update your Profile Name to match your KYC Name exactly to resolve the mismatch.')}
+                    </Text>
+                  </View>
+                ) : (
+                  <View style={styles.kycLockBanner}>
+                    <Icon name="shield-lock" size={16} color="#319795" />
+                    <Text style={styles.kycLockText}>
+                      {t('Name editing is locked as your KYC is verified.')}
+                    </Text>
+                  </View>
+                )
               )}
 
               {/* Name row */}
@@ -811,7 +912,7 @@ export default function ProfileScreen() {
                     errors={fieldErrors} 
                     onChangeText={setField} 
                     placeholder="First Name" 
-                    editable={user?.kycStatus !== 'VERIFIED'} 
+                    editable={user?.kycStatus !== 'VERIFIED' || isKycNameMismatch} 
                   />
                 </View>
                 <View style={styles.halfCol}>
@@ -822,7 +923,7 @@ export default function ProfileScreen() {
                     errors={fieldErrors} 
                     onChangeText={setField} 
                     placeholder="Last Name" 
-                    editable={user?.kycStatus !== 'VERIFIED'} 
+                    editable={user?.kycStatus !== 'VERIFIED' || isKycNameMismatch} 
                   />
                 </View>
               </View>
@@ -1126,10 +1227,18 @@ export default function ProfileScreen() {
 
 function FieldRow({ label, value, last }) {
   const { t } = useTranslation();
+  const cleanVal = (value || '').trim();
+  const hasValue = !!cleanVal;
   return (
-    <View style={[styles.fieldRow, !last && styles.fieldRowBorder]} accessible={true} accessibilityLabel={`${t(label)}: ${value || t('Not provided')}`}>
+    <View style={[styles.fieldRow, !last && styles.fieldRowBorder]} accessible={true} accessibilityLabel={`${t(label)}: ${cleanVal || t('Add Details')}`}>
       <Text style={styles.fieldLabel}>{t(label)}</Text>
-      <Text style={styles.fieldVal}>{value || '—'}</Text>
+      {hasValue ? (
+        <Text style={styles.fieldVal}>{cleanVal}</Text>
+      ) : (
+        <Text style={[styles.fieldVal, styles.fieldValPlaceholder]}>
+          {t('Add {fieldName}').replace('{fieldName}', t(label))}
+        </Text>
+      )}
     </View>
   );
 }
@@ -1260,7 +1369,7 @@ const styles = StyleSheet.create({
   
   fieldRow:        { paddingVertical: h(12) },
   fieldRowBorder:  { borderBottomWidth: 1, borderBottomColor: '#EDF2F7' },
-  fieldLabel:      { fontSize: f(11), fontWeight: '800', color: '#A0AEC0', marginBottom: h(6), textTransform: 'uppercase', letterSpacing: 0.5 },
+  fieldLabel:      { fontSize: f(11), fontWeight: '800', color: '#A0AEC0', marginBottom: h(4), textTransform: 'uppercase', letterSpacing: 0.5 },
   fieldVal:        { fontSize: f(15), color: '#2D3748', fontWeight: '700' },
   
   docRow:          { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: w(14), backgroundColor: '#F7FAFC', borderRadius: mw(16), marginBottom: h(12), borderWidth: 1, borderColor: '#EDF2F7' },
@@ -1274,22 +1383,22 @@ const styles = StyleSheet.create({
   logoutText:      { fontSize: f(17), fontWeight: '800', color: '#E53E3E', letterSpacing: 0.3 },
   
   modalOverlay:    { flex: 1, backgroundColor: 'rgba(15, 23, 42, 0.75)', justifyContent: 'flex-end' },
-  modalContainer:  { backgroundColor: COLORS.white, borderTopLeftRadius: mw(32), borderTopRightRadius: mw(32), overflow: 'hidden', maxHeight: '80%', elevation: 20, shadowColor: '#000', shadowOffset: { width: 0, height: -10 }, shadowOpacity: 0.15, shadowRadius: 20 },
-  modalHeader:     { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: w(24), paddingVertical: h(20), borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.1)' },
+  modalContainer:  { backgroundColor: COLORS.white, borderTopLeftRadius: mw(32), borderTopRightRadius: mw(32), overflow: 'hidden', maxHeight: '88%', elevation: 20, shadowColor: '#000', shadowOffset: { width: 0, height: -10 }, shadowOpacity: 0.15, shadowRadius: 20 },
+  modalHeader:     { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: w(20), paddingVertical: h(14), borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.1)' },
   modalTitle:      { fontSize: f(18), fontWeight: '800', color: COLORS.white, letterSpacing: 0.5 },
   closeBtn:        { padding: w(4), backgroundColor: 'rgba(255,255,255,0.2)', borderRadius: mw(14) },
-  modalBody:       { padding: w(24), paddingBottom: h(40) },
-  row:             { flexDirection: 'row', justifyContent: 'space-between', marginBottom: h(18), gap: w(14) },
+  modalBody:       { padding: w(16), paddingBottom: h(20) },
+  row:             { flexDirection: 'row', justifyContent: 'space-between', marginBottom: h(12), gap: w(14) },
   flex1:           { flex: 1 },
   halfCol:         { flex: 1 },
   thirdCol:        { flex: 1 },
-  fullCol:         { marginBottom: h(18) },
-  fieldInput:      { borderWidth: 1.5, borderColor: '#E2E8F0', borderRadius: mw(14), paddingHorizontal: w(16), height: h(48), fontSize: f(14), color: '#2D3748', backgroundColor: '#F7FAFC', fontWeight: '600' },
+  fullCol:         { marginBottom: h(12) },
+  fieldInput:      { borderWidth: 1.5, borderColor: '#E2E8F0', borderRadius: mw(10), paddingHorizontal: w(12), height: h(42), fontSize: f(14), color: '#2D3748', backgroundColor: '#F7FAFC', fontWeight: '600' },
   disabledInput:   { backgroundColor: '#EDF2F7', color: '#A0AEC0', borderColor: '#E2E8F0' },
-  genderPicker:    { flexDirection: 'row', flexWrap: 'wrap', gap: w(10), marginTop: h(8) },
-  genderChip:      { borderWidth: 1.5, borderColor: '#E2E8F0', backgroundColor: '#F7FAFC', borderRadius: mw(14), paddingHorizontal: w(18), paddingVertical: h(10) },
+  genderPicker:    { flexDirection: 'row', flexWrap: 'wrap', gap: w(10), marginTop: h(4) },
+  genderChip:      { borderWidth: 1.5, borderColor: '#E2E8F0', backgroundColor: '#F7FAFC', borderRadius: mw(10), paddingHorizontal: w(14), paddingVertical: h(8) },
   genderChipText:  { fontSize: f(13), color: '#4A5568', fontWeight: '700' },
-  saveBtn:         { borderRadius: mw(16), paddingVertical: h(16), alignItems: 'center', marginTop: h(20), elevation: 8, shadowColor: '#000', shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.15, shadowRadius: 12,textAlign:"center" },
+  saveBtn:         { borderRadius: mw(12), paddingVertical: h(12), alignItems: 'center', marginTop: h(12), elevation: 8, shadowColor: '#000', shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.15, shadowRadius: 12,textAlign:"center" },
   saveBtnText:     { fontSize: f(16), fontWeight: '800', color: COLORS.white, letterSpacing: 0.5,textAlign:"center" },
   inputError:      { borderColor: '#FC8181', backgroundColor: '#FFF5F5' },
   errorText:       { fontSize: f(11), color: '#E53E3E', fontWeight: '700', marginTop: h(4), marginLeft: w(4) },
@@ -1772,5 +1881,56 @@ const styles = StyleSheet.create({
   },
   footerIcon: {
     opacity: 0.6,
+  },
+  missingFieldsBanner: {
+    marginTop: h(12),
+    borderWidth: 1,
+    borderRadius: mw(12),
+    paddingHorizontal: w(14),
+    paddingVertical: h(10),
+    width: '100%',
+  },
+  missingHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: w(6),
+    marginBottom: h(4),
+  },
+  missingHeaderText: {
+    fontSize: f(11.5),
+    fontWeight: '800',
+    letterSpacing: 0.2,
+  },
+  missingListText: {
+    fontSize: f(11),
+    color: '#4A5568',
+    fontWeight: '600',
+  },
+  missingBoldFields: {
+    fontWeight: '800',
+  },
+  kycMismatchWarningRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    backgroundColor: '#FFF5F5',
+    borderWidth: 1.2,
+    borderColor: '#FED7D7',
+    borderRadius: mw(10),
+    paddingHorizontal: w(12),
+    paddingVertical: h(8),
+    marginTop: h(12),
+    gap: w(6),
+  },
+  kycMismatchWarningText: {
+    fontSize: f(11.5),
+    color: '#C53030',
+    fontWeight: '800',
+    flex: 1,
+    lineHeight: h(16),
+  },
+  fieldValPlaceholder: {
+    color: '#A0AEC0',
+    fontStyle: 'italic',
+    fontWeight: '600',
   },
 });

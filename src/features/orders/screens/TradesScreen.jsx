@@ -1,4 +1,4 @@
-import React, { useEffect, useCallback, useMemo, useReducer, useRef } from 'react';
+import React, { useEffect, useCallback, useMemo, useReducer, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -60,6 +60,43 @@ const LISTING_STATUS_CONFIG = {
   cancelled: { label: 'CANCELLED', color: '#E53E3E', bg: '#FFF5F5', icon: 'close-circle' },
 };
 
+// ─── Accordion Section Configs ────────────────────────────────────────────────
+const BUY_SECTION_CONFIGS = [
+  { key: 'your_turn', label: 'Your Turn to Respond', icon: 'flash',                urgent: true,  accentColor: null /* theme.primary at runtime */ },
+  { key: 'waiting',   label: 'Awaiting Response',    icon: 'timer-sand',            urgent: false, accentColor: '#64748B' },
+  { key: 'accepted',  label: 'Deals Accepted',        icon: 'check-decagram',        urgent: false, accentColor: '#38A169' },
+  { key: 'closed',    label: 'Inactive Offers',       icon: 'archive-outline',       urgent: false, accentColor: '#94A3B8' },
+  { key: 'deleted',   label: 'Listing Removed',       icon: 'alert-circle-outline',  urgent: false, accentColor: '#E53E3E' },
+];
+
+const SELL_SECTION_CONFIGS = [
+  { key: 'active', label: 'Active Listings',     icon: 'storefront-outline',   urgent: false, accentColor: '#38A169' },
+  { key: 'sold',   label: 'Sold — Deals Closed', icon: 'check-decagram',       urgent: false, accentColor: null /* theme.primary */ },
+  { key: 'closed', label: 'Inactive Listings',   icon: 'archive-outline',      urgent: false, accentColor: '#94A3B8' },
+];
+
+function classifyBuyOffer(offer) {
+  const st = normalizeStatus(offer.displayStatus || offer.status);
+  const isTerminal = ['accepted', 'rejected', 'expired', 'cancelled'].includes(st);
+  const commodity = offer.commodity || (typeof offer.commodityId === 'object' ? offer.commodityId : null) || {};
+  const isDeleted = !commodity.commodityName && !commodity.name;
+  if (isDeleted) return 'deleted';
+  if (st === 'accepted') return 'accepted';
+  if (isTerminal) return 'closed';
+  if (offer.currentTurn === 'buyer') return 'your_turn';
+  return 'waiting';
+}
+
+function classifySellListing(listing) {
+  const st = (listing.status || 'active').toLowerCase();
+  if (st === 'sold') return 'sold';
+  if (['expired', 'cancelled'].includes(st)) return 'closed';
+  return 'active';
+}
+
+const BUY_TAB_FILTERS  = ['All', 'Active', 'In Negotiation', 'Accepted', 'Closed'];
+const SELL_TAB_FILTERS = ['All', 'Active', 'In Negotiation', 'Sold', 'Closed'];
+
 function formatRelative(dateStr, t) {
   if (!dateStr) return '';
   const diff = Date.now() - new Date(dateStr).getTime();
@@ -84,8 +121,6 @@ function formatExpiry(expiresAt, t) {
   if (h_ > 0) return t ? t('Expires in {hours}h {mins}m').replace('{hours}', String(h_)).replace('{mins}', String(m)) : `Expires in ${h_}h ${m}m`;
   return t ? t('Expires in {mins}m').replace('{mins}', String(m)) : `Expires in ${m}m`;
 }
-
-const TAB_FILTERS = ['All', 'Active', 'In Negotiation', 'Accepted', 'Closed'];
 
 const INITIAL_STATE = {
   tradeMode:             'buy',
@@ -147,6 +182,9 @@ function tradesReducer(state, action) {
   }
 }
 
+
+
+
 export default function TradesScreen({ navigation }) {
   const { t } = useTranslation();
   // PERFORMANCE FIX: Two granular selectors — TradesScreen only re-renders
@@ -161,6 +199,9 @@ export default function TradesScreen({ navigation }) {
     tradeMode, activeTab, selectedCrop, offers, sellListings,
     loading, refreshing, apiError, backendCrash, selectedOfferForModal,
   } = state;
+
+  // Accordion expand/collapse state — {} means all sections open by default
+  const [expandedSections, setExpandedSections] = useState({});
 
   const isMountedRef = useRef(true);
   const isFetchingRef = useRef(false);
@@ -363,6 +404,71 @@ export default function TradesScreen({ navigation }) {
     });
   }, [sellListings, activeTab, selectedCrop]);
 
+  // ─── Grouped + typed flat array for accordion FlatList ───────────────────────
+  const groupedListData = useMemo(() => {
+    const result = [];
+
+    if (tradeMode === 'buy') {
+      const groups = {};
+      for (const offer of filteredOffers) {
+        const key = classifyBuyOffer(offer);
+        if (!groups[key]) groups[key] = [];
+        groups[key].push(offer);
+      }
+      for (const cfg of BUY_SECTION_CONFIGS) {
+        const items = groups[cfg.key];
+        if (!items?.length) continue;
+        const accentColor = cfg.key === 'your_turn' ? theme.primary : (cfg.accentColor || theme.primary);
+        const isExpanded = expandedSections[cfg.key] === true; // default closed
+        result.push({
+          type: 'section_header',
+          sectionKey: cfg.key,
+          label: cfg.label,
+          icon: cfg.icon,
+          accentColor,
+          urgent: cfg.urgent,
+          count: items.length,
+          isExpanded,
+        });
+        if (isExpanded) {
+          for (const item of items) {
+            result.push({ type: 'buy_card', item });
+          }
+        }
+      }
+    } else {
+      const groups = {};
+      for (const listing of filteredSellListings) {
+        const key = classifySellListing(listing);
+        if (!groups[key]) groups[key] = [];
+        groups[key].push(listing);
+      }
+      for (const cfg of SELL_SECTION_CONFIGS) {
+        const items = groups[cfg.key];
+        if (!items?.length) continue;
+        const accentColor = cfg.key === 'sold' ? theme.primary : (cfg.accentColor || theme.primary);
+        const isExpanded = expandedSections[cfg.key] === true; // default closed
+        result.push({
+          type: 'section_header',
+          sectionKey: cfg.key,
+          label: cfg.label,
+          icon: cfg.icon,
+          accentColor,
+          urgent: cfg.urgent,
+          count: items.length,
+          isExpanded,
+        });
+        if (isExpanded) {
+          for (const item of items) {
+            result.push({ type: 'sell_card', item });
+          }
+        }
+      }
+    }
+
+    return result;
+  }, [filteredOffers, filteredSellListings, expandedSections, tradeMode, theme.primary]);
+
   const handleOfferPress = useCallback((offer) => {
     const resolvedDealId = offer.dealId || offer.id || offer._id || offer.deal?.id || offer.deal?._id;
     const resolvedCommodity = offer.commodity || (typeof offer.commodityId === 'object' ? offer.commodityId : null) || {};
@@ -381,233 +487,184 @@ export default function TradesScreen({ navigation }) {
     }
   }, [navigation]);
 
+  const toggleSection = useCallback((sectionKey) => {
+    setExpandedSections(prev => ({
+      ...prev,
+      [sectionKey]: !prev[sectionKey]
+    }));
+  }, []);
+
   const renderItem = useCallback(({ item, index }) => {
-    if (tradeMode === 'buy') {
-      const offer = item;
-      const displaySt    = normalizeStatus(offer.displayStatus || offer.status);
+    if (item.type === 'section_header') {
+      const { sectionKey, label, icon, accentColor, count, isExpanded } = item;
+      return (
+        <TouchableOpacity
+          key={`header-${sectionKey}`}
+          style={[styles.sectionAccordionHeader, { borderColor: accentColor + '30' }]}
+          onPress={() => toggleSection(sectionKey)}
+          activeOpacity={0.8}
+        >
+          <View style={styles.sectionAccordionLeft}>
+            <View style={[styles.sectionIconBg, { backgroundColor: accentColor + '12' }]}>
+              <Icon name={icon} size={16} color={accentColor} />
+            </View>
+            <Text style={[styles.sectionAccordionTitle, { color: '#1A202C' }]}>
+              {t(label)}
+            </Text>
+          </View>
+          <View style={styles.sectionAccordionRight}>
+            <View style={[styles.sectionCountBadgeCompact, { backgroundColor: accentColor + '18' }]}>
+              <Text style={[styles.sectionCountTextCompact, { color: accentColor }]}>{count}</Text>
+            </View>
+            <Icon
+              name={isExpanded ? 'chevron-up' : 'chevron-down'}
+              size={18}
+              color="#718096"
+              style={{ marginLeft: w(4) }}
+            />
+          </View>
+        </TouchableOpacity>
+      );
+    }
+
+    if (item.type === 'buy_card') {
+      const offer = item.item;
+      const displaySt = normalizeStatus(offer.displayStatus || offer.status);
       const baseStatusCfg = OFFER_STATUS_CONFIG[displaySt] || OFFER_STATUS_CONFIG.pending;
       const statusCfg = {
         ...baseStatusCfg,
         color: ['in_negotiation', 'negotiating', 'countered', 'accepted'].includes(displaySt) ? theme.primary : baseStatusCfg.color,
         bg: ['in_negotiation', 'negotiating', 'countered', 'accepted'].includes(displaySt) ? theme.primary + '15' : baseStatusCfg.bg,
       };
-      const isMyTurn  = offer.currentTurn === 'buyer';
+      
+      const isMyTurn = offer.currentTurn === 'buyer';
       const isTerminal = ['accepted', 'rejected', 'expired', 'cancelled'].includes(displaySt);
-      const history   = offer.negotiationHistory || offer.rounds || [];
+      const history = offer.negotiationHistory || offer.rounds || [];
       const lastRound = history[history.length - 1];
       const lastPrice = lastRound?.price || offer.price || 0;
-      const qty       = offer.quantity || 0;
-      const commodity = offer.commodity ||
-                        (typeof offer.commodityId === 'object' ? offer.commodityId : null) || {};
-      const expiry    = formatExpiry(offer.expiresAt, t);
-      const escrowCfg = offer.deal ? (ESCROW_STATUS_CONFIG[offer.deal.escrowStatus] || ESCROW_STATUS_CONFIG.pending_payment) : null;
-      const maxRounds = offer.maxNegotiationRounds || commodity?.maxNegotiationRounds || 5;
-      const isNegotiable = offer.isNegotiable !== false &&
-                           commodity?.isNegotiable !== false;
-
-      const isDeletedListing = !commodity.commodityName && !commodity.name;
+      const qty = offer.quantity || 0;
+      const commodity = offer.commodity || (typeof offer.commodityId === 'object' ? offer.commodityId : null) || {};
+      const expiry = formatExpiry(offer.expiresAt, t);
       
-      const accessibilityLabel = t('Buy offer for {commodity}{variety}. Status: {status}. Your offer price: ₹{price} per {priceUnit}. Quantity: {qty} {unit}.')
-        .replace('{commodity}', commodity.commodityName || t('commodity'))
-        .replace('{variety}', commodity.type ? t(' variety {type}').replace('{type}', commodity.type) : '')
-        .replace('{status}', t(statusCfg.label))
-        .replace('{price}', String(offer.price))
-        .replace('{priceUnit}', offer.priceUnit || 'Qt')
-        .replace('{qty}', String(qty))
-        .replace('{unit}', offer.unit || 'Ton');
-
-      const ctaBgColor = isDeletedListing ? '#FFF5F5' : isMyTurn && !isTerminal ? theme.primary + '10' : '#F8F9FA';
+      const isDeletedListing = !commodity.commodityName && !commodity.name;
 
       return (
         <TouchableOpacity
-          key={offer.id || offer._id || index}
+          key={`buy-${offer.id || offer._id || index}`}
           style={[
-            styles.offerCard,
-            isMyTurn && !isTerminal && { borderLeftWidth: 4, borderLeftColor: theme.primary, borderColor: theme.primary + '30' },
-            ['in_negotiation', 'negotiating'].includes(displaySt) && !isTerminal && !isMyTurn && { borderLeftWidth: 4, borderLeftColor: theme.primary, borderColor: theme.primary + '30' },
-            isDeletedListing && styles.deletedListingCard,
+            styles.compactCard,
+            {
+              borderColor: isMyTurn && !isTerminal
+                ? theme.primary
+                : ['in_negotiation', 'negotiating', 'countered'].includes(displaySt) && !isTerminal
+                ? theme.primary + '80'
+                : '#E2E8F0',
+              borderWidth: isMyTurn && !isTerminal ? 1.8 : 1,
+            },
           ]}
           onPress={() => {
             if (isDeletedListing) {
-              showAlert({ type: 'error', title: t('Listing Removed'), message: t('The seller has deleted this commodity listing. This negotiation is no longer active.') });
+              showAlert({
+                type: 'warning',
+                title: t('Listing Removed'),
+                message: t('The seller has deleted this commodity listing. This negotiation is no longer active.')
+              });
               return;
             }
             handleOfferPress(offer);
           }}
           activeOpacity={0.85}
-          accessible={true}
-          accessibilityRole="button"
-          accessibilityLabel={accessibilityLabel}
-          accessibilityHint={isMyTurn ? t('Your turn to respond. Double tap to reply to counter offer.') : t('Double tap to view negotiation thread details.')}
         >
           {isMyTurn && !isTerminal && (
-            <View style={[styles.yourTurnBanner, { backgroundColor: theme.primary }]}>
-              <Icon name="flash" size={13} color={COLORS.white} />
-              <Text style={styles.yourTurnText}>{t('Your Turn — Respond Now')}</Text>
+            <View style={[styles.compactUrgentStrip, { backgroundColor: theme.primary }]}>
+              <Icon name="flash" size={10} color={COLORS.white} style={{ marginRight: w(4) }} />
+              <Text style={styles.compactUrgentText}>{t('Your Turn — Respond Now')}</Text>
             </View>
           )}
 
-          <View style={styles.cardHeader}>
-            <View style={styles.cardFlex}>
-              {isDeletedListing ? (
-                <View style={styles.deletedListingHeader}>
-                  <Icon name="cancel" size={14} color={COLORS.error} />
-                  <Text style={[styles.cropTitle, { color: COLORS.error }]}>
-                    {t('Listing Removed by Seller')}
-                  </Text>
-                </View>
-              ) : (
-                <Text style={styles.cropTitle}>
-                  {commodity.commodityName || commodity.name || t('Commodity')}
+          <View style={styles.compactCardBody}>
+            <View style={styles.compactCardLeft}>
+              <View style={styles.compactCardTitleRow}>
+                <Text style={styles.compactCropTitle} numberOfLines={1}>
+                  {commodity.commodityName || commodity.name || t('Listing Removed')}
                   {commodity.type ? ` (${commodity.type})` : ''}
                 </Text>
-              )}
-              {(commodity.state || commodity.commodityLocation) && (
-                <View style={styles.locationRow}>
-                  <Icon name="map-marker-outline" size={12} color={COLORS.textMuted} />
-                  <Text style={styles.locationText}>{commodity.state || commodity.commodityLocation}</Text>
-                </View>
-              )}
-            </View>
-            <View style={[styles.statusBadge, { backgroundColor: statusCfg.bg }]}>
-              <Icon name={statusCfg.icon} size={12} color={statusCfg.color} />
-              <Text style={[styles.statusText, { color: statusCfg.color }]}>{t(statusCfg.label)}</Text>
-            </View>
-          </View>
+                {commodity.state && (
+                  <Text style={styles.compactLocationText} numberOfLines={1}>
+                    • {commodity.state}
+                  </Text>
+                )}
+              </View>
 
-          <View style={styles.priceStrip}>
-            <View style={styles.priceItem}>
-              <Text style={styles.priceLabel}>{t('Your Offer')}</Text>
-              <Text style={[styles.priceVal, { color: theme.primary }]}>₹{offer.price}/{offer.priceUnit || 'Qt'}</Text>
-            </View>
-            <View style={styles.priceDivider} />
-            <View style={styles.priceItem}>
-              <Text style={styles.priceLabel}>{t('Latest Price')}</Text>
-              <Text style={[styles.priceVal, { color: lastPrice !== offer.price ? '#DD6B20' : COLORS.text }]}>
-                ₹{lastPrice}/{offer.priceUnit || 'Qt'}
-              </Text>
-            </View>
-            <View style={styles.priceDivider} />
-            <View style={styles.priceItem}>
-              <Text style={styles.priceLabel}>{t('Quantity')}</Text>
-              <Text style={styles.priceVal}>{qty} {offer.unit || 'Ton'}</Text>
-            </View>
-          </View>
+              <View style={styles.compactBidDetailsRow}>
+                <Text style={styles.compactBidLabel}>
+                  {t('Bid:')} <Text style={[styles.compactBidValue, { color: theme.primary }]}>₹{offer.price}</Text>
+                </Text>
+                {lastPrice !== offer.price && (
+                  <Text style={styles.compactBidLabel}>
+                    {t('Latest:')} <Text style={[styles.compactBidValue, { color: '#DD6B20' }]}>₹{lastPrice}</Text>
+                  </Text>
+                )}
+                <Text style={styles.compactBidLabel}>
+                  {t('Qty:')} <Text style={styles.compactBidValue}>{qty} {offer.unit || 'Ton'}</Text>
+                </Text>
+              </View>
 
-          <View style={styles.metaRow}>
-            {isNegotiable && offer.roundCount != null && (
-              <View style={styles.metaChip}>
-                <Icon name="refresh-circle" size={12} color={COLORS.textMuted} />
-                <Text style={styles.metaChipText}>{t('Round {current}/{max}').replace('{current}', String(offer.roundCount)).replace('{max}', String(maxRounds))}</Text>
-              </View>
-            )}
-            {expiry && !isTerminal && (
-              <View style={[styles.metaChip, { borderColor: '#FBD38D' }]}>
-                <Icon name="timer-outline" size={12} color="#D69E2E" />
-                <Text style={[styles.metaChipText, { color: '#D69E2E' }]}>{expiry}</Text>
-              </View>
-            )}
-            <View style={styles.metaChip}>
-              <Icon name="clock-outline" size={12} color={COLORS.textMuted} />
-              <Text style={styles.metaChipText}>{formatRelative(offer.createdAt, t)}</Text>
-            </View>
-            {commodity.paymentTimeline && (
-              <View style={styles.metaChip}>
-                <Icon name="cash-fast" size={12} color={COLORS.textMuted} />
-                <Text style={styles.metaChipText}>{commodity.paymentTimeline}</Text>
-              </View>
-            )}
-            {commodity.escrowEnabled && (
-              <View style={[styles.metaChip, { borderColor: '#9AE6B4', backgroundColor: '#F0FFF4' }]}>
-                <Icon name="shield-check" size={12} color="#38A169" />
-                <Text style={[styles.metaChipText, { color: '#38A169' }]}>{t('Escrow Secured')}</Text>
-              </View>
-            )}
-          </View>
-
-          {offer.status === 'accepted' && escrowCfg && (
-            <View style={styles.dealBlock}>
-              <View style={styles.dealHeader}>
-                <Icon name={escrowCfg.icon} size={14} color={escrowCfg.color} />
-                <Text style={[styles.dealStatus, { color: escrowCfg.color }]}>{t(escrowCfg.label)}</Text>
-              </View>
-              <View style={styles.progressTrack}>
-                <View style={[styles.progressBar, { width: `${escrowCfg.progress * 100}%`, backgroundColor: escrowCfg.color }]} />
+              <View style={styles.compactMetaRow}>
+                {offer.roundCount != null && (
+                  <Text style={styles.compactMetaText}>
+                    Rnd {offer.roundCount}/{offer.maxNegotiationRounds || 5}
+                  </Text>
+                )}
+                {expiry && !isTerminal && (
+                  <Text style={[styles.compactMetaText, { color: '#D69E2E', fontWeight: '700' }]}>
+                    {expiry}
+                  </Text>
+                )}
+                <Text style={styles.compactMetaText}>
+                  {formatRelative(offer.createdAt, t)}
+                </Text>
               </View>
             </View>
-          )}
 
-          <View style={[styles.ctaRow, { backgroundColor: ctaBgColor }]}>
-            <Icon
-              name={
-                isDeletedListing
-                  ? 'alert-circle-outline'
-                  : offer.status === 'accepted'
-                  ? 'link-variant'
-                  : isMyTurn
-                  ? 'reply'
-                  : 'forum-outline'
-              }
-              size={14}
-              color={isDeletedListing ? COLORS.error : isMyTurn && !isTerminal ? theme.primary : COLORS.textMuted}
-              style={styles.ctaIconMargin}
-            />
-            <Text style={[styles.ctaText, { color: isDeletedListing ? COLORS.error : isMyTurn && !isTerminal ? theme.primary : COLORS.textMuted }]}>
-              {isDeletedListing
-                ? t('Item no longer available')
-                : offer.status === 'accepted'
-                ? t('View Escrow Deal')
-                : isMyTurn
-                ? t('Respond to Counter')
-                : t('View Negotiation Thread')}
-            </Text>
-            {!isDeletedListing && (
-              <Icon name="chevron-right" size={16} color={isMyTurn && !isTerminal ? theme.primary : COLORS.textMuted} />
-            )}
+            <View style={styles.compactCardRight}>
+              <View style={[styles.compactStatusPill, { backgroundColor: statusCfg.bg }]}>
+                <Text style={[styles.compactStatusPillText, { color: statusCfg.color }]}>
+                  {t(statusCfg.label)}
+                </Text>
+              </View>
+              <Icon name="chevron-right" size={16} color="#718096" />
+            </View>
           </View>
         </TouchableOpacity>
       );
-    } else {
-      const listing = item;
+    }
+
+    if (item.type === 'sell_card') {
+      const listing = item.item;
       const id = listing._id || listing.id;
       if (!id) return null;
 
       const rawStatus = (listing.status || 'active').toLowerCase();
       const baseStatusCfg = LISTING_STATUS_CONFIG[rawStatus] || LISTING_STATUS_CONFIG.active;
-      const isSold    = rawStatus === 'sold';
-      const isActive  = rawStatus === 'active';
+      const isSold = rawStatus === 'sold';
       const statusCfg = {
         ...baseStatusCfg,
         color: isSold ? theme.primary : baseStatusCfg.color,
         bg: isSold ? theme.primary + '15' : baseStatusCfg.bg,
       };
 
-      const crop     = listing.commodityName || '—';
-      const variety  = listing.type || null;
+      const crop = listing.commodityName || '—';
+      const variety = listing.type || null;
       const quantity = `${listing.quantity ?? '?'} ${listing.unit || ''}`.trim();
-      const price    = listing.sellingPrice != null ? String(listing.sellingPrice) : 'N/A';
+      const price = listing.sellingPrice != null ? String(listing.sellingPrice) : 'N/A';
       const priceUnit = listing.sellingPriceUnit || 'Qt';
       const location = listing.commodityLocation || '—';
-      const isNegotiableListing = listing.isNegotiable !== false;
-      const tradeType = listing.tradeType || listing.deliveryType || 'FOR';
-      const normalizedTradeType = tradeType === 'EX_WAREHOUSE' ? 'EX-Warehouse' : tradeType;
-
-      const dealId   = listing._dealId || null;
-      const dealObj  = listing._deal   || null;
-      const escrowSt = dealObj?.escrowStatus || null;
-      const escrowCfg = escrowSt ? (ESCROW_STATUS_CONFIG[escrowSt] || ESCROW_STATUS_CONFIG.pending_payment) : null;
-
-      const acceptedOffer = listing._acceptedOffer || null;
-      const buyerObj  = acceptedOffer?.buyerId || acceptedOffer?.buyer || {};
-      const buyerName = buyerObj.firstName
-        ? `${buyerObj.firstName} ${buyerObj.lastName || ''}`.trim()
-        : buyerObj.name || t('Buyer');
-
+      
       const handlePress = () => {
         if (isSold) {
           navigation.navigate('DealDetails', {
-            dealId: dealId || listing.dealId || listing.deal?._id || listing.deal?.id,
-            deal: dealObj,
+            dealId: listing._dealId || listing.dealId || listing.deal?._id || listing.deal?.id,
             item: { id, commodityName: crop, type: variety, ...listing },
             role: 'seller',
           });
@@ -616,138 +673,66 @@ export default function TradesScreen({ navigation }) {
         }
       };
 
-      const accessibilityLabel = t('Sell listing for {crop}{variety}. Status: {status}. Price: ₹{price} per {priceUnit}. Quantity: {quantity}. Trade basis: {tradeType}.')
-        .replace('{crop}', crop)
-        .replace('{variety}', variety ? t(' variety {type}').replace('{type}', variety) : '')
-        .replace('{status}', t(statusCfg.label))
-        .replace('{price}', price)
-        .replace('{priceUnit}', priceUnit)
-        .replace('{quantity}', quantity)
-        .replace('{tradeType}', normalizedTradeType);
-
       return (
         <TouchableOpacity
-          key={id}
+          key={`sell-${id}`}
           style={[
-            styles.offerCard,
-            isSold && { borderLeftWidth: 4, borderLeftColor: theme.primary, borderColor: theme.primary + '30' },
+            styles.compactCard,
+            { borderColor: isSold ? theme.primary + '80' : '#E2E8F0', borderWidth: isSold ? 1.5 : 1 }
           ]}
           onPress={handlePress}
           activeOpacity={0.85}
-          accessible={true}
-          accessibilityRole="button"
-          accessibilityLabel={accessibilityLabel}
-          accessibilityHint={isSold ? t('Deal closed. Double tap to view escrow deal details.') : t('Listing active. Double tap to view received buyer offers.')}
         >
-          {isSold && (
-            <View style={[styles.yourTurnBanner, { backgroundColor: theme.primary }]}>
-              <Icon name="check-decagram" size={13} color={COLORS.white} />
-              <Text style={styles.yourTurnText}>{t('Deal Closed — View Escrow Progress')}</Text>
-            </View>
-          )}
+          <View style={styles.compactCardBody}>
+            <View style={styles.compactCardLeft}>
+              <View style={styles.compactCardTitleRow}>
+                <Text style={styles.compactCropTitle} numberOfLines={1}>
+                  {crop}{variety ? ` (${variety})` : ''}
+                </Text>
+                {location && (
+                  <Text style={styles.compactLocationText} numberOfLines={1}>
+                    • {location}
+                  </Text>
+                )}
+              </View>
 
-          <View style={styles.cardHeader}>
-            <View style={styles.cardFlex}>
-              <Text style={styles.cropTitle}>
-                {crop}{variety ? ` (${variety})` : ''}
-              </Text>
-              <View style={styles.locationRow}>
-                <Icon name="map-marker-outline" size={12} color={COLORS.textMuted} />
-                <Text style={styles.locationText}>{location}</Text>
+              <View style={styles.compactBidDetailsRow}>
+                <Text style={styles.compactBidLabel}>
+                  {t('Price:')} <Text style={[styles.compactBidValue, { color: theme.primary }]}>₹{price}/{priceUnit}</Text>
+                </Text>
+                <Text style={styles.compactBidLabel}>
+                  {t('Qty:')} <Text style={styles.compactBidValue}>{quantity}</Text>
+                </Text>
+              </View>
+
+              <View style={styles.compactMetaRow}>
+                {listing.isNegotiable !== false && (
+                  <Text style={[styles.compactMetaText, { color: theme.primary, fontWeight: '700' }]}>
+                    {t('Negotiable')}
+                  </Text>
+                )}
+                {listing.escrowEnabled && (
+                  <Text style={[styles.compactMetaText, { color: '#38A169', fontWeight: '700' }]}>
+                    {t('Escrow Secured')}
+                  </Text>
+                )}
               </View>
             </View>
-            <View style={[styles.statusBadge, { backgroundColor: statusCfg.bg }]}>
-              <Icon name={statusCfg.icon} size={12} color={statusCfg.color} />
-              <Text style={[styles.statusText, { color: statusCfg.color }]}>{t(statusCfg.label)}</Text>
-            </View>
-          </View>
 
-          <View style={styles.priceStrip}>
-            <View style={styles.priceItem}>
-              <Text style={styles.priceLabel}>{t('Price / {unit}').replace('{unit}', priceUnit)}</Text>
-              <Text style={[styles.priceVal, { color: theme.primary }]}>₹{price}</Text>
-            </View>
-            <View style={styles.priceDivider} />
-            <View style={styles.priceItem}>
-              <Text style={styles.priceLabel}>{t('Quantity')}</Text>
-              <Text style={styles.priceVal}>{quantity}</Text>
-            </View>
-            <View style={styles.priceDivider} />
-            <View style={styles.priceItem}>
-              <Text style={styles.priceLabel}>{t('Trade Basis')}</Text>
-              <Text style={styles.priceVal}>{normalizedTradeType}</Text>
-            </View>
-          </View>
-
-          {isSold && buyerObj.firstName && (
-            <View style={styles.buyerMetaRowSold}>
-              <View style={[styles.metaChip, { borderColor: '#C3DAFE', backgroundColor: '#EBF4FF' }]}>
-                <Icon name="account-check" size={12} color="#3182CE" />
-                <Text style={[styles.metaChipText, { color: '#3182CE' }]}>{t('Buyer: {name}').replace('{name}', buyerName)}</Text>
+            <View style={styles.compactCardRight}>
+              <View style={[styles.compactStatusPill, { backgroundColor: statusCfg.bg }]}>
+                <Text style={[styles.compactStatusPillText, { color: statusCfg.color }]}>
+                  {t(statusCfg.label)}
+                </Text>
               </View>
+              <Icon name="chevron-right" size={16} color="#718096" />
             </View>
-          )}
-
-          {(isActive || listing.escrowEnabled) && (
-            <View style={styles.metaRow}>
-              {isActive && (isNegotiableListing ? (
-                <View style={[styles.metaChip, { borderColor: theme.primary + '30', backgroundColor: theme.primary + '08' }]}>
-                  <Icon name="handshake-outline" size={12} color={theme.primary} />
-                  <Text style={[styles.metaChipText, { color: theme.primary }]}>{t('Negotiation ON')}</Text>
-                </View>
-              ) : (
-                <View style={[styles.metaChip, { borderColor: '#E2E8F0', backgroundColor: '#F8FAFC' }]}>
-                  <Icon name="lock-outline" size={12} color={COLORS.textMuted} />
-                  <Text style={styles.metaChipText}>{t('Fixed Price')}</Text>
-                </View>
-              ))}
-              {listing.escrowEnabled && (
-                <View style={[styles.metaChip, { borderColor: '#9AE6B4', backgroundColor: '#F0FFF4' }]}>
-                  <Icon name="shield-check" size={12} color="#38A169" />
-                  <Text style={[styles.metaChipText, { color: '#38A169' }]}>{t('Escrow Secured')}</Text>
-                </View>
-              )}
-            </View>
-          )}
-
-          {isSold && escrowCfg && (
-            <View style={styles.dealBlock}>
-              <View style={styles.dealHeader}>
-                <Icon name={escrowCfg.icon} size={14} color={escrowCfg.color} />
-                <Text style={[styles.dealStatus, { color: escrowCfg.color }]}>{t(escrowCfg.label)}</Text>
-              </View>
-              <View style={styles.progressTrack}>
-                <View style={[styles.progressBar, { width: `${escrowCfg.progress * 100}%`, backgroundColor: escrowCfg.color }]} />
-              </View>
-            </View>
-          )}
-
-          <View style={[styles.ctaRow, { backgroundColor: isSold ? theme.primary + '10' : '#F8F9FA' }]}>
-            <Icon
-              name={
-                isSold
-                  ? 'link-variant'
-                  : isActive
-                  ? 'download-outline'
-                  : 'clipboard-text-outline'
-              }
-              size={14}
-              color={theme.primary}
-              style={styles.ctaIconMargin}
-            />
-            <Text style={[styles.ctaText, { color: theme.primary }]}>
-              {isSold
-                ? t('View Escrow Deal Details')
-                : isActive
-                ? t('View Received Buyer Offers')
-                : t('View Offer History')}
-            </Text>
-            <Icon name="chevron-right" size={16} color={theme.primary} />
           </View>
         </TouchableOpacity>
       );
     }
-  }, [tradeMode, theme, handleOfferPress, navigation, t]);
+    return null;
+  }, [tradeMode, theme, handleOfferPress, navigation, t, toggleSection]);
 
   const handleRefresh = useCallback(() => loadData(true), [loadData]);
 
@@ -763,32 +748,46 @@ export default function TradesScreen({ navigation }) {
     return (
       <View>
         {apiError && (
-          <View style={styles.errorBanner} accessible={true} accessibilityLabel={t('Error: {msg}').replace('{msg}', t(apiError))}>
-            <Icon name="alert-circle-outline" size={15} color={COLORS.white} />
-            <Text style={styles.errorBannerText}>{t(apiError)}</Text>
+          <View 
+            style={[
+              styles.errorBanner, 
+              { 
+                backgroundColor: theme.primary + '10', 
+                borderColor: theme.primary + '25', 
+                borderBottomWidth: 1.5 
+              }
+            ]} 
+            accessible={true} 
+            accessibilityLabel={t('Notice: {msg}').replace('{msg}', t(apiError))}
+          >
+            <Icon name="information-outline" size={15} color={theme.primary} />
+            <Text style={[styles.errorBannerText, { color: theme.primary, fontWeight: '600' }]}>{t(apiError)}</Text>
             <TouchableOpacity
               onPress={() => loadData(true)}
-              style={styles.retryBadge}
+              style={[styles.retryBadge, { backgroundColor: theme.primary }]}
               accessible={true}
               accessibilityRole="button"
               accessibilityLabel={t('Retry loading data')}
             >
-              <Text style={styles.retryBadgeText}>{t('Retry')}</Text>
+              <Text style={[styles.retryBadgeText, { color: COLORS.white }]}>{t('Retry')}</Text>
             </TouchableOpacity>
           </View>
         )}
+
+        {/* Switcher Guide Text */}
+        <View style={styles.switcherGuideRow}>
+          <Text style={[styles.switcherGuideText, { color: theme.primary }]}>
+            {t('Choose your activity')}
+          </Text>
+        </View>
 
         <View style={styles.switcherContainer}>
           <TouchableOpacity
             style={[
               styles.switcherBtn,
               tradeMode === 'buy' && {
-                backgroundColor: theme.primary,
-                shadowColor: theme.primary,
-                shadowOffset: { width: 0, height: 2 },
-                shadowOpacity: 0.15,
-                shadowRadius: 4,
-                elevation: 3,
+                borderBottomWidth: 3,
+                borderBottomColor: theme.primary,
               },
             ]}
             onPress={() => dispatch({ type: 'SET_MODE', mode: 'buy' })}
@@ -798,7 +797,10 @@ export default function TradesScreen({ navigation }) {
             accessibilityLabel={t('My Bids (Buying)')}
             accessibilityState={{ selected: tradeMode === 'buy' }}
           >
-            <Text style={[styles.switcherText, tradeMode === 'buy' && styles.switcherTextActive]}>
+            <Text style={[
+              styles.switcherText,
+              tradeMode === 'buy' ? { color: theme.primary, fontWeight: '800' } : { color: '#64748B' }
+            ]}>
               {t('My Bids (Buying)')}
             </Text>
           </TouchableOpacity>
@@ -806,12 +808,8 @@ export default function TradesScreen({ navigation }) {
             style={[
               styles.switcherBtn,
               tradeMode === 'sell' && {
-                backgroundColor: theme.primary,
-                shadowColor: theme.primary,
-                shadowOffset: { width: 0, height: 2 },
-                shadowOpacity: 0.15,
-                shadowRadius: 4,
-                elevation: 3,
+                borderBottomWidth: 3,
+                borderBottomColor: theme.primary,
               },
             ]}
             onPress={() => dispatch({ type: 'SET_MODE', mode: 'sell' })}
@@ -821,40 +819,31 @@ export default function TradesScreen({ navigation }) {
             accessibilityLabel={t('My Listings & Quotes')}
             accessibilityState={{ selected: tradeMode === 'sell' }}
           >
-            <Text style={[styles.switcherText, tradeMode === 'sell' && styles.switcherTextActive]}>
+            <Text style={[
+              styles.switcherText,
+              tradeMode === 'sell' ? { color: theme.primary, fontWeight: '800' } : { color: '#64748B' }
+            ]}>
               {t('My Listings & Quotes')}
             </Text>
           </TouchableOpacity>
         </View>
 
-        <View style={styles.orderShortcutRow}>
-          {tradeMode === 'buy' ? (
-            <TouchableOpacity
-              style={[styles.orderShortcutBtn, { borderColor: theme.primary + '30', backgroundColor: theme.primary + '05' }]}
-              onPress={() => navigation.navigate('BuyerOrders')}
-              activeOpacity={0.75}
-            >
-              <Icon name="truck-check-outline" size={16} color={theme.primary} />
-              <Text style={[styles.orderShortcutText, { color: theme.primary }]}>{t('My Purchase Orders')}</Text>
-            </TouchableOpacity>
-          ) : (
-            <TouchableOpacity
-              style={[styles.orderShortcutBtn, { borderColor: theme.primary + '30', backgroundColor: theme.primary + '05' }]}
-              onPress={() => navigation.navigate('SellerOrders')}
-              activeOpacity={0.75}
-            >
-              <Icon name="clipboard-check-outline" size={16} color={theme.primary} />
-              <Text style={[styles.orderShortcutText, { color: theme.primary }]}>{t('My Dispatch Orders')}</Text>
-            </TouchableOpacity>
-          )}
+        {/* Section label — visual identity separator between switcher and tab filters */}
+        <View style={styles.filterLabelRow}>
+          <View style={[styles.filterLabelLine, { backgroundColor: theme.primary + '25' }]} />
+          <Text style={[styles.filterLabelText, { color: theme.primary }]}>
+            {t('Filter by Status')}
+          </Text>
+          <View style={[styles.filterLabelLine, { backgroundColor: theme.primary + '25' }]} />
         </View>
 
-        {true && (
-          <>
+        {(() => {
+          const tabFilters = tradeMode === 'buy' ? BUY_TAB_FILTERS : SELL_TAB_FILTERS;
+          return (
             <View style={styles.tabBar}>
               <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tabBarContent} keyboardShouldPersistTaps="handled">
-                {TAB_FILTERS.map(tab => {
-                  const isActive = tab === activeTab;
+                {tabFilters.map(tab => {
+                  const isSelected = tab === activeTab;
                   const inNegBadge = tradeMode === 'buy' && tab === 'In Negotiation' &&
                     uniqueOffers.some(o => ['in_negotiation', 'negotiating', 'countered'].includes(normalizeStatus(o.displayStatus || o.status)) && o.currentTurn === 'buyer');
                   return (
@@ -862,67 +851,78 @@ export default function TradesScreen({ navigation }) {
                       key={tab}
                       style={[
                         styles.tabChip,
-                        isActive && { backgroundColor: theme.primary, borderColor: theme.primary },
+                        isSelected && { backgroundColor: theme.primary, borderColor: theme.primary },
                         inNegBadge && { flexDirection: 'row', alignItems: 'center', gap: w(4) }
                       ]}
                       onPress={() => dispatch({ type: 'SET_TAB', tab })}
                       accessible={true}
                       accessibilityRole="button"
-                      accessibilityLabel={t('{tab} filter').replace('{tab}', t(tab))}
-                      accessibilityState={{ selected: isActive }}
-                      accessibilityHint={inNegBadge ? t('Counter offer received from seller. Tapping filters list to items awaiting your response.') : t('Filters offers to show {tab}').replace('{tab}', t(tab))}
+                      accessibilityLabel={t(tab)}
+                      accessibilityState={{ selected: isSelected }}
                     >
-                      <Text style={[styles.tabChipText, isActive && { color: COLORS.white }]}>
-                        {tab === 'Accepted' && tradeMode === 'sell' ? t('Sold') : t(tab)}
+                      <Text style={[styles.tabChipText, isSelected && { color: COLORS.white, fontWeight: '800' }]}>
+                        {t(tab)}
                       </Text>
                       {inNegBadge && (
-                        <Icon name="circle" size={8} color={COLORS.error} />
+                        <View style={styles.urgentDot} />
                       )}
                     </TouchableOpacity>
                   );
                 })}
               </ScrollView>
             </View>
+          );
+        })()}
 
-            {cropChips.length > 2 && (
-              <View style={styles.cropChipsBar}>
-                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.cropChipsContent} keyboardShouldPersistTaps="handled">
-                  {cropChips.map(crop => (
-                    <TouchableOpacity
-                      key={crop}
-                      style={[styles.cropChip, selectedCrop === crop && { borderColor: theme.primary, backgroundColor: theme.primary + '10' }]}
-                      onPress={() => dispatch({ type: 'SET_CROP', crop })}
-                      accessible={true}
-                      accessibilityRole="button"
-                      accessibilityLabel={crop === 'All' ? t('All crop filter') : t('{crop} crop filter').replace('{crop}', crop)}
-                      accessibilityState={{ selected: selectedCrop === crop }}
-                    >
-                      <Text style={[styles.cropChipText, selectedCrop === crop && { color: theme.primary, fontWeight: '700' }]}>
-                        {crop === 'All' ? t('All') : crop}
-                      </Text>
-                    </TouchableOpacity>
-                  ))}
-                </ScrollView>
-              </View>
-            )}
+        {/* Crop Filter Chips */}
+        {cropChips.length > 1 && (
+          <>
+            <View style={styles.filterLabelRow}>
+              <View style={[styles.filterLabelLine, { backgroundColor: theme.primary + '25' }]} />
+              <Text style={[styles.filterLabelText, { color: theme.primary }]}>
+                {t('Filter by Crop / Commodity')}
+              </Text>
+              <View style={[styles.filterLabelLine, { backgroundColor: theme.primary + '25' }]} />
+            </View>
+            <View style={styles.cropChipsBar}>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.cropChipsContent}
+              keyboardShouldPersistTaps="handled"
+            >
+              {cropChips.map(crop => {
+                const isSelected = crop === selectedCrop;
+                return (
+                  <TouchableOpacity
+                    key={crop}
+                    style={[
+                      styles.cropChip,
+                      isSelected && { backgroundColor: theme.primary, borderColor: theme.primary }
+                    ]}
+                    onPress={() => dispatch({ type: 'SET_CROP', crop })}
+                    accessible={true}
+                    accessibilityRole="button"
+                    accessibilityLabel={t('Filter by crop {crop}').replace('{crop}', t(crop))}
+                    accessibilityState={{ selected: isSelected }}
+                  >
+                    <Text style={[
+                      styles.cropChipText,
+                      isSelected && { color: COLORS.white, fontWeight: '700' }
+                    ]}>
+                      {t(crop)}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+          </View>
           </>
         )}
 
-        <Text style={[styles.countLabel, { color: theme.primary, marginHorizontal: w(16), marginTop: h(12) }]} accessibilityLiveRegion="polite">
-          {tradeMode === 'buy'
-            ? (filteredOffers.length === 1
-                ? t('1 offer')
-                : t('{count} offers').replace('{count}', String(filteredOffers.length)))
-            : (filteredSellListings.length === 1
-                ? (activeTab === 'Active' ? t('1 active listing for sale') : t('1 listing'))
-                : (activeTab === 'Active'
-                    ? t('{count} active listings for sale').replace('{count}', String(filteredSellListings.length))
-                    : t('{count} listings').replace('{count}', String(filteredSellListings.length))))
-          }
-        </Text>
       </View>
     );
-  }, [apiError, tradeMode, activeTab, selectedCrop, cropChips, filteredOffers.length, filteredSellListings.length, uniqueOffers, theme, loadData, navigation, t]);
+  }, [apiError, tradeMode, activeTab, selectedCrop, cropChips, uniqueOffers, theme, loadData, navigation, t]);
 
   const listEmpty = useMemo(() => {
     if (apiError) return null;
@@ -950,17 +950,9 @@ export default function TradesScreen({ navigation }) {
             </>
           )}
           {activeTab === 'All' && !backendCrash && (
-            <TouchableOpacity
-              style={[styles.browseBtn, { backgroundColor: theme.primary }]}
-              onPress={() => navigation.navigate('Market')}
-              accessible={true}
-              accessibilityRole="button"
-              accessibilityLabel={t('Browse Marketplace')}
-              accessibilityHint={t('Navigate to browse commodities marketplace screen')}
-            >
-              <Icon name="store-outline" size={16} color={COLORS.white} />
-              <Text style={styles.browseBtnText}>{t('Browse Marketplace')}</Text>
-            </TouchableOpacity>
+            <Text style={[styles.emptySubHint, { color: theme.primary }]}>
+              {t('Go to Market tab to place offers on listings.')}
+            </Text>
           )}
         </View>
       );
@@ -969,28 +961,33 @@ export default function TradesScreen({ navigation }) {
       return (
         <View style={styles.emptyState} accessible={true}>
           <Icon name="store-outline" size={56} color={COLORS.textMuted} />
-          <Text style={styles.emptyTitle}>{t('No Active Listings')}</Text>
-          <Text style={styles.emptyText}>
-            {t("You haven't listed any crops for sale in the marketplace yet.")}
+          <Text style={styles.emptyTitle}>
+            {activeTab === 'Sold' ? t('No Sold Deals Yet') :
+             activeTab === 'In Negotiation' ? t('No Active Negotiations') :
+             activeTab === 'Closed' ? t('No Closed Deals') :
+             t('No Listings Found')}
           </Text>
-          <TouchableOpacity
-            style={[styles.browseBtn, { backgroundColor: theme.primary }]}
-            onPress={() => navigation.navigate('Sell')}
-            accessible={true}
-            accessibilityRole="button"
-            accessibilityLabel={t('Create Sell Offer')}
-            accessibilityHint={t('Navigate to list a new crop for sale')}
-          >
-            <Icon name="plus-circle-outline" size={16} color={COLORS.white} />
-            <Text style={styles.browseBtnText}>{t('Create Sell Offer')}</Text>
-          </TouchableOpacity>
+          <Text style={styles.emptyText}>
+            {activeTab === 'All' || activeTab === 'Active'
+              ? t("You haven't listed any crops for sale in the marketplace yet.")
+              : t('No listings with this status right now.')}
+          </Text>
+          {(activeTab === 'All' || activeTab === 'Active') && (
+            <Text style={[styles.emptySubHint, { color: theme.primary }]}>
+              {t('Use the Sell tab at the bottom to create a new listing.')}
+            </Text>
+          )}
         </View>
       );
     }
   }, [apiError, tradeMode, filteredOffers.length, filteredSellListings.length, backendCrash, activeTab, theme.primary, navigation, t]);
 
   const keyExtractor = useCallback((item, index) => {
-    return item?.id || item?._id || String(index);
+    if (item.type === 'section_header') {
+      return `header-${item.sectionKey}`;
+    }
+    const inner = item.item || {};
+    return `${item.type}-${inner.id || inner._id || index}`;
   }, []);
 
   if (loading) {
@@ -1020,7 +1017,7 @@ export default function TradesScreen({ navigation }) {
       />
 
       <FlatList
-        data={tradeMode === 'buy' ? filteredOffers : filteredSellListings}
+        data={groupedListData}
         keyExtractor={keyExtractor}
         contentContainerStyle={flatListContentStyle}
         showsVerticalScrollIndicator={false}
@@ -1084,37 +1081,164 @@ const styles = StyleSheet.create({
   },
   // Tab Bar
   tabBar: {
-    backgroundColor: COLORS.white,
+    backgroundColor: '#FAFBFF',
     paddingVertical: h(12),
     borderBottomWidth: 1,
-    borderBottomColor: '#F1F5F9',
+    borderBottomColor: '#ECEEF4',
   },
   tabBarContent: {
     paddingHorizontal: w(16),
     gap: w(8),
   },
   tabChip: {
-    paddingHorizontal: w(16),
+    paddingHorizontal: w(18),
     paddingVertical: h(8),
-    borderRadius: 20,
-    backgroundColor: '#F1F5F9',
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
+    borderRadius: 22,
+    backgroundColor: '#EEF2F7',
+    borderWidth: 1.5,
+    borderColor: '#D8DFEA',
   },
   tabChipText: {
-    fontSize: f(12),
-    fontWeight: '600',
-    color: COLORS.textLight,
+    fontSize: f(12.5),
+    fontWeight: '700',
+    color: '#4A5568',
+  },
+  urgentDot: {
+    width: w(6),
+    height: w(6),
+    borderRadius: w(3),
+    backgroundColor: '#E53E3E',
   },
   listContent: {
     padding: w(16),
     paddingBottom: h(30),
   },
-  countLabel: {
-    fontSize: f(12),
-    fontWeight: '700',
-    marginBottom: h(12),
-    marginTop: h(4),
+  accordionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: h(10),
+    paddingHorizontal: w(14),
+    borderRadius: 12,
+    borderWidth: 1.2,
+    marginHorizontal: w(16),
+    marginTop: h(12),
+    marginBottom: h(4),
+  },
+  compactSoldCard: {
+    backgroundColor: COLORS.white,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderLeftWidth: 4,
+    marginHorizontal: w(16),
+    marginVertical: h(5),
+    paddingHorizontal: w(14),
+    paddingVertical: h(10),
+  },
+  compactCardContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  compactTextContainer: {
+    flex: 1,
+  },
+  compactTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: w(8),
+    marginBottom: h(2),
+  },
+  compactCropTitle: {
+    fontSize: f(13.5),
+    fontWeight: '800',
+    color: '#2D3748',
+  },
+  compactInfoSub: {
+    fontSize: f(11),
+    color: COLORS.textMuted,
+    fontWeight: '500',
+  },
+  compactBuyerSub: {
+    fontSize: f(10.5),
+    color: '#4A5568',
+    fontWeight: '600',
+    marginTop: h(2),
+  },
+  compactChevron: {
+    marginLeft: w(8),
+  },
+  compactStatusBadge: {
+    borderRadius: 6,
+    paddingHorizontal: w(6),
+    paddingVertical: h(2.5),
+  },
+  compactStatusBadgeText: {
+    fontSize: f(9),
+    fontWeight: '800',
+  },
+  compactEscrowBadge: {
+    borderRadius: 6,
+    borderWidth: 1,
+    paddingHorizontal: w(6),
+    paddingVertical: h(2.5),
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  compactEscrowBadgeText: {
+    fontSize: f(9),
+    fontWeight: '800',
+  },
+  accordionLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  accordionTitle: {
+    fontSize: f(13),
+    fontWeight: '800',
+    letterSpacing: 0.1,
+  },
+  accordionSubtitle: {
+    fontSize: f(10),
+    color: COLORS.textMuted,
+    marginTop: h(2),
+  },
+  accordionBadge: {
+    borderRadius: 12,
+    paddingHorizontal: w(8),
+    paddingVertical: h(2),
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  accordionBadgeText: {
+    fontSize: f(10.5),
+    fontWeight: '800',
+    color: COLORS.white,
+  },
+  sectionHeadingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginHorizontal: w(16),
+    marginTop: h(16),
+    marginBottom: h(8),
+    gap: w(6),
+  },
+  sectionHeadingText: {
+    fontSize: f(13),
+    fontWeight: '800',
+    letterSpacing: 0.1,
+  },
+  sectionCountBadge: {
+    borderRadius: 12,
+    paddingHorizontal: w(8),
+    paddingVertical: h(2),
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  sectionCountBadgeText: {
+    fontSize: f(10.5),
+    fontWeight: '800',
   },
   // Empty State
   emptyState: {
@@ -1149,6 +1273,13 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     fontSize: f(13),
   },
+  emptySubHint: {
+    fontSize: f(12),
+    fontWeight: '600',
+    textAlign: 'center',
+    marginTop: h(4),
+    paddingHorizontal: w(20),
+  },
   // Offer Card
   offerCard: {
     backgroundColor: COLORS.white,
@@ -1165,10 +1296,17 @@ const styles = StyleSheet.create({
   },
   yourTurnBanner: {
     paddingHorizontal: w(16),
-    paddingVertical: h(8),
+    paddingVertical: h(9),
     flexDirection: 'row',
     alignItems: 'center',
     gap: w(6),
+  },
+  yourTurnDot: {
+    width: w(5),
+    height: w(5),
+    borderRadius: w(3),
+    backgroundColor: 'rgba(255,255,255,0.45)',
+    marginLeft: w(2),
   },
   yourTurnText: {
     color: COLORS.white,
@@ -1328,58 +1466,31 @@ const styles = StyleSheet.create({
   // Buy/Sell switcher styles
   switcherContainer: {
     flexDirection: 'row',
-    backgroundColor: '#E2E8F0',
-    borderRadius: 14,
     marginHorizontal: w(16),
-    marginTop: h(14),
-    padding: w(4),
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.04,
-    shadowRadius: 3,
-    elevation: 1,
-  },
-  orderShortcutRow: {
-    flexDirection: 'row',
-    gap: w(12),
-    marginHorizontal: w(16),
-    marginTop: h(12),
-  },
-  orderShortcutBtn: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: w(8),
-    borderWidth: 1.5,
-    borderRadius: 14,
-    paddingVertical: h(11),
-    backgroundColor: COLORS.white,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
-    elevation: 2,
-  },
-  orderShortcutText: {
-    fontSize: f(12),
-    fontWeight: '800',
+    marginTop: h(2),
+    borderBottomWidth: 1,
+    borderBottomColor: '#E2E8F0',
   },
   switcherBtn: {
     flex: 1,
-    paddingVertical: h(10),
-    paddingHorizontal: w(12),
-    borderRadius: 10,
+    paddingVertical: h(12),
     alignItems: 'center',
     justifyContent: 'center',
   },
   switcherText: {
-    fontSize: f(12),
-    fontWeight: '700',
-    color: COLORS.textLight,
+    fontSize: f(13),
+    fontWeight: '600',
   },
-  switcherTextActive: {
-    color: COLORS.white,
+  switcherGuideRow: {
+    marginHorizontal: w(16),
+    marginTop: h(14),
+    marginBottom: h(4),
+  },
+  switcherGuideText: {
+    fontSize: f(11),
+    fontWeight: '800',
+    letterSpacing: 0.5,
+    textTransform: 'uppercase',
   },
   // Crop Chips filter styles
   cropChipsBar: {
@@ -1425,5 +1536,176 @@ const styles = StyleSheet.create({
     gap: w(6),
     paddingHorizontal: w(14),
     marginBottom: h(10),
+  },
+
+  // ─── Filter Label Divider ─────────────────────────────────────────
+  filterLabelRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginHorizontal: w(16),
+    marginTop: h(14),
+    marginBottom: h(2),
+    gap: w(10),
+  },
+  filterLabelLine: {
+    flex: 1,
+    height: 1,
+  },
+  filterLabelText: {
+    fontSize: f(10),
+    fontWeight: '800',
+    letterSpacing: 0.8,
+    textTransform: 'uppercase',
+  },
+
+  // ─── Accordion Headers ────────────────────────────────────────────
+  sectionAccordionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    borderWidth: 1,
+    paddingHorizontal: w(12),
+    paddingVertical: h(10),
+    marginTop: h(12),
+    marginBottom: h(6),
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.02,
+    shadowRadius: 2,
+    elevation: 1,
+  },
+  sectionAccordionLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: w(8),
+    flex: 1,
+  },
+  sectionIconBg: {
+    width: w(28),
+    height: w(28),
+    borderRadius: w(14),
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  sectionAccordionTitle: {
+    fontSize: f(13.5),
+    fontWeight: '800',
+    letterSpacing: -0.1,
+  },
+  sectionAccordionRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: w(4),
+  },
+  sectionCountBadgeCompact: {
+    paddingHorizontal: w(6),
+    paddingVertical: h(2),
+    borderRadius: 8,
+    minWidth: w(18),
+    alignItems: 'center',
+  },
+  sectionCountTextCompact: {
+    fontSize: f(10),
+    fontWeight: '800',
+  },
+
+  // ─── Compact Cards ───────────────────────────────────────────────
+  compactCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    marginBottom: h(8),
+    borderWidth: 1,
+    overflow: 'hidden',
+    shadowColor: '#0F172A',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.03,
+    shadowRadius: 3,
+    elevation: 1,
+  },
+  compactUrgentStrip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: h(4),
+    paddingHorizontal: w(10),
+  },
+  compactUrgentText: {
+    color: '#FFFFFF',
+    fontSize: f(9),
+    fontWeight: '800',
+    letterSpacing: 0.5,
+    textTransform: 'uppercase',
+  },
+  compactCardBody: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: w(12),
+    paddingVertical: h(10),
+  },
+  compactCardLeft: {
+    flex: 1,
+    gap: h(4),
+  },
+  compactCardRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: w(6),
+    marginLeft: w(8),
+  },
+  compactCardTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+  },
+  compactCropTitle: {
+    fontSize: f(14),
+    fontWeight: '800',
+    color: '#1E293B',
+    letterSpacing: -0.2,
+  },
+  compactLocationText: {
+    fontSize: f(11),
+    color: '#64748B',
+    fontWeight: '500',
+    marginLeft: w(4),
+  },
+  compactBidDetailsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: w(10),
+  },
+  compactBidLabel: {
+    fontSize: f(11),
+    color: '#64748B',
+    fontWeight: '600',
+  },
+  compactBidValue: {
+    fontWeight: '800',
+    color: '#0F172A',
+  },
+  compactMetaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: w(8),
+    marginTop: h(2),
+  },
+  compactMetaText: {
+    fontSize: f(10),
+    color: '#94A3B8',
+    fontWeight: '600',
+  },
+  compactStatusPill: {
+    paddingHorizontal: w(8),
+    paddingVertical: h(3.5),
+    borderRadius: 6,
+  },
+  compactStatusPillText: {
+    fontSize: f(9.5),
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    letterSpacing: 0.2,
   },
 });

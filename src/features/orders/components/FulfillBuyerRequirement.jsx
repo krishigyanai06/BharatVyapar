@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Modal, View, Text, TextInput, TouchableOpacity, StyleSheet, ActivityIndicator } from 'react-native';
 
-export default function FulfillRequirementBottomSheet({ visible, requirement, onClose, onSubmit }) {
+export default function FulfillBuyerRequirement({ visible, requirement, onClose, onSubmit }) {
   const [quantity, setQuantity] = useState('');
   const [price, setPrice] = useState('');
   const [dispatchTime, setDispatchTime] = useState('');

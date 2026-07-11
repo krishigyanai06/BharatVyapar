@@ -2,7 +2,6 @@ import React from 'react';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import AppTabs from './AppTabs';
 import WarehouseScreen from '../../features/warehouse/screens/WarehouseScreen';
-import FinanceScreen from '../../features/finance/screens/FinanceScreen';
 
 // New static screens for Marketplace & Trades flow
 import CommodityDetailsScreen from '../../features/marketplace/screens/CommodityDetailsScreen';
@@ -21,7 +20,6 @@ export default function AppStack() {
     <Stack.Navigator screenOptions={SCREEN_OPTIONS}>
       <Stack.Screen name="MainTabs" component={AppTabs} />
       <Stack.Screen name="WarehouseScreen" component={WarehouseScreen} />
-      <Stack.Screen name="FinanceScreen" component={FinanceScreen} />
       
       {/* Marketplace & Trades flows */}
       <Stack.Screen name="CommodityDetails" component={CommodityDetailsScreen} />

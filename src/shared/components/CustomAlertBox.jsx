@@ -105,7 +105,9 @@ const CustomAlertInner = forwardRef((_, ref) => {
       setConfig({
         type: options.type || 'info',
         title: options.title || '',
-        message: options.message ? getFriendlyErrorMessage(options.message) : '',
+        message: options.message
+          ? (options.type === 'error' ? getFriendlyErrorMessage(options.message) : String(options.message))
+          : '',
         buttons:
           options.buttons && options.buttons.length > 0
             ? options.buttons
