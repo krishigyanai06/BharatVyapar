@@ -204,11 +204,18 @@ global.requestIdleCallback = (callback) => {
 global.cancelIdleCallback = () => {};
 
 // Mock useTranslation globally
-jest.mock('./src/hook/useTranslation', () => ({
+const mockT = (str) => str || '';
+jest.mock('./src/shared/hooks/useTranslation', () => ({
   useTranslation: () => ({
-    t: (str) => str || '',
+    t: mockT,
     currentLanguage: 'en',
   }),
+}));
+
+// Mock NetInfo Native Module
+jest.mock('@react-native-community/netinfo', () => ({
+  addEventListener: jest.fn(),
+  fetch: jest.fn(() => Promise.resolve({ isConnected: true })),
 }));
 
 

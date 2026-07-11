@@ -1,8 +1,9 @@
 import React from 'react';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
-import RoleSelectionScreen from '../../screen/auth/RoleSelectionScreen';
-import SendOtp from '../../screen/auth/SendOtp';
-import VerifyMobileOtp from '../../screen/auth/VerifyMobileOtp';
+import RoleSelectionScreen from '../../features/auth/screens/RoleSelectionScreen';
+import SendOtp from '../../features/auth/screens/SendOtp';
+import VerifyMobileOtp from '../../features/auth/screens/VerifyMobileOtp';
+
 
 const Stack = createNativeStackNavigator();
 

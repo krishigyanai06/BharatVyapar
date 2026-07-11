@@ -1,7 +1,8 @@
 import { createSlice, createAsyncThunk } from '@reduxjs/toolkit';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { translateTextService, translateBatchService } from '../service/translation/translationService';
-import { storage, initStorage } from '../service/storage';
+import { translateTextService, translateBatchService } from '../shared/utils/translationService';
+import { storage, initStorage } from '../shared/utils/storage';
+
 import enStrings from '../locales/en.json';
 import hiStrings from '../locales/hi.json';
 
