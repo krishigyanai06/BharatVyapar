@@ -41,11 +41,12 @@ import { pick, types, isCancel } from '@react-native-documents/picker';
 import { showAlert } from '../../../shared/components/CustomAlertBox';
 import { getFriendlyErrorMessage } from '../../../shared/utils/errorUtils';
 import { submitSellListing } from '../marketplace.service';
+import { useTranslation } from '../../../shared/hooks/useTranslation';
 
 
 
 
-export const IMAGE_MAX_SIZE_MB = 5;
+export const IMAGE_MAX_SIZE_MB = 10;
 export const UNIT_TO_PRICE_UNIT = { Ton: 'Ton', Quintal: 'Qt', Kg: 'Kg' };
 
 const INITIAL_STATE = {
@@ -104,6 +105,7 @@ function sellFormReducer(state, action) {
 
 export const useSellCommoditiesForm = ({ route, navigation }) => {
   const [state, dispatch] = useReducer(sellFormReducer, INITIAL_STATE);
+  const { t } = useTranslation();
 
   const abortControllerRef = useRef(null);
   const isMountedRef       = useRef(true);
@@ -323,14 +325,121 @@ export const useSellCommoditiesForm = ({ route, navigation }) => {
     // Check image sizes
     if (Array.isArray(currentState.commodityImages)) {
       for (const img of currentState.commodityImages) {
-        if (img?.fileSize && img.fileSize > 5 * 1024 * 1024) {
+        if (img?.fileSize && img.fileSize > IMAGE_MAX_SIZE_MB * 1024 * 1024) {
           showAlert({
             type: 'error',
-            title: 'Image Too Large',
-            message: 'Image size cannot exceed 5MB.',
+            title: t('Image Too Large'),
+            message: t('Image size cannot exceed {size}MB.').replace('{size}', String(IMAGE_MAX_SIZE_MB)),
           });
           return;
         }
+      }
+    }
+
+    // ─── Frontend Field Validations ───
+    if (!currentState.commodityName.trim()) {
+      showAlert({ type: 'warning', title: t('Field Required'), message: t('Please enter the Commodity Name.') });
+      return;
+    }
+    if (currentState.commodityName.length > 100) {
+      showAlert({ type: 'warning', title: t('Input Too Long'), message: t('Commodity Name cannot exceed 100 characters.') });
+      return;
+    }
+    if (currentState.type && currentState.type.length > 100) {
+      showAlert({ type: 'warning', title: t('Input Too Long'), message: t('Variety/Type cannot exceed 100 characters.') });
+      return;
+    }
+
+    if (!currentState.quantity.trim()) {
+      showAlert({ type: 'warning', title: t('Field Required'), message: t('Please enter the Available Quantity.') });
+      return;
+    }
+    const parsedQty = Number(currentState.quantity.trim());
+    if (isNaN(parsedQty) || parsedQty <= 0) {
+      showAlert({ type: 'warning', title: t('Invalid Input'), message: t('Please enter a valid Quantity greater than 0.') });
+      return;
+    }
+    if (parsedQty > 100000000) {
+      showAlert({ type: 'warning', title: t('Invalid Quantity'), message: t('Quantity cannot exceed 100,000,000.') });
+      return;
+    }
+
+    if (!currentState.sellingPrice.trim()) {
+      showAlert({ type: 'warning', title: t('Field Required'), message: t('Please enter the Expected Price.') });
+      return;
+    }
+    const parsedPrice = Number(currentState.sellingPrice.trim());
+    if (isNaN(parsedPrice) || parsedPrice <= 0) {
+      showAlert({ type: 'warning', title: t('Invalid Input'), message: t('Please enter a valid Expected Price greater than 0.') });
+      return;
+    }
+    if (parsedPrice > 10000000) {
+      showAlert({ type: 'warning', title: t('Invalid Price'), message: t('Expected Price cannot exceed ₹10,000,000.') });
+      return;
+    }
+
+    // Bidding checks
+    if (currentState.isNegotiable) {
+      if (currentState.minimumAcceptablePrice.trim()) {
+        const parsedMinPrice = Number(currentState.minimumAcceptablePrice.trim());
+        if (isNaN(parsedMinPrice) || parsedMinPrice <= 0) {
+          showAlert({ type: 'warning', title: t('Invalid Input'), message: t('Please enter a valid Minimum Price.') });
+          return;
+        }
+        if (parsedMinPrice > parsedPrice) {
+          showAlert({ type: 'warning', title: t('Validation Error'), message: t('Minimum price cannot be greater than the Expected Price.') });
+          return;
+        }
+      }
+      if (currentState.maxNegotiationRounds.trim()) {
+        const parsedRounds = Number(currentState.maxNegotiationRounds.trim());
+        if (isNaN(parsedRounds) || parsedRounds < 1 || parsedRounds > 20) {
+          showAlert({ type: 'warning', title: t('Invalid Input'), message: t('Negotiation rounds must be a whole number between 1 and 20.') });
+          return;
+        }
+      }
+      if (currentState.offerExpiryHours.trim()) {
+        const parsedHours = Number(currentState.offerExpiryHours.trim());
+        if (isNaN(parsedHours) || parsedHours < 1 || parsedHours > 720) {
+          showAlert({ type: 'warning', title: t('Invalid Input'), message: t('Offer expiry hours must be between 1 and 720.') });
+          return;
+        }
+      }
+    }
+
+    // Logistics checks
+    if (currentState.deliveryType === 'EX_WAREHOUSE' && !currentState.exWarehouseAddress.trim()) {
+      showAlert({ type: 'warning', title: t('Field Required'), message: t('Please enter the Pickup Warehouse Address.') });
+      return;
+    }
+    if (!currentState.commodityLocation.trim()) {
+      showAlert({ type: 'warning', title: t('Field Required'), message: t('Please enter the Stock Location.') });
+      return;
+    }
+    if (!currentState.listingEndDate.trim()) {
+      showAlert({ type: 'warning', title: t('Field Required'), message: t('Please select the Listing Expiry Date.') });
+      return;
+    }
+
+    // Quality parameters checks
+    const checkPercentage = (val, fieldName) => {
+      if (val.trim()) {
+        const num = Number(val.trim());
+        if (isNaN(num) || num < 0 || num > 100) {
+          showAlert({ type: 'warning', title: t('Invalid Percentage'), message: t('{field} percentage must be between 0 and 100.').replace('{field}', fieldName) });
+          return false;
+        }
+      }
+      return true;
+    };
+    if (!checkPercentage(currentState.moisture, t('Moisture'))) return;
+    if (!checkPercentage(currentState.foreignMaterial, t('Foreign Material'))) return;
+    if (!checkPercentage(currentState.broken, t('Broken / Damaged'))) return;
+    if (currentState.weightTolerance.trim()) {
+      const parsedTol = Number(currentState.weightTolerance.trim());
+      if (isNaN(parsedTol) || parsedTol < 0 || parsedTol > 20) {
+        showAlert({ type: 'warning', title: t('Invalid Input'), message: t('Weight Tolerance percentage must be between 0% and 20%.') });
+        return;
       }
     }
 

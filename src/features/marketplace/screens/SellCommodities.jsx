@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useCallback } from 'react';
 import {
   View,
   Text,
@@ -177,6 +177,15 @@ export default function SellCommodities({ route, navigation }) {
     handleWeightTypeChange,
   } = handlers;
 
+  const getInputStyle = useCallback((fieldKey) => [
+    styles.textInput,
+    focusedField === fieldKey && { 
+      borderColor: theme.primary, 
+      borderWidth: 2, 
+      backgroundColor: COLORS.white 
+    }
+  ], [focusedField, theme.primary]);
+
   return (
     <SafeScreen style={styles.container} top={false} bottom={false}>
       <AppHeader
@@ -221,10 +230,7 @@ export default function SellCommodities({ route, navigation }) {
           <View style={styles.formGroup}>
             <Text style={styles.inputLabel}>{t('Commodity Name *')}</Text>
             <TextInput
-              style={[
-                styles.textInput,
-                focusedField === 'commodityName' && { borderColor: theme.primary, backgroundColor: COLORS.white }
-              ]}
+              style={getInputStyle('commodityName')}
               value={commodityName}
               onChangeText={setCommodityName}
               placeholder={t('e.g. Wheat, Soybean')}
@@ -240,10 +246,7 @@ export default function SellCommodities({ route, navigation }) {
           <View style={styles.formGroup}>
             <Text style={styles.inputLabel}>{t('Variety / Type')}</Text>
             <TextInput
-              style={[
-                styles.textInput,
-                focusedField === 'type' && { borderColor: theme.primary, backgroundColor: COLORS.white }
-              ]}
+              style={getInputStyle('type')}
               value={type}
               onChangeText={setType}
               placeholder={t('e.g. Lokwan, Desi')}
@@ -259,10 +262,7 @@ export default function SellCommodities({ route, navigation }) {
           <View style={styles.formGroup}>
             <Text style={styles.inputLabel}>{t('Available Qty *')}</Text>
             <TextInput
-              style={[
-                styles.textInput,
-                focusedField === 'quantity' && { borderColor: theme.primary, backgroundColor: COLORS.white }
-              ]}
+              style={getInputStyle('quantity')}
               value={quantity}
               onChangeText={setQuantity}
               placeholder={t('e.g. 50')}
@@ -304,10 +304,7 @@ export default function SellCommodities({ route, navigation }) {
           <View style={styles.formGroup}>
             <Text style={styles.inputLabel}>{t('Expected Price *')}</Text>
             <TextInput
-              style={[
-                styles.textInput,
-                focusedField === 'sellingPrice' && { borderColor: theme.primary, backgroundColor: COLORS.white }
-              ]}
+              style={getInputStyle('sellingPrice')}
               value={sellingPrice}
               onChangeText={setSellingPrice}
               placeholder={t('e.g. 2400')}
@@ -362,10 +359,7 @@ export default function SellCommodities({ route, navigation }) {
               <View style={styles.formGroup}>
                 <Text style={styles.inputLabel}>{t('Min Price (₹)')}</Text>
                 <TextInput
-                  style={[
-                    styles.textInput,
-                    focusedField === 'minimumAcceptablePrice' && { borderColor: theme.primary, backgroundColor: COLORS.white }
-                  ]}
+                  style={getInputStyle('minimumAcceptablePrice')}
                   value={minimumAcceptablePrice}
                   onChangeText={setMinimumAcceptablePrice}
                   placeholder={t('e.g. 2300')}
@@ -382,10 +376,7 @@ export default function SellCommodities({ route, navigation }) {
               <View style={styles.formGroup}>
                 <Text style={styles.inputLabel}>{t('Max Negotiation Rounds')}</Text>
                 <TextInput
-                  style={[
-                    styles.textInput,
-                    focusedField === 'maxNegotiationRounds' && { borderColor: theme.primary, backgroundColor: COLORS.white }
-                  ]}
+                  style={getInputStyle('maxNegotiationRounds')}
                   value={maxNegotiationRounds}
                   onChangeText={setMaxNegotiationRounds}
                   placeholder={t('e.g. 5')}
@@ -402,10 +393,7 @@ export default function SellCommodities({ route, navigation }) {
               <View style={styles.formGroup}>
                 <Text style={styles.inputLabel}>{t('Offer Expiry (Hours)')}</Text>
                 <TextInput
-                  style={[
-                    styles.textInput,
-                    focusedField === 'offerExpiryHours' && { borderColor: theme.primary, backgroundColor: COLORS.white }
-                  ]}
+                  style={getInputStyle('offerExpiryHours')}
                   value={offerExpiryHours}
                   onChangeText={setOfferExpiryHours}
                   placeholder={t('e.g. 24')}
@@ -469,10 +457,7 @@ export default function SellCommodities({ route, navigation }) {
             <View style={styles.formGroup}>
               <Text style={styles.inputLabel}>{t('Pickup Warehouse Address *')}</Text>
               <TextInput
-                style={[
-                  styles.textInput,
-                  focusedField === 'exWarehouseAddress' && { borderColor: theme.primary, backgroundColor: COLORS.white }
-                ]}
+                style={getInputStyle('exWarehouseAddress')}
                 value={exWarehouseAddress}
                 onChangeText={setExWarehouseAddress}
                 placeholder={t('Enter warehouse storage address')}
@@ -489,10 +474,7 @@ export default function SellCommodities({ route, navigation }) {
           <View style={styles.formGroup}>
             <Text style={styles.inputLabel}>{t('Stock Location *')}</Text>
             <TextInput
-              style={[
-                styles.textInput,
-                focusedField === 'commodityLocation' && { borderColor: theme.primary, backgroundColor: COLORS.white }
-              ]}
+              style={getInputStyle('commodityLocation')}
               value={commodityLocation}
               onChangeText={setCommodityLocation}
               placeholder={t('e.g. Indore, MP')}
@@ -520,9 +502,8 @@ export default function SellCommodities({ route, navigation }) {
             ) : (
               <TouchableOpacity
                 style={[
-                  styles.textInput,
-                  styles.datePickerInput,
-                  focusedField === 'listingEndDate' && { borderColor: theme.primary, backgroundColor: COLORS.white }
+                  getInputStyle('listingEndDate'),
+                  styles.datePickerInput
                 ]}
                 onPress={() => {
                   setFocusedField('listingEndDate');
@@ -545,10 +526,7 @@ export default function SellCommodities({ route, navigation }) {
           <View style={styles.formGroup}>
             <Text style={styles.inputLabel}>{t('Billing Address')}</Text>
             <TextInput
-              style={[
-                styles.textInput,
-                focusedField === 'billingAddress' && { borderColor: theme.primary, backgroundColor: COLORS.white }
-              ]}
+              style={getInputStyle('billingAddress')}
               value={billingAddress}
               onChangeText={setBillingAddress}
               placeholder={t('e.g. Indore Mandi Complex, MP')}
@@ -564,10 +542,7 @@ export default function SellCommodities({ route, navigation }) {
           <View style={styles.formGroup}>
             <Text style={styles.inputLabel}>{t('Weight Tolerance (%)')}</Text>
             <TextInput
-              style={[
-                styles.textInput,
-                focusedField === 'weightTolerance' && { borderColor: theme.primary, backgroundColor: COLORS.white }
-              ]}
+              style={getInputStyle('weightTolerance')}
               value={weightTolerance}
               onChangeText={setWeightTolerance}
               placeholder={t('e.g. 1')}
@@ -584,10 +559,7 @@ export default function SellCommodities({ route, navigation }) {
           <View style={styles.formGroup}>
             <Text style={styles.inputLabel}>{t('Payment Release Clause')}</Text>
             <TextInput
-              style={[
-                styles.textInput,
-                focusedField === 'paymentTimeline' && { borderColor: theme.primary, backgroundColor: COLORS.white }
-              ]}
+              style={getInputStyle('paymentTimeline')}
               value={paymentTimeline}
               onChangeText={setPaymentTimeline}
               placeholder={t('e.g. Within 3 days of delivery')}
@@ -616,10 +588,7 @@ export default function SellCommodities({ route, navigation }) {
           <View style={styles.formGroup}>
             <Text style={styles.inputLabel}>{t('Moisture Parameter (%)')}</Text>
             <TextInput
-              style={[
-                styles.textInput,
-                focusedField === 'moisture' && { borderColor: theme.primary, backgroundColor: COLORS.white }
-              ]}
+              style={getInputStyle('moisture')}
               value={moisture}
               onChangeText={setMoisture}
               placeholder={t('e.g. 12')}
@@ -636,10 +605,7 @@ export default function SellCommodities({ route, navigation }) {
           <View style={styles.formGroup}>
             <Text style={styles.inputLabel}>{t('Foreign Material (%)')}</Text>
             <TextInput
-              style={[
-                styles.textInput,
-                focusedField === 'foreignMaterial' && { borderColor: theme.primary, backgroundColor: COLORS.white }
-              ]}
+              style={getInputStyle('foreignMaterial')}
               value={foreignMaterial}
               onChangeText={setForeignMaterial}
               placeholder={t('e.g. 1')}
@@ -656,10 +622,7 @@ export default function SellCommodities({ route, navigation }) {
           <View style={styles.formGroup}>
             <Text style={styles.inputLabel}>{t('Broken / Damaged (%)')}</Text>
             <TextInput
-              style={[
-                styles.textInput,
-                focusedField === 'broken' && { borderColor: theme.primary, backgroundColor: COLORS.white }
-              ]}
+              style={getInputStyle('broken')}
               value={broken}
               onChangeText={setBroken}
               placeholder={t('e.g. 2')}
@@ -824,9 +787,8 @@ export default function SellCommodities({ route, navigation }) {
           <Text style={styles.inputLabel}>{t('Additional Remarks or Special Terms')}</Text>
           <TextInput
             style={[
-              styles.textInput,
-              styles.textArea,
-              focusedField === 'remarks' && { borderColor: theme.primary, backgroundColor: COLORS.white }
+              getInputStyle('remarks'),
+              styles.textArea
             ]}
             multiline
             value={remarks}
@@ -994,11 +956,16 @@ export default function SellCommodities({ route, navigation }) {
 
             <Text style={styles.modalLabel}>{t('Or Enter Custom Name')}</Text>
             <TextInput
-              style={styles.modalInput}
+              style={[
+                styles.modalInput,
+                focusedField === 'modalParamName' && { borderColor: theme.primary, borderWidth: 2, backgroundColor: COLORS.white }
+              ]}
               placeholder={t('e.g. Density, Oil Content')}
               placeholderTextColor={COLORS.textMuted}
               value={modalParamName}
               onChangeText={setModalParamName}
+              onFocus={() => setFocusedField('modalParamName')}
+              onBlur={() => setFocusedField(null)}
               accessible={true}
               accessibilityLabel={t('Custom Parameter Name')}
               accessibilityHint={t('Type custom quality parameter name here')}
@@ -1006,12 +973,17 @@ export default function SellCommodities({ route, navigation }) {
 
             <Text style={styles.modalLabel}>{t('Value (%)')}</Text>
             <TextInput
-              style={styles.modalInput}
+              style={[
+                styles.modalInput,
+                focusedField === 'modalParamValue' && { borderColor: theme.primary, borderWidth: 2, backgroundColor: COLORS.white }
+              ]}
               placeholder="e.g. 5"
               placeholderTextColor={COLORS.textMuted}
               keyboardType="numeric"
               value={modalParamValue}
               onChangeText={setModalParamValue}
+              onFocus={() => setFocusedField('modalParamValue')}
+              onBlur={() => setFocusedField(null)}
               accessible={true}
               accessibilityLabel={t('Parameter Value percentage')}
               accessibilityHint={t('Enter percentage value for the custom parameter')}

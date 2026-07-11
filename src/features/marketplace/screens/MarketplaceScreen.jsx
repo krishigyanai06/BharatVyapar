@@ -24,9 +24,12 @@ import { showAlert } from '../../../shared/components/CustomAlertBox';
 import { getSellCommodities, deleteSellCommodity, getReceivedOffers } from '../marketplace.api';
 import { getFriendlyErrorMessage } from '../../../shared/utils/errorUtils';
 import { normalizeCommodity } from '../marketplace.normalizer';
-import { requirementService } from '../../orders/orders.requirements';
-import { submitQuoteAgainstRequirement } from '../../orders/orders.service';
-import FulfillRequirementBottomSheet from '../../orders/components/FulfillRequirementBottomSheet';
+// import { requirementService } from '../../orders/orders.requirements';
+// import { submitQuoteAgainstRequirement } from '../../orders/orders.service';
+import FulfillRequirementBottomSheet from '../../orders/components/FulfillBuyerRequirement';
+import { selectRequirements } from '../../../store/mockDataSlice';
+
+
 
 
 const ROLE_THEMES = {
@@ -296,91 +299,152 @@ const OfferCard = React.memo(function OfferCard({ offer, theme, onPress, onEditP
 
   const priceDisplay = safePriceDisplay(offer.price);
   
+  const displayName = offer.shopName || offer.sellerName || t('Seller');
+  const avatarChar = displayName.substring(0, 1).toUpperCase();
+
   const accessibilityLabel = `Listing for ${offer.name}${offer.variety ? ` variety ${offer.variety}` : ''}, quantity ${offer.quantityLabel}, price ${priceDisplay ? `₹${priceDisplay} per ${offer.priceUnit}` : 'Negotiable'}, located in ${offer.location}. Published by ${offer.sellerName}${offer.shopName ? ` of ${offer.shopName}` : ''}. Status: ${offer.status}.`;
 
   return (
     <View
-      style={[styles.offerCard, isExpired && styles.offerCardDimmed]}
+      style={[
+        styles.offerCard,
+        {
+          backgroundColor: theme.light,
+          borderColor: theme.primary + '20',
+          borderWidth: 1,
+        },
+        isExpired && styles.offerCardDimmed,
+      ]}
       accessible={true}
       accessibilityLabel={accessibilityLabel}
     >
-      {/* Publisher Row */}
-      <View style={styles.publisherRow}>
-        <View style={styles.publisherInfo}>
-          <Icon name="account-circle-outline" size={13} color={COLORS.textMuted} />
-          <Text style={styles.publisherName} numberOfLines={1}>
-            {offer.sellerName || t('Unknown Seller')}{offer.shopName ? ` (${offer.shopName})` : ''}
-          </Text>
-        </View>
-        <View style={[styles.roleBadge, { backgroundColor: roleTheme.primary + '18' }]}>
-          <Text style={[styles.roleBadgeText, { color: roleTheme.primary }]}>
-            {t(offer.sellerRole) || t('Seller')}
-          </Text>
-        </View>
-      </View>
-
-      {/* Crop + Location */}
-      <View style={styles.offerHeader}>
-        <View style={styles.cropInfoWrapper}>
-          <Text style={styles.offerCrop} numberOfLines={1}>
-            {t(offer.name) || '—'}
-            {offer.variety ? ` (${t(offer.variety)})` : ''}
-          </Text>
-          <View style={styles.locationRow}>
-            <Icon name="map-marker-outline" size={12} color={COLORS.textMuted} />
-            <Text style={styles.offerLocation}>{t(offer.location) || '—'}</Text>
+      {/* Publisher Row (matching DemandCard style) */}
+      <View style={[styles.cardHeader, { borderBottomColor: theme.primary + '15' }]}>
+        <View style={styles.userRow}>
+          <View
+            style={[
+              styles.avatarBox,
+              {
+                backgroundColor: COLORS.white,
+                borderWidth: 1,
+                borderColor: roleTheme.primary + '20',
+                elevation: 1.5,
+                shadowColor: roleTheme.primary,
+                shadowOffset: { width: 0, height: 1 },
+                shadowOpacity: 0.1,
+                shadowRadius: 2,
+              },
+            ]}
+          >
+            <Text style={[styles.avatarInitial, { color: roleTheme.primary, fontWeight: '800' }]}>
+              {avatarChar}
+            </Text>
+          </View>
+          <View>
+            <Text style={[styles.userName, { fontSize: f(13.5), fontWeight: '800', color: theme.text }]} numberOfLines={1}>
+              {displayName}
+            </Text>
+            <Text style={{ fontSize: f(10.5), color: COLORS.textMuted }}>
+              {t(offer.sellerRole) || t('Seller')}
+            </Text>
           </View>
         </View>
-
-        {isExpired && (
-          <View style={styles.expiredBadge}>
-            <Text style={styles.expiredBadgeText}>
+        {offer.status && (
+          <View
+            style={[
+              styles.roleBadge,
+              {
+                backgroundColor: isExpired ? COLORS.textMuted : roleTheme.primary,
+                borderWidth: 1,
+                borderColor: isExpired ? COLORS.textMuted : roleTheme.primary,
+              },
+            ]}
+          >
+            <Text style={[styles.roleBadgeText, { color: COLORS.white, fontSize: f(9.5), fontWeight: '800' }]}>
               {t(safeStatusLabel(offer.status))}
             </Text>
           </View>
         )}
       </View>
 
+      {/* Crop + Location */}
+      <View style={[styles.offerHeader, { marginTop: h(4) }]}>
+        <View style={styles.cropInfoWrapper}>
+          <Text style={[styles.offerCrop, { fontSize: f(16.5), fontWeight: '900', color: theme.text }]} numberOfLines={1}>
+            {t(offer.name) || '—'}{offer.variety ? ` (${t(offer.variety)})` : ''}
+          </Text>
+          <View style={styles.locationRow}>
+            <Icon name="map-marker" size={14} color={theme.primary} />
+            <Text style={[styles.offerLocation, { color: COLORS.text, fontWeight: '600' }]}>
+              {t(offer.location) || '—'}
+            </Text>
+          </View>
+        </View>
+      </View>
+
       {/* Stats Row */}
-      <View style={styles.detailsRow}>
+      <View
+        style={[
+          styles.detailsRow,
+          {
+            backgroundColor: COLORS.white,
+            borderRadius: mw(12),
+            padding: w(12),
+            borderColor: theme.primary + '15',
+            borderWidth: 1,
+            marginBottom: h(10),
+          },
+        ]}
+      >
         <View style={styles.detailCol}>
-          <Text style={styles.detailLabel}>{t('Quantity')}</Text>
-          <Text style={styles.detailVal}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: w(4), marginBottom: h(2) }}>
+            <Icon name="scale-balance" size={13} color={COLORS.textMuted} />
+            <Text style={styles.detailLabel}>{t('Quantity')}</Text>
+          </View>
+          <Text style={[styles.detailVal, { fontSize: f(14.5), color: theme.text }]}>
             {offer.quantityLabel ? offer.quantityLabel.split(' ').map(word => t(word)).join(' ') : '—'}
           </Text>
         </View>
 
         <View style={[styles.detailCol, styles.detailColCenter]}>
-          <Text style={styles.detailLabel}>{t('Price')} / {t(offer.priceUnit || 'Qt')}</Text>
-          <Text style={[styles.detailVal, { color: theme.primary }]}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: w(4), marginBottom: h(2) }}>
+            <Icon name="tag-outline" size={13} color={COLORS.textMuted} />
+            <Text style={styles.detailLabel}>{t('Price')} / {t(offer.priceUnit || 'Qt')}</Text>
+          </View>
+          <Text style={[styles.detailVal, { color: theme.primary, fontSize: f(15), fontWeight: '900' }]}>
             {priceDisplay ? `₹${priceDisplay}` : t('N/A')}
           </Text>
         </View>
 
         <View style={styles.detailCol}>
-          <Text style={styles.detailLabel}>{t('Moisture')}</Text>
-          <Text style={styles.detailVal}>{offer.moisture || '—'}</Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: w(4), marginBottom: h(2) }}>
+            <Icon name="water-percent" size={13} color={COLORS.textMuted} />
+            <Text style={styles.detailLabel}>{t('Moisture')}</Text>
+          </View>
+          <Text style={[styles.detailVal, { fontSize: f(14.5), color: theme.text }]}>
+            {offer.moisture || '—'}
+          </Text>
         </View>
       </View>
 
       {/* Flags */}
-      <View style={styles.flagsRow}>
+      <View style={[styles.flagsRow, { marginBottom: h(8) }]}>
         {offer.isNegotiable && (
-          <View style={[styles.flag, { backgroundColor: theme.primary + '12' }]}>
+          <View style={[styles.flag, { backgroundColor: COLORS.white, borderWidth: 1, borderColor: theme.primary + '30' }]}>
             <Icon name="handshake-outline" size={11} color={theme.primary} />
             <Text style={[styles.flagText, { color: theme.primary }]}>{t('Negotiable')}</Text>
           </View>
         )}
 
         {offer.deliveryType === 'FOR' && (
-          <View style={styles.flagFOR}>
+          <View style={[styles.flagFOR, { backgroundColor: COLORS.white, borderWidth: 1, borderColor: '#388E3C30' }]}>
             <Icon name="truck-delivery-outline" size={11} color="#388E3C" />
             <Text style={styles.flagTextFOR}>{t('FOR')}</Text>
           </View>
         )}
 
         {offer.deliveryType === 'EX-Warehouse' && (
-          <View style={styles.flagWarehouse}>
+          <View style={[styles.flagWarehouse, { backgroundColor: COLORS.white, borderWidth: 1, borderColor: '#F57C0030' }]}>
             <Icon name="warehouse" size={11} color="#F57C00" />
             <Text style={styles.flagTextWarehouse}>{t('Ex-Warehouse')}</Text>
           </View>
@@ -389,11 +453,20 @@ const OfferCard = React.memo(function OfferCard({ offer, theme, onPress, onEditP
 
       {/* Action Buttons Row */}
       {!isExpired && (
-        <View style={styles.actionButtonsRow}>
+        <View style={[styles.actionButtonsRow, { marginTop: h(4) }]}>
           {isOwner && (
             <>
               <TouchableOpacity
-                style={[styles.actionBtn, styles.deleteBtn]}
+                style={[
+                  styles.actionBtn,
+                  styles.deleteBtn,
+                  {
+                    borderRadius: mw(10),
+                    height: h(40),
+                    backgroundColor: COLORS.white,
+                    borderColor: COLORS.error + '40',
+                  },
+                ]}
                 onPress={() => onDeletePress && offer.id && onDeletePress(offer)}
                 activeOpacity={0.7}
                 accessible={true}
@@ -402,11 +475,20 @@ const OfferCard = React.memo(function OfferCard({ offer, theme, onPress, onEditP
                 accessibilityHint={`Permanently deletes the listing for ${offer.name}`}
               >
                 <Icon name="trash-can-outline" size={16} color={COLORS.error} />
-                <Text style={styles.deleteBtnText}>{t('Delete')}</Text>
+                <Text style={[styles.deleteBtnText, { fontSize: f(12), fontWeight: '800' }]}>{t('Delete')}</Text>
               </TouchableOpacity>
 
               <TouchableOpacity
-                style={[styles.actionBtn, styles.editBtn, { borderColor: theme.primary }]}
+                style={[
+                  styles.actionBtn,
+                  styles.editBtn,
+                  {
+                    borderRadius: mw(10),
+                    height: h(40),
+                    backgroundColor: COLORS.white,
+                    borderColor: theme.primary + '40',
+                  },
+                ]}
                 onPress={() => onEditPress && onEditPress(offer)}
                 activeOpacity={0.7}
                 accessible={true}
@@ -415,13 +497,27 @@ const OfferCard = React.memo(function OfferCard({ offer, theme, onPress, onEditP
                 accessibilityHint={`Edits details of the listing for ${offer.name}`}
               >
                 <Icon name="pencil-outline" size={16} color={theme.primary} />
-                <Text style={[styles.editBtnText, { color: theme.primary }]}>{t('Edit')}</Text>
+                <Text style={[styles.editBtnText, { color: theme.primary, fontSize: f(12), fontWeight: '800' }]}>{t('Edit')}</Text>
               </TouchableOpacity>
             </>
           )}
 
           <TouchableOpacity
-            style={[styles.actionBtn, styles.viewBtn, { backgroundColor: theme.primary }]}
+            style={[
+              styles.actionBtn,
+              styles.viewBtn,
+              {
+                backgroundColor: theme.primary,
+                flex: 1.4,
+                height: h(40),
+                borderRadius: mw(10),
+                elevation: 3,
+                shadowColor: theme.primary,
+                shadowOffset: { width: 0, height: 2 },
+                shadowOpacity: 0.2,
+                shadowRadius: 4,
+              },
+            ]}
             onPress={() => onPress && onPress(offer)}
             activeOpacity={0.8}
             accessible={true}
@@ -430,7 +526,7 @@ const OfferCard = React.memo(function OfferCard({ offer, theme, onPress, onEditP
             accessibilityHint={`View detailed specifications and images of the listing for ${offer.name}`}
           >
             <Icon name="eye-outline" size={16} color={COLORS.white} />
-            <Text style={styles.viewBtnText}>{t('View')}</Text>
+            <Text style={[styles.viewBtnText, { fontSize: f(12.5), fontWeight: '800' }]}>{t('View')}</Text>
           </TouchableOpacity>
         </View>
       )}
@@ -449,7 +545,7 @@ const demandCardPropsAreEqual = (prev, next) => {
     pd.location === nd.location &&
     pd.quantity === nd.quantity &&
     pd.unit === nd.unit &&
-    pd.targetPrice === nd.targetPrice &&
+    (pd.expectedPrice || pd.targetPrice) === (nd.expectedPrice || nd.targetPrice) &&
     pd.status === nd.status &&
     prev.theme?.primary === next.theme?.primary
   );
@@ -470,53 +566,113 @@ const DemandCard = React.memo(({ demand, theme, t, onFulfillPress }) => {
   const postedTime = formatDemandPostedTime(demand.createdAt, t);
 
   return (
-    <View style={[styles.offerCard, { borderLeftColor: theme.primary, borderLeftWidth: 4 }]}>
+    <View
+      style={[
+        styles.offerCard,
+        {
+          backgroundColor: theme.light,
+          borderColor: theme.primary + '20',
+          borderWidth: 1,
+        },
+      ]}
+    >
       {/* Header with Avatar and Status Badge */}
-      <View style={styles.cardHeader}>
+      <View style={[styles.cardHeader, { borderBottomColor: theme.primary + '15' }]}>
         <View style={styles.userRow}>
-          <View style={[styles.avatarBox, { backgroundColor: theme.primary + '15', borderWidth: 1, borderColor: theme.primary + '30' }]}>
+          <View
+            style={[
+              styles.avatarBox,
+              {
+                backgroundColor: COLORS.white,
+                borderWidth: 1,
+                borderColor: theme.primary + '20',
+                elevation: 1.5,
+                shadowColor: theme.primary,
+                shadowOffset: { width: 0, height: 1 },
+                shadowOpacity: 0.1,
+                shadowRadius: 2,
+              },
+            ]}
+          >
             <Text style={[styles.avatarInitial, { color: theme.primary, fontWeight: '800' }]}>
               {avatarChar}
             </Text>
           </View>
           <View>
-            <Text style={[styles.userName, { fontSize: f(13), fontWeight: '700' }]} numberOfLines={1}>
+            <Text style={[styles.userName, { fontSize: f(13.5), fontWeight: '800', color: theme.text }]} numberOfLines={1}>
               {displayName}{subName ? ` (${subName})` : ''}
             </Text>
-            <Text style={{ fontSize: f(10), color: COLORS.textMuted }}>{postedTime}</Text>
+            <Text style={{ fontSize: f(10.5), color: COLORS.textMuted }}>{postedTime}</Text>
           </View>
         </View>
-        <View style={[styles.roleBadge, { backgroundColor: theme.primary + '10', borderWidth: 1, borderColor: theme.primary + '20' }]}>
-          <Text style={[styles.roleBadgeText, { color: theme.primary, fontSize: f(9), fontWeight: '800' }]}>{t('Demand')}</Text>
+        <View
+          style={[
+            styles.roleBadge,
+            {
+              backgroundColor: theme.primary,
+              borderWidth: 1,
+              borderColor: theme.primary,
+            },
+          ]}
+        >
+          <Text style={[styles.roleBadgeText, { color: COLORS.white, fontSize: f(9.5), fontWeight: '800' }]}>
+            {t('Demand')}
+          </Text>
         </View>
       </View>
 
       {/* Commodity Info */}
       <View style={[styles.offerHeader, { marginTop: h(4) }]}>
         <View style={styles.cropInfoWrapper}>
-          <Text style={[styles.offerCrop, { fontSize: f(16), fontWeight: '800', color: COLORS.text }]}>
+          <Text style={[styles.offerCrop, { fontSize: f(16.5), fontWeight: '900', color: theme.text }]}>
             {t(demand.commodity) || '—'}
           </Text>
           <View style={styles.locationRow}>
             <Icon name="map-marker" size={14} color={theme.primary} />
-            <Text style={[styles.offerLocation, { color: COLORS.text, fontWeight: '500' }]}>{t(demand.location) || '—'}</Text>
+            <Text style={[styles.offerLocation, { color: COLORS.text, fontWeight: '600' }]}>
+              {t(demand.location) || '—'}
+            </Text>
           </View>
         </View>
         {demand.grade ? (
-          <View style={{ backgroundColor: '#F3F4F6', paddingHorizontal: w(8), paddingVertical: h(4), borderRadius: 6, borderWidth: 1, borderColor: '#E5E7EB' }}>
-            <Text style={{ fontSize: f(10), fontWeight: '700', color: '#4B5563' }}>{t('Grade')}: {t(demand.grade)}</Text>
+          <View
+            style={{
+              backgroundColor: COLORS.white,
+              paddingHorizontal: w(8),
+              paddingVertical: h(4),
+              borderRadius: 6,
+              borderWidth: 1,
+              borderColor: theme.primary + '20',
+            }}
+          >
+            <Text style={{ fontSize: f(10.5), fontWeight: '800', color: theme.primary }}>
+              {t('Grade')}: {t(demand.grade)}
+            </Text>
           </View>
         ) : null}
       </View>
 
       {/* Grid details (Quantity and Target Price) */}
-      <View style={[styles.detailsRow, { backgroundColor: '#F8FAFC', borderRadius: mw(12), padding: w(12), borderColor: '#F1F5F9' }]}>
+      <View
+        style={[
+          styles.detailsRow,
+          {
+            backgroundColor: COLORS.white,
+            borderRadius: mw(12),
+            padding: w(12),
+            borderColor: theme.primary + '15',
+            borderWidth: 1,
+          },
+        ]}
+      >
         <View style={styles.detailCol}>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: w(4), marginBottom: h(2) }}>
             <Icon name="scale-balance" size={13} color={COLORS.textMuted} />
             <Text style={styles.detailLabel}>{t('Req Qty')}</Text>
           </View>
-          <Text style={[styles.detailVal, { fontSize: f(14) }]}>{demand.quantity || '—'} {t(demand.unit || 'Qt')}</Text>
+          <Text style={[styles.detailVal, { fontSize: f(14.5), color: theme.text }]}>
+            {demand.quantity || '—'} {t(demand.unit || 'Qt')}
+          </Text>
         </View>
 
         <View style={[styles.detailCol, styles.detailColCenter]}>
@@ -524,8 +680,8 @@ const DemandCard = React.memo(({ demand, theme, t, onFulfillPress }) => {
             <Icon name="tag-outline" size={13} color={COLORS.textMuted} />
             <Text style={styles.detailLabel}>{t('Target Price')}</Text>
           </View>
-          <Text style={[styles.detailVal, { color: theme.primary, fontSize: f(14), fontWeight: '800' }]}>
-            ₹{demand.targetPrice || 'N/A'}
+          <Text style={[styles.detailVal, { color: theme.primary, fontSize: f(15), fontWeight: '900' }]}>
+            ₹{demand.expectedPrice || demand.targetPrice || 'N/A'}
           </Text>
         </View>
       </View>
@@ -533,12 +689,29 @@ const DemandCard = React.memo(({ demand, theme, t, onFulfillPress }) => {
       {/* CTA Button */}
       <View style={styles.actionButtonsRow}>
         <TouchableOpacity
-          style={[styles.actionBtn, styles.viewBtn, { backgroundColor: theme.primary, flex: 1, height: h(40), borderRadius: mw(10), marginTop: h(4) }]}
+          style={[
+            styles.actionBtn,
+            styles.viewBtn,
+            {
+              backgroundColor: theme.primary,
+              flex: 1,
+              height: h(40),
+              borderRadius: mw(10),
+              marginTop: h(4),
+              elevation: 3,
+              shadowColor: theme.primary,
+              shadowOffset: { width: 0, height: 2 },
+              shadowOpacity: 0.2,
+              shadowRadius: 4,
+            },
+          ]}
           onPress={() => onFulfillPress && onFulfillPress(demand)}
           activeOpacity={0.8}
         >
           <Icon name="handshake-outline" size={18} color={COLORS.white} />
-          <Text style={[styles.viewBtnText, { fontSize: f(12), fontWeight: '700' }]}>{t('Quote / Fulfill')}</Text>
+          <Text style={[styles.viewBtnText, { fontSize: f(12.5), fontWeight: '800' }]}>
+            {t('Quote / Fulfill')}
+          </Text>
         </TouchableOpacity>
       </View>
     </View>
@@ -574,6 +747,11 @@ function MarketplaceScreenInner({ route, navigation }) {
   });
   const theme = ROLE_THEMES[selectedRole] || ROLE_THEMES.FPO;
   const { t } = useTranslation();
+
+  // Read requirements from Redux mockData slice (written by HomeScreen)
+  const contextRequirements = useSelector(selectRequirements);
+  const contextRequirementsRef = useRef(contextRequirements);
+  contextRequirementsRef.current = contextRequirements;
 
   const bottomTabBarHeight = useBottomTabBarHeight();
 
@@ -664,7 +842,13 @@ function MarketplaceScreenInner({ route, navigation }) {
 
       let response;
       if (tab === 'DEMANDS') {
-        response = await requirementService.getMarketplaceRequirements({ excludeBuyerId: currentUserId }); // Fetch from requirement service
+        // Use requirements from context (posted in HomeScreen) — no API call
+        response = {
+          success: true,
+          data: {
+            requirements: contextRequirementsRef.current,
+          },
+        };
       } else {
         response = await getSellCommodities(params, { signal: controller.signal });
       }
@@ -757,6 +941,16 @@ function MarketplaceScreenInner({ route, navigation }) {
 
   useEffect(() => { searchTextRef.current = searchText; }, [searchText]);
   useEffect(() => { selectedCropRef.current = selectedCrop; }, [selectedCrop]);
+
+  // Re-fetch DEMANDS tab whenever a new requirement is added in HomeScreen
+  useEffect(() => {
+    if (activeTabRef.current === 'DEMANDS') {
+      fetchListings({ pageNum: 1, isRefresh: true });
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [contextRequirements]);
+
+
 
   const rawUpdatedItem = route?.params?.rawUpdatedItem;
 
@@ -1259,7 +1453,8 @@ function MarketplaceScreenInner({ route, navigation }) {
         onClose={() => setSelectedDemandForQuote(null)}
         onSubmit={async (payload) => {
           try {
-            await submitQuoteAgainstRequirement(payload.requirementId, payload);
+            // Mock delay and show success directly to avoid active backend API calls
+            await new Promise((res) => setTimeout(res, 400));
             showAlert({
               type: 'success',
               title: t('Quote Submitted'),

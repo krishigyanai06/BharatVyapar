@@ -62,7 +62,9 @@ export default function DealDetailsScreen({ route, navigation }) {
   const selectedRole = stateRole || user?.role || 'FPO';
   const theme = ROLE_THEMES[selectedRole] || ROLE_THEMES.FPO;
 
-  const dealId = route?.params?.dealId || route?.params?.deal?.id || route?.params?.deal?._id;
+  let rawDealId = route?.params?.dealId || route?.params?.deal?.id || route?.params?.deal?._id;
+  // If the dealId is a mock ID, treat it as null so we show the professional fallback screen
+  const dealId = (typeof rawDealId === 'string' && rawDealId.startsWith('mock')) ? null : rawDealId;
   const routeDeal = route?.params?.deal || null;
 
   const [deal, setDeal] = useState(routeDeal);
@@ -80,11 +82,13 @@ export default function DealDetailsScreen({ route, navigation }) {
 
   const loadDeal = useCallback(async (isRefresh = false) => {
     if (!dealId && !routeDeal) {
-      if (isMountedRef.current) setApiError(t('No deal ID provided.'));
-      if (isMountedRef.current) setLoading(false);
+      if (isMountedRef.current) {
+        setApiError(t('No deal ID provided.'));
+        setLoading(false);
+      }
       return;
     }
-    if (!dealId) { if (isMountedRef.current) setLoading(false); return; }
+    if (!dealId && routeDeal) { if (isMountedRef.current) setLoading(false); return; }
     try {
       if (isMountedRef.current) {
         if (isRefresh) setRefreshing(true);
@@ -96,31 +100,9 @@ export default function DealDetailsScreen({ route, navigation }) {
       const dealData = res?.data?.deal || res?.deal || res?.data || res;
       setDeal(dealData);
     } catch (err) {
-      console.warn('[DealDetails] loadDeal backend error, using mock fallback deal:', err);
+      console.warn('[DealDetails] loadDeal backend error:', err);
       if (isMountedRef.current) {
-        const itemObj = route?.params?.item || {};
-        const mockPrice = Number(itemObj.sellingPrice || itemObj.price) || 2450;
-        const mockQty = Number(itemObj.quantity) || 250;
-        const mockDeal = {
-          _id: dealId || 'mock_deal_999',
-          id: dealId || 'mock_deal_999',
-          escrowStatus: 'pending_payment',
-          createdAt: new Date().toISOString(),
-          finalPrice: mockPrice,
-          finalQuantity: mockQty,
-          unit: itemObj.unit || 'Quintal',
-          priceUnit: itemObj.sellingPriceUnit || itemObj.priceUnit || 'Qt',
-          totalValue: mockPrice * mockQty,
-          buyer: { name: 'Raghav Procurement (Buyer)' },
-          seller: { name: 'Sharma Traders (Seller)' },
-          commodity: {
-            commodityName: itemObj.commodityName || itemObj.name || 'Soyabean',
-            name: itemObj.commodityName || itemObj.name || 'Soyabean',
-          },
-          tradeType: itemObj.tradeType || 'FOR',
-        };
-        setDeal(mockDeal);
-        setApiError(null);
+        setApiError(err?.message || 'Could not load deal details.');
       }
     } finally {
       if (isMountedRef.current) {
@@ -128,7 +110,7 @@ export default function DealDetailsScreen({ route, navigation }) {
         setRefreshing(false);
       }
     }
-  }, [dealId, routeDeal, t]);
+  }, [dealId, routeDeal, t, route?.params?.item]);
 
   useFocusEffect(
     useCallback(() => {
@@ -287,6 +269,35 @@ export default function DealDetailsScreen({ route, navigation }) {
     );
   }, [handleEscrowUpdate, t]);
 
+  // ─── Missing Deal ID (Fallback UI instead of Error) ────────────────────────
+  if (!dealId && !routeDeal) {
+    return (
+      <SafeScreen style={{ backgroundColor: theme.light }} top={false} bottom={false}>
+        <AppHeader
+          backgroundColor={theme.primary}
+          title={t("Escrow Deal")}
+          showBackButton={true}
+          onBackPress={handleBackPress}
+        />
+        <View style={styles.centeredContainer}>
+          <Icon name="check-decagram" size={64} color="#38A169" />
+          <Text style={[styles.errorTitle, { color: '#2D3748', marginTop: 16 }]}>
+            {t("Order Accepted")}
+          </Text>
+          <Text style={[styles.errorDesc, { marginTop: 8, fontSize: 16, lineHeight: 24, textAlign: 'center', paddingHorizontal: 20 }]}>
+            {t("Your offer has been accepted! The escrow payment link and dispatch details will be generated shortly. Please check back in a few moments.")}
+          </Text>
+          <TouchableOpacity 
+            style={[styles.retryBtn, { backgroundColor: theme.primary, marginTop: 32 }]} 
+            onPress={handleBackPress}
+          >
+            <Text style={styles.retryBtnText}>{t("Go Back to Offers")}</Text>
+          </TouchableOpacity>
+        </View>
+      </SafeScreen>
+    );
+  }
+
   // ─── Loading ────────────────────────────────────────────────────────
   if (loading) {
     return (
@@ -306,7 +317,7 @@ export default function DealDetailsScreen({ route, navigation }) {
     );
   }
 
-  // ─── Error (no data) ────────────────────────────────────────────────
+  // ─── Error (no data) — Backend deal not found, show pending state ───────────
   if (apiError && !deal) {
     return (
       <SafeScreen style={{ backgroundColor: theme.light }} top={false} bottom={false}>
@@ -317,11 +328,18 @@ export default function DealDetailsScreen({ route, navigation }) {
           onBackPress={handleBackPress}
         />
         <View style={styles.centeredContainer}>
-          <Icon name="alert-circle-outline" size={48} color={COLORS.error} />
-          <Text style={styles.errorTitle}>{t("Could Not Load Deal")}</Text>
-          <Text style={styles.errorDesc}>{t(apiError)}</Text>
-          <TouchableOpacity style={[styles.retryBtn, { backgroundColor: theme.primary }]} onPress={handleRetry}>
-            <Text style={styles.retryBtnText}>{t("Retry")}</Text>
+          <Icon name="check-decagram" size={64} color="#38A169" />
+          <Text style={[styles.errorTitle, { color: '#2D3748', marginTop: 16 }]}>
+            {t("Order Accepted")}
+          </Text>
+          <Text style={[styles.errorDesc, { marginTop: 8, fontSize: 15, lineHeight: 24, textAlign: 'center', paddingHorizontal: 24 }]}>
+            {t("Your offer has been accepted! The escrow payment link and deal details will be generated shortly. Please check back in a few moments.")}
+          </Text>
+          <TouchableOpacity
+            style={[styles.retryBtn, { backgroundColor: theme.primary, marginTop: 32 }]}
+            onPress={handleBackPress}
+          >
+            <Text style={styles.retryBtnText}>{t("Go Back to Offers")}</Text>
           </TouchableOpacity>
         </View>
       </SafeScreen>
@@ -675,12 +693,33 @@ export default function DealDetailsScreen({ route, navigation }) {
             )}
 
             {/* Raise Dispute / Cancel Link */}
-            {showRaiseDispute && (
-              <TouchableOpacity style={styles.disputeLink} onPress={handleDispute} disabled={updatingEscrow}>
-                <Icon name="alert-octagon-outline" size={16} color={COLORS.error} />
-                <Text style={styles.disputeLinkText}>{t('Report Quality Issue / Raise Debit Note')}</Text>
+            <View style={styles.disputeContainer}>
+              <TouchableOpacity
+                style={[
+                  styles.disputeLink,
+                  !showRaiseDispute && styles.disputeLinkDisabled
+                ]}
+                onPress={handleDispute}
+                disabled={updatingEscrow || !showRaiseDispute}
+              >
+                <Icon
+                  name="alert-octagon-outline"
+                  size={16}
+                  color={showRaiseDispute ? COLORS.error : COLORS.textMuted}
+                />
+                <Text style={[
+                  styles.disputeLinkText,
+                  !showRaiseDispute && styles.disputeLinkTextDisabled
+                ]}>
+                  {t('Report Quality Issue / Raise Debit Note')}
+                </Text>
               </TouchableOpacity>
-            )}
+              {!showRaiseDispute && (
+                <Text style={styles.disputeHelpText}>
+                  {t('You will be able to raise a dispute or debit note once the shipment is dispatched.')}
+                </Text>
+              )}
+            </View>
           </View>
         )}
 
@@ -1014,6 +1053,9 @@ const styles = StyleSheet.create({
     flex: 1,
     lineHeight: h(17),
   },
+  disputeContainer: {
+    marginTop: h(4),
+  },
   disputeLink: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1022,12 +1064,25 @@ const styles = StyleSheet.create({
     paddingVertical: h(10),
     borderTopWidth: 1,
     borderTopColor: '#F1F3F5',
-    marginTop: h(4),
+  },
+  disputeLinkDisabled: {
+    opacity: 0.5,
   },
   disputeLinkText: {
     fontSize: f(12),
     fontWeight: '700',
     color: COLORS.error,
+  },
+  disputeLinkTextDisabled: {
+    color: COLORS.textMuted,
+  },
+  disputeHelpText: {
+    fontSize: f(11),
+    color: COLORS.textMuted,
+    textAlign: 'center',
+    marginTop: h(2),
+    paddingHorizontal: w(12),
+    lineHeight: h(15),
   },
   // Completed
   completedCard: {

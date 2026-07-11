@@ -78,12 +78,12 @@ export const getFriendlyErrorMessage = (errorMsg) => {
     /validationerror/i.test(message) ||
     /db_/i.test(message) ||
     /e11000/i.test(message) ||
-    /500/i.test(message) ||
+    /\b500\b/i.test(message) ||
     /internal server error/i.test(message) ||
-    /502/i.test(message) ||
+    /\b502\b/i.test(message) ||
     /bad gateway/i.test(message) ||
-    /503/i.test(message) ||
-    /504/i.test(message) ||
+    /\b503\b/i.test(message) ||
+    /\b504\b/i.test(message) ||
     /typeerror/i.test(message) ||
     /referenceerror/i.test(message) ||
     /syntaxerror/i.test(message) ||

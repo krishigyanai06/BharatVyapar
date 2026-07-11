@@ -8,7 +8,8 @@ import {
   Image,
 } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
-import { useSelector } from 'react-redux';
+import { useSelector, useDispatch } from 'react-redux';
+
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { selectUser, selectSelectedRole } from '../../../store/authSelectors';
 import { SafeScreen } from '../../../shared/components/SafeScreen';
@@ -18,9 +19,11 @@ import { w, h, f, mw } from '../../../shared/utils/responsive';
 import { syncUserToDisplayData } from '../../profile/profile.service';
 import { showAlert } from '../../../shared/components/CustomAlertBox';
 import { useTranslation } from '../../../shared/hooks/useTranslation';
-import RequirementBottomSheet from '../../orders/components/RequirementBottomSheet';
+import AddYourRequirement from '../../orders/components/AddYourRequirement';
+import { addRequirement, selectRequirements } from '../../../store/mockDataSlice';
 
-import { requirementService } from '../../orders/orders.requirements';
+
+
 
 
 const ROLE_THEMES = {
@@ -156,49 +159,30 @@ function HomeScreen({ navigation }) {
   const stateRole = useSelector(selectSelectedRole);
   const { t } = useTranslation();
 
-  // Deal Lifecycle Engine: Buyer Requirements
-  const [requirements, setRequirements] = React.useState([]);
+  // Redux — shared mock data slice (no API, replace with real endpoint when ready)
+  const dispatch = useDispatch();
+  const requirements = useSelector(selectRequirements);
+  console.log('[HomeScreen] Selected requirements from Redux store:', requirements);
   const [showRequirementModal, setShowRequirementModal] = React.useState(false);
-  const [loadingRequirements, setLoadingRequirements] = React.useState(false);
   const [expandedReqId, setExpandedReqId] = React.useState(null);
 
-  React.useEffect(() => {
-    const fetchRequirements = async () => {
-      setLoadingRequirements(true);
-      try {
-        const myId = user?._id || user?.id;
-        const res = await requirementService.getAllRequirements();
-        if (res?.success) {
-          const all = res.data.requirements || [];
-          // Dummy mode: buyer_001 = currentBuyer. Real mode: match actual user._id
-          const mine = all.filter(r => {
-            const bid = r.buyerId?._id || r.buyerId;
-            return String(bid) === String(myId) || String(bid) === 'buyer_001';
-          });
-          setRequirements(mine);
-        }
-      } catch (e) {
-        console.warn('[HomeScreen] Requirements endpoint not available:', e?.message || e);
-      } finally {
-        setLoadingRequirements(false);
-      }
-    };
-    fetchRequirements();
-  }, [user?._id, user?.id]);
+  const handleRequirementSubmit = useCallback(
+    payload => {
+      dispatch(
+        addRequirement({
+          ...payload,
+          buyerId: {
+            _id: user?._id || user?.id || 'buyer_001',
+            firstName: displayData.firstName || '',
+            lastName: displayData.lastName || '',
+            shopName: displayData.shopName || '',
+          },
+        }),
+      );
+    },
+    [dispatch, user, displayData],
+  );
 
-  const handleRequirementSubmit = async payload => {
-    const res = await requirementService.submitRequirement({
-      ...payload,
-      buyerId: {
-        _id: user?._id || user?.id || 'me',
-        firstName: displayData.firstName || '',
-        lastName: displayData.lastName || '',
-      },
-    });
-    if (res?.success) {
-      setRequirements(prev => [...prev, res.data]);
-    }
-  };
 
   const selectedRole = useMemo(
     () => stateRole || user?.role || 'FPO',
@@ -279,19 +263,27 @@ function HomeScreen({ navigation }) {
         buttonStyle: [
           styles.actionButton,
           {
-            borderColor: roleTheme.primary + '20',
+            backgroundColor: roleTheme.light,
+            borderColor: roleTheme.primary + '25',
           },
         ],
         iconCircleStyle: [
           styles.actionIconCircle,
-          { backgroundColor: roleTheme.primary + '10' },
+          {
+            backgroundColor: COLORS.white,
+            elevation: 2,
+            shadowColor: roleTheme.primary,
+            shadowOffset: { width: 0, height: 2 },
+            shadowOpacity: 0.08,
+            shadowRadius: 3,
+          },
         ],
         iconColor: roleTheme.primary,
         textStyle: [styles.actionText, { color: roleTheme.primary }],
         descriptionStyle: [styles.actionDescription],
       };
     });
-  }, [config.actions, roleTheme.primary, t]);
+  }, [config.actions, roleTheme.primary, roleTheme.light, t]);
 
   return (
     <SafeScreen style={styles.safeContainer} top={false} bottom={false}>
@@ -310,7 +302,10 @@ function HomeScreen({ navigation }) {
       >
         {/* Welcome Section */}
         <View
-          style={[styles.welcomeHeader, { borderLeftColor: roleTheme.primary }]}
+          style={[
+            styles.welcomeHeader,
+            { backgroundColor: roleTheme.light, borderColor: roleTheme.primary + '20' },
+          ]}
           accessible={true}
           accessibilityRole="header"
           accessibilityLabel={`${t('Welcome back,')} ${welcomeText}. ${t(
@@ -346,12 +341,12 @@ function HomeScreen({ navigation }) {
           </View>
         </View>
 
-        {/* Buyer Requirement Section */}
-        {requirements.length === 0 && !loadingRequirements ? (
+        {/* Buyer Requirement Section — local state only, no API */}
+        {requirements.length === 0 ? (
           <TouchableOpacity
             style={[
               styles.welcomeHeader,
-              { backgroundColor: roleTheme.light, borderColor: roleTheme.primary, borderLeftColor: roleTheme.primary },
+              { backgroundColor: roleTheme.light, borderColor: roleTheme.primary + '20' },
             ]}
             onPress={() => setShowRequirementModal(true)}
           >
@@ -369,7 +364,7 @@ function HomeScreen({ navigation }) {
               </View>
             </View>
           </TouchableOpacity>
-        ) : requirements.length > 0 ? (
+        ) : (
           <>
             <View style={styles.sectionHeader}>
               <Text style={styles.sectionTitle}>{t('My Requirements')}</Text>
@@ -377,12 +372,11 @@ function HomeScreen({ navigation }) {
                 <Icon name="plus-circle" size={24} color={roleTheme.primary} />
               </TouchableOpacity>
             </View>
-            {requirements.map((req, idx) => {
-              const reqId = req.id || req._id || idx;
+            {requirements.slice(0, 3).map((req, idx) => {
+              const reqId = req._id || idx;
               const isExpanded = expandedReqId === reqId;
               return (
                 <View key={reqId} style={styles.requirementCard}>
-                  {/* Accordion Header — tap to expand/collapse */}
                   <TouchableOpacity
                     onPress={() => setExpandedReqId(isExpanded ? null : reqId)}
                     activeOpacity={0.8}
@@ -403,7 +397,6 @@ function HomeScreen({ navigation }) {
                     />
                   </TouchableOpacity>
 
-                  {/* Summary always visible */}
                   <View style={styles.reqSummaryRow}>
                     <Text style={styles.reqDetailText}>
                       {t('Qty:')} <Text style={{ fontWeight: '700' }}>{req.quantity} {t(req.unit || 'Qt')}</Text>
@@ -416,7 +409,6 @@ function HomeScreen({ navigation }) {
                     </Text>
                   </View>
 
-                  {/* Expanded details */}
                   {isExpanded && (
                     <View style={styles.reqExpandedBody}>
                       <View style={styles.reqDetailsRow}>
@@ -427,43 +419,16 @@ function HomeScreen({ navigation }) {
                           {t('Grade:')} <Text style={{ fontWeight: '700' }}>{t(req.grade) || '—'}</Text>
                         </Text>
                       </View>
-                      <TouchableOpacity
-                        style={[styles.reqViewQuotesBtn, { borderColor: roleTheme.primary }]}
-                        onPress={() => navigation.navigate('BuyerQuoteDashboard', { requirement: req })}
-                        activeOpacity={0.8}
-                      >
-                        <Icon name="format-list-bulleted" size={14} color={roleTheme.primary} />
-                        <Text style={[styles.reqFooterText, { color: roleTheme.primary }]}>
-                          {t('View Received Quotes')}
-                        </Text>
-                      </TouchableOpacity>
                     </View>
                   )}
                 </View>
               );
             })}
           </>
-        ) : null}
-
-        {/* Stats Row */}
-        {stats.length > 0 && (
-          <View style={styles.statsContainer}>
-            {stats.map((stat, idx) => (
-              <View
-                key={idx}
-                style={styles.statCard}
-                accessible={true}
-                accessibilityLabel={`${stat.label}: ${stat.value}`}
-              >
-                <View style={stat.iconWrapperStyle}>
-                  <Icon name={stat.icon} size={18} color={stat.iconColor} />
-                </View>
-                <Text style={styles.statValue}>{stat.value}</Text>
-                <Text style={styles.statLabel}>{stat.label}</Text>
-              </View>
-            ))}
-          </View>
         )}
+
+
+
 
         {/* Trade Operations Section */}
         <View
@@ -514,7 +479,7 @@ function HomeScreen({ navigation }) {
         <View
           style={[
             styles.supportCard,
-            { borderColor: roleTheme.primary + '15', borderLeftColor: roleTheme.primary },
+            { borderColor: roleTheme.primary + '20' },
           ]}
         >
           <View style={styles.supportRow}>
@@ -559,7 +524,7 @@ function HomeScreen({ navigation }) {
         </View>
       </ScrollView>
 
-      <RequirementBottomSheet
+      <AddYourRequirement
         visible={showRequirementModal}
         onClose={() => setShowRequirementModal(false)}
         onSubmit={handleRequirementSubmit}
@@ -592,8 +557,6 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.04,
     shadowRadius: 8,
-    borderLeftWidth: 4,
-    borderLeftColor: '#E2E8F0',
   },
   welcomeRow: {
     flexDirection: 'row',
@@ -751,6 +714,7 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.white,
     borderRadius: 16,
     borderWidth: 1,
+    borderColor: '#E2E8F0',
     padding: w(16),
     marginTop: h(8),
     elevation: 3,
@@ -758,8 +722,6 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.04,
     shadowRadius: 8,
-    borderLeftWidth: 4,
-    borderLeftColor: '#E2E8F0',
   },
   supportRow: {
     flexDirection: 'row',
