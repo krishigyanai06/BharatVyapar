@@ -47,6 +47,7 @@ import { useTranslation } from '../../../shared/hooks/useTranslation';
 
 
 export const IMAGE_MAX_SIZE_MB = 10;
+export const PDF_MAX_SIZE_MB = 10;
 export const UNIT_TO_PRICE_UNIT = { Ton: 'Ton', Quintal: 'Qt', Kg: 'Kg' };
 
 const INITIAL_STATE = {
@@ -265,7 +266,7 @@ export const useSellCommoditiesForm = ({ route, navigation }) => {
       // Read current image count from stateRef — always fresh, no stale closure
       const remainingSlots = 3 - stateRef.current.commodityImages.length;
       if (remainingSlots <= 0) {
-        showAlert({ type: 'warning', title: 'Limit Reached', message: 'You can only add up to 3 images. Remove some to add more.' });
+        showAlert({ type: 'warning', title: t('Limit Reached'), message: t('You can only add up to 3 images. Remove some to add more.') });
         return;
       }
 
@@ -273,36 +274,90 @@ export const useSellCommoditiesForm = ({ route, navigation }) => {
 
       if (result.didCancel) return;
       if (result.errorCode) {
-        showAlert({ type: 'error', title: 'Image Error', message: result.errorMessage || 'Failed to pick images.' });
+        showAlert({ type: 'error', title: t('Image Error'), message: result.errorMessage || t('Failed to pick images.') });
         return;
       }
 
       if (result.assets && Array.isArray(result.assets)) {
+        const allowedExtensions = ['jpg', 'jpeg', 'png', 'webp', 'heic', 'heif'];
+        const allowedMimeTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'image/heic', 'image/heif'];
+        const validAssets = [];
+
+        for (const img of result.assets) {
+          const imgSize = img.fileSize || img.size;
+          if (imgSize && imgSize > IMAGE_MAX_SIZE_MB * 1024 * 1024) {
+            showAlert({
+              type: 'warning',
+              title: t('Image Too Large'),
+              message: t('Image size cannot exceed {size}MB.').replace('{size}', String(IMAGE_MAX_SIZE_MB)),
+            });
+            return;
+          }
+
+          const extension = img.fileName ? img.fileName.split('.').pop().toLowerCase() : '';
+          const mimeType = img.type ? img.type.toLowerCase() : '';
+
+          if (allowedExtensions.indexOf(extension) === -1 || (allowedMimeTypes.indexOf(mimeType) === -1 && (!mimeType || mimeType.indexOf('image/') !== 0))) {
+            showAlert({
+              type: 'error',
+              title: t('Invalid File Type'),
+              message: t('Only image files (JPG, JPEG, PNG, WEBP, HEIC) are allowed.'),
+            });
+            return;
+          }
+          validAssets.push(img);
+        }
+
         if (process.env.NODE_ENV === 'test') {
-          setCommodityImages(result.assets);
+          setCommodityImages(validAssets);
         } else {
-          setCommodityImages(prev => [...prev, ...result.assets].slice(0, 3));
+          setCommodityImages(prev => [...prev, ...validAssets].slice(0, 3));
         }
       }
     } catch (err) {
       console.warn('[SellCommodities] Image picker error:', err);
-      showAlert({ type: 'error', title: 'Unexpected Error', message: 'Something went wrong while opening the gallery.' });
+      showAlert({ type: 'error', title: t('Unexpected Error'), message: t('Something went wrong while opening the gallery.') });
     }
-  }, []); // [] — reads stateRef.current at call-time, never stale
+  }, [t, setCommodityImages]);
 
   const handleAddReport = useCallback(async () => {
     try {
       const result = await pick({ allowMultiSelection: true, type: [types.pdf] });
       if (result && Array.isArray(result)) {
-        setQualityReport(result);
+        const validReports = [];
+        for (const doc of result) {
+          const docSize = doc.size || doc.fileSize;
+          if (docSize && docSize > PDF_MAX_SIZE_MB * 1024 * 1024) {
+            showAlert({
+              type: 'warning',
+              title: t('File Too Large'),
+              message: t('Each quality report file must be less than {size}MB.').replace('{size}', String(PDF_MAX_SIZE_MB)),
+            });
+            return;
+          }
+
+          const extension = doc.name ? doc.name.split('.').pop().toLowerCase() : '';
+          const mimeType = doc.type ? doc.type.toLowerCase() : '';
+
+          if (extension !== 'pdf' || mimeType !== 'application/pdf') {
+            showAlert({
+              type: 'error',
+              title: t('Invalid File Type'),
+              message: t('Only PDF files are allowed for quality reports.'),
+            });
+            return;
+          }
+          validReports.push(doc);
+        }
+        setQualityReport(validReports);
       }
     } catch (err) {
       if (!isCancel(err)) {
         console.warn('[SellCommodities] DocumentPicker error:', err);
-        showAlert({ type: 'error', title: 'File Error', message: 'Failed to pick the document.' });
+        showAlert({ type: 'error', title: t('File Error'), message: t('Failed to pick the document.') });
       }
     }
-  }, []); // [] — no state needed
+  }, [t, setQualityReport]);
 
   const handlePostListing = useCallback(async () => {
     // Read the latest state and editItem through refs at call-time.
@@ -322,16 +377,63 @@ export const useSellCommoditiesForm = ({ route, navigation }) => {
       return;
     }
 
-    // Check image sizes
+    // Check image sizes and types
     if (Array.isArray(currentState.commodityImages)) {
+      const allowedExtensions = ['jpg', 'jpeg', 'png', 'webp', 'heic', 'heif'];
+      const allowedMimeTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'image/heic', 'image/heif'];
+
       for (const img of currentState.commodityImages) {
-        if (img?.fileSize && img.fileSize > IMAGE_MAX_SIZE_MB * 1024 * 1024) {
-          showAlert({
-            type: 'error',
-            title: t('Image Too Large'),
-            message: t('Image size cannot exceed {size}MB.').replace('{size}', String(IMAGE_MAX_SIZE_MB)),
-          });
-          return;
+        if (img?.uri && !img.uri.startsWith('http')) {
+          const imgSize = img.fileSize || img.size;
+          if (imgSize && imgSize > IMAGE_MAX_SIZE_MB * 1024 * 1024) {
+            showAlert({
+              type: 'error',
+              title: t('Image Too Large'),
+              message: t('Image size cannot exceed {size}MB.').replace('{size}', String(IMAGE_MAX_SIZE_MB)),
+            });
+            return;
+          }
+
+          const extension = img.fileName ? img.fileName.split('.').pop().toLowerCase() : '';
+          const mimeType = img.type ? img.type.toLowerCase() : '';
+
+          if (allowedExtensions.indexOf(extension) === -1 || (allowedMimeTypes.indexOf(mimeType) === -1 && (!mimeType || mimeType.indexOf('image/') !== 0))) {
+            showAlert({
+              type: 'error',
+              title: t('Invalid File Type'),
+              message: t('Only image files (JPG, JPEG, PNG, WEBP, HEIC) are allowed for crop images.'),
+            });
+            return;
+          }
+        }
+      }
+    }
+
+    // Check quality reports (PDF size & type)
+    if (Array.isArray(currentState.qualityReport)) {
+      for (const doc of currentState.qualityReport) {
+        if (doc?.uri && !doc.uri.startsWith('http')) {
+          const docSize = doc.size || doc.fileSize;
+          if (docSize && docSize > PDF_MAX_SIZE_MB * 1024 * 1024) {
+            showAlert({
+              type: 'error',
+              title: t('File Too Large'),
+              message: t('Each quality report file must be less than {size}MB.').replace('{size}', String(PDF_MAX_SIZE_MB)),
+            });
+            return;
+          }
+
+          const extension = doc.name ? doc.name.split('.').pop().toLowerCase() : '';
+          const mimeType = doc.type ? doc.type.toLowerCase() : '';
+
+          if (extension !== 'pdf' || mimeType !== 'application/pdf') {
+            showAlert({
+              type: 'error',
+              title: t('Invalid File Type'),
+              message: t('Only PDF files are allowed for quality reports.'),
+            });
+            return;
+          }
         }
       }
     }
@@ -498,7 +600,7 @@ export const useSellCommoditiesForm = ({ route, navigation }) => {
         setSubmitting(false);
       }
     }
-  }, []); // [] — reads all mutable values through refs, never stale
+  }, [t, setSubmitting]);
 
   const handleUnitChange = useCallback((selectedUnit) => {
     dispatch({
@@ -550,7 +652,38 @@ export const useSellCommoditiesForm = ({ route, navigation }) => {
     setSubmitting,
     setDeletedImages,
     setDeletedReports,
-  }), []); // All inner callbacks are stable ([] deps), so this memo never re-runs
+  }), [
+    setFocusedField,
+    setCommodityName,
+    setType,
+    setQuantity,
+    setSellingPrice,
+    setListingEndDate,
+    setDeliveryType,
+    setExWarehouseAddress,
+    setWeightTolerance,
+    setBillingAddress,
+    setPaymentTimeline,
+    setRemarks,
+    setIsNegotiable,
+    setMinimumAcceptablePrice,
+    setMaxNegotiationRounds,
+    setOfferExpiryHours,
+    setCommodityLocation,
+    setIsDatePickerOpen,
+    setMoisture,
+    setForeignMaterial,
+    setBroken,
+    setCustomQualityParams,
+    setIsModalVisible,
+    setModalParamName,
+    setModalParamValue,
+    setCommodityImages,
+    setQualityReport,
+    setSubmitting,
+    setDeletedImages,
+    setDeletedReports,
+  ]);
 
   const handlers = useMemo(() => ({
     handleAddImages,
@@ -558,7 +691,13 @@ export const useSellCommoditiesForm = ({ route, navigation }) => {
     handlePostListing,
     handleUnitChange,
     handleWeightTypeChange,
-  }), []); // Same reason — all callbacks have [] deps
+  }), [
+    handleAddImages,
+    handleAddReport,
+    handlePostListing,
+    handleUnitChange,
+    handleWeightTypeChange,
+  ]);
 
   return {
     state,

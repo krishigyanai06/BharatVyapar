@@ -1,4 +1,30 @@
 /**
+ * ─────────────────────────────────────────────────────────────────────────────
+ * UI ERROR MAPPER: Centralizes error extraction and maps technical errors to
+ * user-friendly localized messages.
+ * ─────────────────────────────────────────────────────────────────────────────
+ * RELATIONSHIP WITH client.js:
+ *   - client.js is the "Network layer" (HTTP Client). It fetches raw responses
+ *     and wraps network/Axios exceptions into standard objects with status codes:
+ *       { message, type, statusCode, backendError }
+ *   - errorUtils.js is the "UI layer helper". It takes those standard error objects
+ *     (or raw strings) and extracts the message. It then translates developer jargon
+ *     (like MongoDB tracebacks or OpenSSL errors) into polite, safe, human-readable
+ *     strings for our B2B farmers and traders.
+ * 
+ * WHY IT EXISTS:
+ *   Without errorUtils.js, developers would have to manually parse API error objects,
+ *   write repeated try/catch string extraction logic on every screen, and risk
+ *   exposing raw database code stack-traces directly to app users (which is bad UX
+ *   and a security issue).
+ * 
+ * WHAT HAPPENS IF WE REMOVE IT:
+ *   Users would see confusing, highly technical system crash logs (like "E11000 duplicate
+ *   key collection...") when things go wrong, and screens would require massive
+ *   amounts of boilerplate catch code.
+ */
+
+/**
  * Extracts the raw backend error message safely from any API response error object.
  * Reusable across all Redux thunks and API call catch blocks.
  *
@@ -18,6 +44,7 @@ export const extractErrorMessage = (err) => {
 /**
  * Maps raw backend/technical errors to user-friendly messages.
  * If the message is already user-friendly, returns it as-is.
+ * Supports status-code based mapping for standard HTTP responses.
  *
  * @param {string | any} errorMsg - The raw error message or error object
  * @returns {string} User-friendly error message
@@ -27,7 +54,13 @@ export const getFriendlyErrorMessage = (errorMsg) => {
     return 'An unexpected error occurred. Please try again.';
   }
 
-  // Handle case where object is passed instead of string
+  // 1. Extract status code if complex object is passed
+  let statusCode = null;
+  if (errorMsg && typeof errorMsg === 'object') {
+    statusCode = errorMsg.statusCode || errorMsg.status || errorMsg.response?.status;
+  }
+
+  // 2. Extract message string
   let message = '';
   if (typeof errorMsg === 'string') {
     message = errorMsg;
@@ -37,6 +70,47 @@ export const getFriendlyErrorMessage = (errorMsg) => {
 
   // Trim whitespace
   message = message.trim();
+
+  // 3. Status Code Mapping (Best Practice)
+  if (statusCode) {
+    switch (Number(statusCode)) {
+      case 400:
+        return message || 'Invalid request details. Please check your inputs.';
+      case 401:
+        return 'Your session has expired. Please log in again.';
+      case 403:
+        return 'You do not have permission to perform this action.';
+      case 404:
+        return 'The requested resource could not be found.';
+      case 409:
+        if (/active offer/i.test(message) || /offer/i.test(message)) {
+          return message;
+        }
+        return 'A duplicate listing or entry already exists. Please verify your details.';
+      case 422:
+        return 'Validation failed. Some required details are missing or invalid.';
+      case 429:
+        return 'Too many requests. Please wait a moment and try again.';
+      case 500:
+      case 502:
+      case 503:
+      case 504:
+        return 'Something went wrong on our end. Please try again in a moment, or contact support if the issue persists.';
+      default:
+        break;
+    }
+  }
+
+  // 4. Regex string match mapping (Defensive Fallback for raw text/unmapped status codes)
+
+  // 0. Unique/Duplicate constraint checks (e.g. duplicate listings, MongoDB unique index violations)
+  if (
+    /duplicate key/i.test(message) ||
+    /e11000/i.test(message) ||
+    /duplicate listing/i.test(message)
+  ) {
+    return 'A duplicate listing already exists. You have already created a listing with the same details.';
+  }
 
   // 1. Commodity delete blocked by active negotiations
   if (
@@ -70,14 +144,12 @@ export const getFriendlyErrorMessage = (errorMsg) => {
     return 'Could not connect to the server. Please check your internet connection and try again.';
   }
 
-  // 4. Technical System & Server Crash errors
+  // 4. Technical System & Server Crash errors (Fallback)
   if (
     /mongo/i.test(message) ||
     /cast to objectid/i.test(message) ||
-    /duplicate key/i.test(message) ||
     /validationerror/i.test(message) ||
     /db_/i.test(message) ||
-    /e11000/i.test(message) ||
     /\b500\b/i.test(message) ||
     /internal server error/i.test(message) ||
     /\b502\b/i.test(message) ||

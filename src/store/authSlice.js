@@ -6,6 +6,7 @@ import {
   removeAuthSession,
   saveLocalProfile,
   getLocalProfile,
+  getStoredToken,
 } from '../features/auth/auth.storage';
 import authApi from '../features/auth/auth.api';
 import userApi from '../features/profile/profile.api';
@@ -177,15 +178,30 @@ export const updateProfile = createAsyncThunk(
 
 export const logoutUser = createAsyncThunk(
   'auth/logoutUser',
-  async (_, { rejectWithValue }) => {
+  async (_, { rejectWithValue, getState }) => {
     try {
       console.log('🔄 [LOGOUT] Logging out...');
+      // Get the token before clearing storage
+      const token = getState().auth?.token || (await getStoredToken());
+      
       // Clear local session first so the user gets logged out instantly
       await removeAuthSession();
-      // Call backend logout asynchronously without awaiting it (fire-and-forget)
-      userApi.logout().catch(err => {
-        console.warn('⚠️ [LOGOUT] Backend api logout failed:', err?.message || err);
-      });
+      
+      // Call backend logout asynchronously with the explicit token (fire-and-forget)
+      if (token) {
+        userApi.logout({
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        }).catch(err => {
+          console.warn('⚠️ [LOGOUT] Backend api logout failed:', err?.message || err);
+        });
+      } else {
+        userApi.logout().catch(err => {
+          console.warn('⚠️ [LOGOUT] Backend api logout failed:', err?.message || err);
+        });
+      }
+      
       console.log('✅ [LOGOUT] Local session cleared, backend notified');
       return true;
     } catch (err) {

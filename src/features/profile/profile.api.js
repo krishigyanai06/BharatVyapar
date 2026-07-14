@@ -34,8 +34,8 @@ const profileApi = {
     return res.data;
   },
 
-  logout: async () => {
-    const res = await apiClient.post('/user/logout');
+  logout: async (config = {}) => {
+    const res = await apiClient.post('/user/logout', {}, config);
     return res.data;
   },
 

@@ -376,7 +376,7 @@ export default function NegotiationDetailsScreen({ route, navigation }) {
         setRefreshing(false);
       }
     }
-  }, [offerId, routeItem, user?._id]);
+  }, [offerId, t]);
 
   const handleRefresh = useCallback(() => loadOfferDetails(true), [loadOfferDetails]);
 
@@ -415,6 +415,32 @@ export default function NegotiationDetailsScreen({ route, navigation }) {
     const lastRound = displayRounds[displayRounds.length - 1];
     const price = lastRound?.price || offer?.price;
     const qty = lastRound?.quantity || offer?.quantity;
+
+    const minPrice = Number(item?.minimumAcceptablePrice || 0);
+    const availableQty = Number(item?.quantity || 0);
+
+    if (myRole === 'seller' && availableQty > 0 && Number(qty) > availableQty) {
+      showAlert({
+        type: 'error',
+        title: t('Cannot Accept Offer'),
+        message: t('This offer quantity ({qty} {unit}) exceeds your listing\'s available quantity of {availQty} {unit}. You cannot accept it.')
+          .replace('{qty}', String(qty))
+          .replace('{availQty}', String(availableQty))
+          .replace(/{unit}/g, t(item?.unit || 'Ton')),
+      });
+      return;
+    }
+
+    if (myRole === 'seller' && minPrice > 0 && price < minPrice) {
+      showAlert({
+        type: 'error',
+        title: t('Cannot Accept Offer'),
+        message: t('This offer price is below your minimum acceptable price of ₹{price}/{unit}. You cannot accept it.')
+          .replace('{price}', String(minPrice))
+          .replace('{unit}', t(item?.sellingPriceUnit || item?.priceUnit || 'Qtl')),
+      });
+      return;
+    }
 
     showAlert({
       type: 'confirm',
@@ -518,6 +544,50 @@ export default function NegotiationDetailsScreen({ route, navigation }) {
     }
 
     const newPrice = Number(counterPrice);
+    const numericQty = Number(counterQty);
+    const availableQty = Number(item?.quantity || 0);
+    const minPrice = Number(item?.minimumAcceptablePrice || 0);
+
+    if (isNaN(numericQty) || numericQty <= 0) {
+      showAlert({
+        type: 'error',
+        title: t('Invalid Quantity'),
+        message: t('Quantity must be greater than zero.'),
+      });
+      return;
+    }
+
+    if (availableQty > 0 && numericQty > availableQty) {
+      showAlert({
+        type: 'error',
+        title: t('Invalid Quantity'),
+        message: t('Quantity cannot exceed available quantity of {qty} {unit}.')
+          .replace('{qty}', String(availableQty))
+          .replace('{unit}', t(item?.unit || 'Ton')),
+      });
+      return;
+    }
+
+    if (isNaN(newPrice) || newPrice <= 0) {
+      showAlert({
+        type: 'error',
+        title: t('Invalid Price'),
+        message: t('Counter price must be greater than zero.'),
+      });
+      return;
+    }
+
+    if (myRole === 'buyer' && minPrice > 0 && newPrice < minPrice) {
+      showAlert({
+        type: 'error',
+        title: t('Invalid Price'),
+        message: t('Counter price cannot be less than the minimum acceptable price of ₹{price}/{unit}.')
+          .replace('{price}', String(minPrice))
+          .replace('{unit}', t(item?.sellingPriceUnit || item?.priceUnit || 'Qtl')),
+      });
+      return;
+    }
+
     const lastRound = displayRounds[displayRounds.length - 1];
     if (lastRound) {
       const delta = Math.abs(newPrice - lastRound.price) / lastRound.price;
@@ -1049,7 +1119,41 @@ export default function NegotiationDetailsScreen({ route, navigation }) {
           )
         ) : (
           // Active state (Negotiation in progress)
-          <View>
+          <View style={{ width: '100%' }}>
+            {(() => {
+              const activePrice = lastRound?.price || offer?.price;
+              const activeQty = lastRound?.quantity || offer?.quantity;
+              const availableQty = Number(item?.quantity || 0);
+              const minPrice = Number(item?.minimumAcceptablePrice || 0);
+
+              if (myRole === 'seller') {
+                if (availableQty > 0 && activeQty > availableQty) {
+                  return (
+                    <View style={styles.priceWarningBanner}>
+                      <Icon name="alert-circle-outline" size={16} color="#C53030" style={{ marginRight: w(6) }} />
+                      <Text style={styles.priceWarningText}>
+                        {t('This offer quantity ({qty} {unit}) exceeds your listing\'s available quantity of {availQty} {unit}. Acceptance is disabled.')
+                          .replace('{qty}', String(activeQty))
+                          .replace('{availQty}', String(availableQty))
+                          .replace(/{unit}/g, t(item?.unit || 'Ton'))}
+                      </Text>
+                    </View>
+                  );
+                }
+                if (minPrice > 0 && activePrice < minPrice) {
+                  return (
+                    <View style={styles.priceWarningBanner}>
+                      <Icon name="alert-circle-outline" size={16} color="#C53030" style={{ marginRight: w(6) }} />
+                      <Text style={styles.priceWarningText}>
+                        {t('This offer price is below your minimum acceptable price of ₹{minPrice}. Acceptance is disabled.')
+                          .replace('{minPrice}', String(minPrice))}
+                      </Text>
+                    </View>
+                  );
+                }
+              }
+              return null;
+            })()}
 
             <View style={styles.buttonRow}>
               {/* Decline: Visible when it is your turn and negotiation is active */}
@@ -1067,9 +1171,19 @@ export default function NegotiationDetailsScreen({ route, navigation }) {
                 lastRound.role !== myRole
               ) && (
                 <TouchableOpacity
-                  style={[styles.actionBtn, { backgroundColor: theme.primary }]}
+                  style={[
+                    styles.actionBtn,
+                    { backgroundColor: theme.primary },
+                    (myRole === 'seller' && (
+                      (Number(item?.quantity || 0) > 0 && (lastRound?.quantity || offer?.quantity) > Number(item.quantity)) ||
+                      (Number(item?.minimumAcceptablePrice || 0) > 0 && (lastRound?.price || offer?.price) < Number(item.minimumAcceptablePrice))
+                    )) && { backgroundColor: '#CBD5E0' }
+                  ]}
                   onPress={handleAccept}
-                  disabled={submittingAction}
+                  disabled={submittingAction || (myRole === 'seller' && (
+                    (Number(item?.quantity || 0) > 0 && (lastRound?.quantity || offer?.quantity) > Number(item.quantity)) ||
+                    (Number(item?.minimumAcceptablePrice || 0) > 0 && (lastRound?.price || offer?.price) < Number(item.minimumAcceptablePrice))
+                  ))}
                 >
                   <Icon name="check-decagram" size={18} color={COLORS.white} />
                   <Text style={styles.acceptBtnText}>{t('Accept')}</Text>
@@ -1159,6 +1273,7 @@ export default function NegotiationDetailsScreen({ route, navigation }) {
               multiline
               value={counterRemarks}
               onChangeText={setCounterRemarks}
+              maxLength={250}
               placeholder={t('Explain your counter terms...')}
             />
 
@@ -1511,6 +1626,7 @@ const styles = StyleSheet.create({
     fontStyle: 'italic',
     color: COLORS.textLight,
     lineHeight: h(15),
+    flex: 1,
   },
   emptyRoundsContainer: {
     alignItems: 'center',
@@ -1522,6 +1638,23 @@ const styles = StyleSheet.create({
     fontSize: f(13),
     color: COLORS.textMuted,
     textAlign: 'center',
+  },
+  priceWarningBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFF5F5',
+    borderColor: '#FEB2B2',
+    borderWidth: 1,
+    borderRadius: 8,
+    padding: w(10),
+    marginBottom: h(12),
+  },
+  priceWarningText: {
+    fontSize: f(11),
+    color: '#C53030',
+    fontWeight: '600',
+    flex: 1,
+    lineHeight: h(16),
   },
   // Action Footer
   actionFooter: {

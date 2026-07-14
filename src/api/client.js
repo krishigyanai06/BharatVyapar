@@ -1,5 +1,26 @@
-// Network layer: shared HTTP client and interceptors.
-// Patterns: request-ID tracing, retry/backoff, 429 rate-limit, GET dedup, typed errors.
+/**
+ * ─────────────────────────────────────────────────────────────────────────────
+ * NETWORK LAYER: shared HTTP client (Axios) and interceptors.
+ * ─────────────────────────────────────────────────────────────────────────────
+ * RELATIONSHIP WITH errorUtils.js:
+ *   - client.js is the "Network layer" (communicator with the server). It handles
+ *     auth headers, request-ID logging, retries, 429 rate-limiting, and refreshes
+ *     expired auth tokens. If a request fails, it intercepts the Axios error and
+ *     packages it into a standardized schema object:
+ *       { message, type, statusCode, backendError }
+ *   - client.js DOES NOT map or translate raw database errors or custom message texts
+ *     into friendly UI labels. Instead, it rejects the standard error object,
+ *     which the screens/hooks pass to `getFriendlyErrorMessage(error)` in `errorUtils.js`.
+ * 
+ * WHY IT EXISTS:
+ *   Without client.js, we would have to duplicate authentication header setting,
+ *   token refresh checks, request tracing IDs, rate limit delays, and error wrappers
+ *   across every single API call block in the app.
+ * 
+ * WHAT HAPPENS IF WE REMOVE IT:
+ *   API integration would become extremely fragile, duplicate requests would trigger,
+ *   auth session sync would break, and network failures would cause unhandled crashes.
+ */
 
 import axios from 'axios';
 import config from '../config';
@@ -15,7 +36,7 @@ import {
 // ─────────────────────────────────────────────
 // 1. TYPED ERROR CATALOGUE
 // Single source of truth for every user-visible error string.
-// Screens import getFriendlyError(err) — never hardcode messages in UI.
+// Screens import getFriendlyErrorMessage from errorUtils.js — never hardcode messages in UI.
 // ─────────────────────────────────────────────
 export const ERROR_MESSAGES = {
   NETWORK_ERROR:          'No internet connection. Please check your network and try again.',
@@ -29,12 +50,10 @@ export const ERROR_MESSAGES = {
 };
 
 /**
- * Returns the most user-friendly error message for a caught error.
- * Works for: axios interceptor errors, validation errors, unexpected throws.
- *
- * Usage in screens:
- *   import { getFriendlyError } from '../../api/client';
- *   setApiError(getFriendlyError(err));
+ * @deprecated - Use getFriendlyErrorMessage(err) from shared/utils/errorUtils.js instead!
+ * 
+ * getFriendlyErrorMessage handles complex object parsing, validation errors,
+ * and comprehensive HTTP status code mappings.
  */
 export const getFriendlyError = (err) => {
   if (!err) return ERROR_MESSAGES.UNKNOWN;

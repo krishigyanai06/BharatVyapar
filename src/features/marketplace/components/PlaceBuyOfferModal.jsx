@@ -124,6 +124,7 @@ export default function PlaceBuyOfferModal({
               multiline
               value={remarks}
               onChangeText={setRemarks}
+              maxLength={250}
               placeholder={t('e.g. Request immediate loading, jute bags packing...')}
             />
 
