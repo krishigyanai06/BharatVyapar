@@ -10,8 +10,11 @@ import {
 import ReactNativeBlobUtil from 'react-native-blob-util';
 import { showAlert } from '../components/CustomAlertBox';
 
-const MAX_FILE_SIZE_MB = 5;
+const MAX_FILE_SIZE_MB = 10;
 const MAX_FILE_SIZE_BYTES = MAX_FILE_SIZE_MB * 1024 * 1024;
+
+const ALLOWED_EXTENSIONS = ['pdf', 'jpg', 'jpeg', 'png', 'webp', 'heic', 'heif'];
+const ALLOWED_MIME_TYPES = ['application/pdf', 'image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'image/heic', 'image/heif'];
 
 const IMAGE_OPTIONS = {
   mediaType: 'photo',
@@ -105,6 +108,8 @@ const requestStoragePermission = async () => {
 
 const validateFile = file => {
   if (!file) return null;
+
+  // Validate File Size
   if (file.size && file.size > MAX_FILE_SIZE_BYTES) {
     showAlert({
       type: 'warning',
@@ -113,12 +118,30 @@ const validateFile = file => {
     });
     return null;
   }
+
+  // Validate File Extension (extracted from name)
+  const extension = file.name ? file.name.split('.').pop().toLowerCase() : '';
+  const isExtensionAllowed = ALLOWED_EXTENSIONS.indexOf(extension) !== -1;
+
+  // Validate MIME Type
+  const mimeType = file.type ? file.type.toLowerCase() : '';
+  const isMimeAllowed = ALLOWED_MIME_TYPES.indexOf(mimeType) !== -1 || (mimeType && mimeType.indexOf('image/') === 0);
+
+  if (!isExtensionAllowed || !isMimeAllowed) {
+    showAlert({
+      type: 'error',
+      title: 'Invalid File Type',
+      message: 'Only PDF and image files (JPG, JPEG, PNG, WEBP, HEIC) are allowed.',
+    });
+    return null;
+  }
+
   return file;
 };
 
 // ─── Pickers ─────────────────────────────────────────────────────────────────
 
-const pickFromGallery = async () => {
+export const pickFromGallery = async () => {
   const hasPermission = await requestStoragePermission();
   if (!hasPermission) return null;
 
@@ -149,7 +172,7 @@ const pickFromGallery = async () => {
   });
 };
 
-const pickFromCamera = async () => {
+export const pickFromCamera = async () => {
   const hasPermission = await requestCameraPermission();
   if (!hasPermission) return null;
 

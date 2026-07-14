@@ -183,6 +183,51 @@ export default function CommodityDetailsScreen({ route, navigation }) {
       return;
     }
 
+    const numericQty = Number(offerQty);
+    const numericPrice = Number(finalPrice);
+    const availableQty = Number(item.quantity || 0);
+    const minPrice = Number(item.minimumAcceptablePrice || 0);
+
+    if (isNaN(numericQty) || numericQty <= 0) {
+      showAlert({
+        type: 'error',
+        title: t('Invalid Quantity'),
+        message: t('Quantity must be greater than zero.'),
+      });
+      return;
+    }
+
+    if (numericQty > availableQty) {
+      showAlert({
+        type: 'error',
+        title: t('Invalid Quantity'),
+        message: t('Quantity cannot exceed available quantity of {qty} {unit}.')
+          .replace('{qty}', String(availableQty))
+          .replace('{unit}', t(item.unit || 'Ton')),
+      });
+      return;
+    }
+
+    if (isNaN(numericPrice) || numericPrice <= 0) {
+      showAlert({
+        type: 'error',
+        title: t('Invalid Price'),
+        message: t('Offer price must be greater than zero.'),
+      });
+      return;
+    }
+
+    if (item.isNegotiable !== false && minPrice > 0 && numericPrice < minPrice) {
+      showAlert({
+        type: 'error',
+        title: t('Invalid Price'),
+        message: t('Offer price cannot be less than the minimum acceptable price of ₹{price}/{unit}.')
+          .replace('{price}', String(minPrice))
+          .replace('{unit}', t(item.sellingPriceUnit || 'Qt')),
+      });
+      return;
+    }
+
     try {
       setSubmittingOffer(true);
       const requestData = {

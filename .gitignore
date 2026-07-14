@@ -71,6 +71,7 @@ __test__/
 # Markdown & Text files
 *.md
 *.txt
+documentation/
 
 # Recordings & Screenshots (local dev artifacts)
 recordings/
