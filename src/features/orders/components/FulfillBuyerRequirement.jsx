@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Modal, View, Text, TextInput, TouchableOpacity, StyleSheet, ActivityIndicator } from 'react-native';
+import { Modal, View, Text, TextInput, TouchableOpacity, StyleSheet, ActivityIndicator, Alert } from 'react-native';
 
 export default function FulfillBuyerRequirement({ visible, requirement, onClose, onSubmit }) {
   const [quantity, setQuantity] = useState('');
@@ -16,7 +16,32 @@ export default function FulfillBuyerRequirement({ visible, requirement, onClose,
   }, [requirement]);
 
   const handleSubmit = async () => {
-    if (!quantity || !price) return;
+    if (!quantity || !price) {
+      Alert.alert('Validation Error', 'Please fill in quantity and price.');
+      return;
+    }
+
+    const numericQty = Number(quantity);
+    const numericPrice = Number(price);
+    const maxQty = Number(requirement?.remainingQuantity || requirement?.quantity || 0);
+
+    if (isNaN(numericQty) || numericQty <= 0) {
+      Alert.alert('Invalid Quantity', 'Quantity must be greater than zero.');
+      return;
+    }
+
+    if (maxQty > 0 && numericQty > maxQty) {
+      Alert.alert(
+        'Invalid Quantity',
+        `Quantity cannot exceed remaining requirement of ${maxQty} ${requirement?.unit || 'Qt'}.`
+      );
+      return;
+    }
+
+    if (isNaN(numericPrice) || numericPrice <= 0) {
+      Alert.alert('Invalid Price', 'Price must be greater than zero.');
+      return;
+    }
     
     setIsSubmitting(true);
     try {
@@ -100,6 +125,7 @@ export default function FulfillBuyerRequirement({ visible, requirement, onClose,
             placeholder="Optional remarks"
             value={remarks}
             onChangeText={setRemarks}
+            maxLength={250}
             placeholderTextColor="#999"
             multiline
             numberOfLines={3}

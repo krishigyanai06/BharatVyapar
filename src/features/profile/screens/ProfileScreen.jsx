@@ -6,8 +6,8 @@ import {
 } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
-import { launchImageLibrary, launchCamera } from 'react-native-image-picker';
 import { useDispatch, useSelector } from 'react-redux';
+import { pickFromCamera, pickFromGallery } from '../../../shared/utils/documentUtils';
 import { SafeScreen } from '../../../shared/components/SafeScreen';
 import AppHeader from '../../../shared/components/AppHeader';
 import COLORS from '../../../theme/colors';
@@ -434,15 +434,11 @@ export default function ProfileScreen() {
 
   const openImagePicker = useCallback(async (pickerType) => {
     try {
-      const options = { mediaType: 'photo', quality: 0.8, selectionLimit: 1 };
-      const result = pickerType === 'camera' 
-        ? await launchCamera(options) 
-        : await launchImageLibrary(options);
+      const file = pickerType === 'camera' 
+        ? await pickFromCamera() 
+        : await pickFromGallery();
 
-      if (result.didCancel || !result.assets || result.assets.length === 0) return;
-
-      const asset = result.assets[0];
-      const file = { uri: asset.uri, name: asset.fileName || `profile_image_${Date.now()}.jpg`, type: asset.type || 'image/jpeg' };
+      if (!file) return;
 
       dispatchAction({ type: 'SET_UPLOADING_DOC', payload: 'profileImage' });
       const formData = buildDocumentFormData('profileImage', file);
@@ -1180,7 +1176,8 @@ export default function ProfileScreen() {
                   style={styles.bottomSheetOptionRow}
                   onPress={() => {
                     dispatchAction({ type: 'CLOSE_PHOTO_SHEET' });
-                    openImagePicker('gallery');
+                    // Fix Async-Race Condition: Delay native launch until modal closes
+                    setTimeout(() => openImagePicker('gallery'), 300);
                   }}
                 >
                   <View style={[styles.bottomSheetIconBg, { backgroundColor: theme.primary + '15' }]}>
@@ -1195,7 +1192,8 @@ export default function ProfileScreen() {
                   style={styles.bottomSheetOptionRow}
                   onPress={() => {
                     dispatchAction({ type: 'CLOSE_PHOTO_SHEET' });
-                    openImagePicker('camera');
+                    // Fix Async-Race Condition: Delay native launch until modal closes
+                    setTimeout(() => openImagePicker('camera'), 300);
                   }}
                 >
                   <View style={[styles.bottomSheetIconBg, { backgroundColor: theme.primary + '15' }]}>

@@ -793,6 +793,7 @@ export default function SellCommodities({ route, navigation }) {
             multiline
             value={remarks}
             onChangeText={setRemarks}
+            maxLength={250}
             placeholder={t('Moisture standards, packing material quality, loading timeline constraints...')}
             placeholderTextColor={COLORS.textMuted}
             onFocus={() => setFocusedField('remarks')}
