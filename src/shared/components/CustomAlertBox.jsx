@@ -102,12 +102,35 @@ const CustomAlertInner = forwardRef((_, ref) => {
 
   useImperativeHandle(ref, () => ({
     show(options) {
+      let alertType = options.type || 'info';
+      let title = options.title || '';
+      let rawMsg = options.message;
+
+      let message = '';
+      if (rawMsg) {
+        if (options.type === 'error') {
+          message = getFriendlyErrorMessage(rawMsg);
+        } else {
+          message = String(rawMsg);
+        }
+      }
+
+      const isOfflineBlock =
+        message === 'Please connect to Wi-Fi or mobile data to perform this action.' ||
+        (typeof rawMsg === 'string' && rawMsg.includes('NO_INTERNET_WRITE_BLOCKED')) ||
+        (rawMsg && typeof rawMsg === 'object' && (rawMsg.message === 'NO_INTERNET_WRITE_BLOCKED' || rawMsg.message?.includes('NO_INTERNET_WRITE_BLOCKED')));
+
+      if (isOfflineBlock) {
+        alertType = 'warning';
+        if (!options.title || options.title === 'Error' || options.title === 'Update Failed' || options.title === 'Submission Failed') {
+          title = 'Connection Required';
+        }
+      }
+
       setConfig({
-        type: options.type || 'info',
-        title: options.title || '',
-        message: options.message
-          ? (options.type === 'error' ? getFriendlyErrorMessage(options.message) : String(options.message))
-          : '',
+        type: alertType,
+        title: title,
+        message: message,
         buttons:
           options.buttons && options.buttons.length > 0
             ? options.buttons

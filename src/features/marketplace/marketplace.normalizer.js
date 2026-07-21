@@ -243,8 +243,10 @@ export function normalizeOffer(raw) {
   const sellerId  = sellerObj ? { ...sellerObj, _id: sellerIdStr, id: sellerIdStr } : sellerIdStr;
 
   const commObj      = (raw.commodityId && typeof raw.commodityId === 'object') ? raw.commodityId :
-                       (raw.commodity   && typeof raw.commodity   === 'object') ? raw.commodity   : null;
-  const commodityId  = commObj ? extractId(commObj) : extractId(raw.commodityId || raw.commodity);
+                       (raw.commodity   && typeof raw.commodity   === 'object') ? raw.commodity   :
+                       (raw.requirementId && typeof raw.requirementId === 'object') ? raw.requirementId :
+                       (raw.requirement && typeof raw.requirement === 'object') ? raw.requirement : null;
+  const commodityId  = commObj ? extractId(commObj) : extractId(raw.commodityId || raw.commodity || raw.requirementId || raw.requirement);
 
   const rounds = normalizeRounds(raw, buyerIdStr);
 
@@ -289,12 +291,13 @@ export function normalizeOffer(raw) {
 
     sellerId,
     commodityId,
+    requirementId: raw.requirementId || raw.requirement || null,
 
     commodity: commObj ? {
       ...commObj,
       id:                    extractId(commObj),
-      name:                  String(commObj.commodityName || commObj.name || '').trim() || '—',
-      commodityName:         String(commObj.commodityName || commObj.name || '').trim() || '—',
+      name:                  String(commObj.commodityName || commObj.name || commObj.commodity || '').trim() || '—',
+      commodityName:         String(commObj.commodityName || commObj.name || commObj.commodity || '').trim() || '—',
       type:                  String(commObj.type          || commObj.variety || '').trim() || null,
       variety:               String(commObj.type          || commObj.variety || '').trim() || null,
       grade:                 commObj.grade || null,

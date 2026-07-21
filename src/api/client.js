@@ -23,6 +23,7 @@
  */
 
 import axios from 'axios';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import config from '../config';
 import {
   getStoredToken,
@@ -31,6 +32,7 @@ import {
   removeAuthSession,
   getStoredAuthSession,
 } from '../features/auth/auth.storage';
+import { getNetworkStatusStatic } from '../shared/components/NetworkProvider';
 
 
 // ─────────────────────────────────────────────
@@ -74,13 +76,13 @@ export const getFriendlyError = (err) => {
 const generateRequestId = () =>
   `${Date.now().toString(36)}-${Math.random().toString(16).slice(2, 8)}`;
 
-// ─────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────
 // 3. RETRY CONFIG
 // Mirrors patterns used by Swiggy / Zepto / GPay:
 //   - Retry network errors and 5xx responses (not 4xx — those are client errors)
 //   - Exponential backoff: 1s → 2s → 4s
 //   - Do NOT retry POST/PATCH/DELETE (non-idempotent) unless explicitly opted-in
-// ─────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────
 const RETRY_CONFIG = {
   maxAttempts: 3,
   retryableStatusCodes: [500, 502, 503, 504],
@@ -88,7 +90,39 @@ const RETRY_CONFIG = {
   baseDelayMs: 1000,
 };
 
-const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+// ─────────────────────────────────────────────────────────────────
+// 3a. OFFLINE GET CACHE CONFIG
+// TTL: How long cached data is considered "fresh" before it is treated as stale.
+// Stale cache is NOT served — error propagates so the UI can show a proper message.
+// Key prefix: '@cache_' keeps all cache entries namespaced, easy to audit/clear.
+// _noCache flag: Sensitive endpoints (e.g. bank details, auth tokens) can opt out.
+// _offlineSync flag: Write operations that are safe to queue offline opt IN.
+// ─────────────────────────────────────────────────────────────────
+const CACHE_TTL_MS = 30 * 60 * 1000; // 30 minutes
+const CACHE_KEY_PREFIX = '@cache_';
+
+const sleep = (ms, signal) => {
+  return new Promise((resolve, reject) => {
+    if (signal?.aborted) {
+      return reject(new axios.Cancel('Request aborted during retry backoff'));
+    }
+    const timer = setTimeout(() => {
+      if (signal) {
+        signal.removeEventListener('abort', onAbort);
+      }
+      resolve();
+    }, ms);
+
+    function onAbort() {
+      clearTimeout(timer);
+      reject(new axios.Cancel('Request aborted during retry backoff'));
+    }
+
+    if (signal) {
+      signal.addEventListener('abort', onAbort);
+    }
+  });
+};
 
 const isRetryable = (error, reqConfig) => {
   if (axios.isCancel(error)) return false;
@@ -150,23 +184,54 @@ api.interceptors.request.use(async reqConfig => {
     reqConfig.headers['Content-Type'] = 'application/json';
   }
 
-  // 7c. Request ID tracing — every request gets a unique ID
-  const requestId = generateRequestId();
-  reqConfig.headers['X-Request-ID'] = requestId;
-  reqConfig._requestId = requestId;
+  // 7c. Request ID tracing — preserve original across retries for correlation, append attempt suffix
+  if (!reqConfig._requestId) {
+    reqConfig._requestId = generateRequestId();
+  }
+  const attempt = reqConfig._retryCount ? `;attempt=${reqConfig._retryCount + 1}` : '';
+  reqConfig.headers['X-Request-ID'] = `${reqConfig._requestId}${attempt}`;
 
   // 7d. GET deduplication — attach to existing in-flight promise if duplicate
   const dedupeKey = getDedupeKey(reqConfig);
   if (dedupeKey) {
     if (inFlightRequests.has(dedupeKey)) {
-      if (__DEV__) {
-        console.log(`🔁 [DEDUP] Reusing in-flight GET: ${reqConfig.url}`);
+      // If this request is already retrying, let it pass through to perform the actual call
+      if (reqConfig._retryCount > 0 || reqConfig._rateLimitRetried || reqConfig._retry) {
+        // Active retry/refresh attempt — bypass duplicate rejection
+      } else {
+        if (__DEV__) {
+          console.log(`🔁 [DEDUP] Reusing in-flight GET: ${reqConfig.url}`);
+        }
+        return Promise.reject({ __isDeduplicated: true, dedupeKey });
       }
+    } else {
+      inFlightRequests.set(dedupeKey, { callbacks: [] });
+      reqConfig._dedupeKey = dedupeKey;
     }
-    reqConfig._dedupeKey = dedupeKey;
   }
 
-  // 7e. Dev logging
+  // 7e. OFFLINE WRITE BLOCKER
+  // Blocks non-GET requests when offline UNLESS caller explicitly opts in
+  // via { _offlineSync: true } at the call site (service/screen layer).
+  //
+  // WHY Config Flag instead of URL check:
+  //   URL check (config.url.includes('/counter')) = Feature logic inside Infrastructure = ❌
+  //   Config flag check (config._offlineSync) = Infrastructure reads generic intent = ✅
+  //
+  // Stale/duplicate prevention: This runs at request time, so cancelled requests
+  // never reach the network — no duplicate entries in server or queue.
+  if (!getNetworkStatusStatic() && reqConfig.method?.toLowerCase() !== 'get') {
+    if (!reqConfig._offlineSync) {
+      const cancelSource = axios.CancelToken.source();
+      reqConfig.cancelToken = cancelSource.token;
+      cancelSource.cancel('NO_INTERNET_WRITE_BLOCKED');
+      if (__DEV__) {
+        console.log(`🚫 [OfflineBlocker] Non-syncable write blocked (offline): ${reqConfig.url}`);
+      }
+    }
+  }
+
+  // 7f. Dev logging
   if (__DEV__) {
     let bodyLog = reqConfig.data;
     if (reqConfig.data instanceof FormData) {
@@ -203,11 +268,35 @@ const forceLogout = async () => {
 
 api.interceptors.response.use(
   // ── SUCCESS ──
-  res => {
+  async res => {
     // Clean up deduplication tracker
     if (res.config?._dedupeKey) {
-      inFlightRequests.delete(res.config._dedupeKey);
+      const dedupeKey = res.config._dedupeKey;
+      const active = inFlightRequests.get(dedupeKey);
+      if (active) {
+        active.callbacks.forEach(cb => cb.resolve(res));
+      }
+      inFlightRequests.delete(dedupeKey);
     }
+
+    // 8a-cache. WRITE GET RESPONSE TO LOCAL CACHE
+    // Runs on every successful GET unless caller opts out via { _noCache: true }.
+    // Stores { data, timestamp } so we can enforce TTL on retrieval.
+    // Wrapped in try/catch — AsyncStorage failure must NEVER crash a successful API response.
+    // Memory safety: Same key always overwrites — no unbounded growth per endpoint.
+    if (res.config?.method?.toLowerCase() === 'get' && !res.config?._noCache) {
+      try {
+        const cacheKey = `${CACHE_KEY_PREFIX}${res.config.url}`;
+        await AsyncStorage.setItem(
+          cacheKey,
+          JSON.stringify({ data: res.data, timestamp: Date.now() }),
+        );
+      } catch (cacheWriteErr) {
+        // Silent fail — cache write failure is non-critical
+        if (__DEV__) console.warn('💾 [Cache] Write failed (non-critical):', cacheWriteErr?.message);
+      }
+    }
+
     if (__DEV__) {
       console.log(
         `📥 [${res.config?._requestId}] ${res.config?.method?.toUpperCase()} ${res.config?.url}`,
@@ -219,17 +308,92 @@ api.interceptors.response.use(
 
   // ── ERROR ──
   async error => {
+    // Handle queue waiting for duplicate requests
+    if (error && error.__isDeduplicated) {
+      const { dedupeKey } = error;
+      if (__DEV__) {
+        console.log(`⏳ [DEDUP] Request queued: waiting for in-flight GET to complete`);
+      }
+      return new Promise((resolve, reject) => {
+        const active = inFlightRequests.get(dedupeKey);
+        if (active) {
+          active.callbacks.push({ resolve, reject });
+        } else {
+          reject(error);
+        }
+      });
+    }
+
     const original = error.config || {};
     const statusCode = error.response?.status;
     const requestId = original._requestId;
 
-    // Clean up dedup tracker on error too
-    if (original._dedupeKey) {
-      inFlightRequests.delete(original._dedupeKey);
-    }
+    // Standardized rejection helper that also rejects any queued duplicates
+    const rejectWithStandardizedError = (formatted) => {
+      if (original._dedupeKey) {
+        const dedupeKey = original._dedupeKey;
+        const active = inFlightRequests.get(dedupeKey);
+        if (active) {
+          active.callbacks.forEach(cb => cb.reject(formatted));
+        }
+        inFlightRequests.delete(dedupeKey);
+      }
+      return Promise.reject(formatted);
+    };
 
     // 8a. Cancelled requests — pass through untouched (AbortController / axios.CancelToken)
-    if (axios.isCancel(error)) return Promise.reject(error);
+    if (axios.isCancel(error)) {
+      if (original._dedupeKey) {
+        const dedupeKey = original._dedupeKey;
+        const active = inFlightRequests.get(dedupeKey);
+        if (active) {
+          active.callbacks.forEach(cb => cb.reject(error));
+        }
+        inFlightRequests.delete(dedupeKey);
+      }
+      return Promise.reject(error);
+    }
+
+    // 8b. GET CACHE FALLBACK (network errors only)
+    // Triggered when a GET request fails with no server response (ERR_NETWORK).
+    // Guards:
+    //   - Only GET requests (POST/PUT never fall back to cache)
+    //   - Only if caller did NOT opt out via { _noCache: true }
+    //   - TTL check: cache older than CACHE_TTL_MS is treated as stale and NOT served
+    //   - Full try/catch: AsyncStorage failure must not shadow the original network error
+    if (
+      !error.response &&
+      original?.method?.toLowerCase() === 'get' &&
+      !original?._noCache
+    ) {
+      try {
+        const cacheKey = `${CACHE_KEY_PREFIX}${original.url}`;
+        const cachedStr = await AsyncStorage.getItem(cacheKey);
+        if (cachedStr) {
+          const { data: cachedData, timestamp } = JSON.parse(cachedStr);
+          const isStale = (Date.now() - timestamp) > CACHE_TTL_MS;
+
+          if (isStale) {
+            // Stale data — do NOT serve it. Let error propagate naturally.
+            if (__DEV__) console.warn(`⏰ [Cache] Stale cache ignored for: ${original.url}`);
+          } else {
+            if (__DEV__) console.log(`📵 [Cache] Serving cached response for: ${original.url}`);
+            // Mock Axios response shape so callers receive identical structure
+            return Promise.resolve({
+              data: cachedData,
+              status: 200,
+              statusText: 'OK',
+              headers: original.headers ?? {},
+              config: original,
+              isFromCache: true, // UI checks this to show 'Showing Saved Data' banner
+            });
+          }
+        }
+      } catch (cacheReadErr) {
+        // Silent fail — cache read failure must not shadow the real error
+        if (__DEV__) console.warn('💾 [Cache] Read failed (non-critical):', cacheReadErr?.message);
+      }
+    }
 
     // 8b. Dev error logging
     if (__DEV__) {
@@ -254,8 +418,12 @@ api.interceptors.response.use(
         );
       }
 
-      await sleep(delayMs);
-      return api(original);
+      try {
+        await sleep(delayMs, original.signal);
+        return api(original);
+      } catch (sleepError) {
+        return rejectWithStandardizedError(sleepError);
+      }
     }
 
     // ── 8d. 429 RATE LIMITING ──
@@ -269,11 +437,15 @@ api.interceptors.response.use(
 
       if (!original._rateLimitRetried) {
         original._rateLimitRetried = true;
-        await sleep(retryAfterMs);
-        return api(original);
+        try {
+          await sleep(retryAfterMs, original.signal);
+          return api(original);
+        } catch (sleepError) {
+          return rejectWithStandardizedError(sleepError);
+        }
       }
 
-      return Promise.reject({
+      return rejectWithStandardizedError({
         message: ERROR_MESSAGES.RATE_LIMITED,
         type: 'RATE_LIMITED',
         statusCode: 429,
@@ -287,7 +459,7 @@ api.interceptors.response.use(
       const isTimeout =
         error.code === 'ECONNABORTED' || error.message?.includes('timeout');
 
-      return Promise.reject({
+      return rejectWithStandardizedError({
         message: isTimeout ? ERROR_MESSAGES.TIMEOUT_ERROR : ERROR_MESSAGES.NETWORK_ERROR,
         type: isTimeout ? 'TIMEOUT_ERROR' : 'NETWORK_ERROR',
         statusCode: null,
@@ -307,7 +479,7 @@ api.interceptors.response.use(
       flushQueue(null, sessionExpiredError);
       await forceLogout();
       refreshFailureCount = 0;
-      return Promise.reject(sessionExpiredError);
+      return rejectWithStandardizedError(sessionExpiredError);
     }
 
     // ── 8g. 401 — First occurrence → attempt token refresh ──
@@ -338,7 +510,7 @@ api.interceptors.response.use(
           flushQueue(null, sessionExpiredError);
           await forceLogout();
           refreshFailureCount = 0;
-          return Promise.reject(sessionExpiredError);
+          return rejectWithStandardizedError(sessionExpiredError);
         }
 
         const res = await axios.post(`${config.API_BASE_URL}/auth/refresh`, { refreshToken });
@@ -356,17 +528,20 @@ api.interceptors.response.use(
         return api(original);
       } catch (err) {
         refreshFailureCount += 1;
+        const isTerminalRefreshError = err?.response?.status === 401 || err?.response?.status === 403;
 
         const refreshFailureError = {
           message: err?.message || ERROR_MESSAGES.SESSION_REFRESH_FAILED,
           type: 'SESSION_REFRESH_FAILED',
-          statusCode: 401,
+          statusCode: err?.response?.status || null,
           requestId,
         };
 
         flushQueue(null, refreshFailureError);
 
-        if (refreshFailureCount >= 2) {
+        // OPTIMIZATION: Only force logout if the token refresh endpoint specifically rejects with 401/403 (Terminal Auth Error).
+        // Transient failures like network disconnects or gateway timeouts should NOT clear the user session.
+        if (isTerminalRefreshError) {
           const sessionExpiredError = {
             message: ERROR_MESSAGES.SESSION_EXPIRED,
             type: 'SESSION_EXPIRED',
@@ -375,10 +550,10 @@ api.interceptors.response.use(
           };
           await forceLogout();
           refreshFailureCount = 0;
-          return Promise.reject(sessionExpiredError);
+          return rejectWithStandardizedError(sessionExpiredError);
         }
 
-        return Promise.reject(refreshFailureError);
+        return rejectWithStandardizedError(refreshFailureError);
       } finally {
         isRefreshing = false;
       }
@@ -386,7 +561,7 @@ api.interceptors.response.use(
 
     // ── 8h. 5xx SERVER ERRORS (after retry exhaustion) ──
     if (statusCode >= 500) {
-      return Promise.reject({
+      return rejectWithStandardizedError({
         message: ERROR_MESSAGES.SERVER_ERROR,
         type: 'SERVER_ERROR',
         statusCode,
@@ -397,7 +572,7 @@ api.interceptors.response.use(
 
     // ── 8i. ALL OTHER API ERRORS (4xx) ──
     // Backend message is shown directly — it's already user-relevant
-    return Promise.reject({
+    return rejectWithStandardizedError({
       message: error.response?.data?.message || ERROR_MESSAGES.API_ERROR,
       type: 'API_ERROR',
       statusCode,

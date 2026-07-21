@@ -8,15 +8,9 @@ import {
   viewDocument,
 } from '../../shared/utils/documentUtils';
 import { validateProfileForm, validateProfileField } from '../../shared/utils/validators';
-import COLORS from '../../theme/colors';
-
-
-export const ROLE_THEMES = {
-  FPO:       { primary: COLORS.fpoPrimary,       secondary: COLORS.fpoSecondary,       light: COLORS.fpoLight,       text: COLORS.fpoText },
-  Trader:    { primary: COLORS.traderPrimary,    secondary: COLORS.traderSecondary,    light: COLORS.traderLight,    text: COLORS.traderText },
-  Miller:    { primary: COLORS.millerPrimary,    secondary: COLORS.millerSecondary,    light: COLORS.millerLight,    text: COLORS.millerText },
-  Corporate: { primary: COLORS.corporatePrimary, secondary: COLORS.corporateSecondary, light: COLORS.corporateLight, text: COLORS.corporateText },
-};
+// ROLE_THEMES moved to theme/roleThemes.js (single source of truth).
+// Re-exported here for backward compatibility with existing imports.
+export { ROLE_THEMES } from '../../theme/roleThemes';
 
 export const GENDER_OPTIONS = ['Male', 'Female', 'Other'];
 
