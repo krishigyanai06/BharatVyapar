@@ -98,3 +98,104 @@ export const calculateOrderTotal = (quantityKg, pricePerKg) => {
   const price = Number(pricePerKg || 0);
   return qty * price;
 };
+
+// ─── STATUS CONFIGS & FILTERS ────────────────────────────────────────────────
+export const OFFER_STATUS_CONFIG = {
+  pending:        { label: 'Awaiting Response',  color: '#718096', bg: '#EDF2F7',  icon: 'clock-outline' },
+  in_negotiation: { label: 'In Negotiation',     color: '#6B46C1', bg: '#FAF5FF',  icon: 'swap-horizontal' },
+  negotiating:    { label: 'In Negotiation',     color: '#6B46C1', bg: '#FAF5FF',  icon: 'swap-horizontal' },
+  countered:      { label: 'Counter Received',   color: '#3182CE', bg: '#EBF8FF',  icon: 'swap-horizontal' },
+  accepted:       { label: 'Deal Closed',        color: '#38A169', bg: '#F0FFF4',  icon: 'check-decagram' },
+  rejected:       { label: 'Rejected',           color: '#E53E3E', bg: '#FFF5F5',  icon: 'close-circle' },
+  expired:        { label: 'Expired',            color: '#718096', bg: '#EDF2F7',  icon: 'timer-off' },
+  cancelled:      { label: 'Cancelled',          color: '#718096', bg: '#EDF2F7',  icon: 'close-circle' },
+};
+
+export const ESCROW_STATUS_CONFIG = {
+  pending_payment: { label: 'Payment Pending', color: '#3182CE', bg: '#EBF8FF',  icon: 'cash-clock',     progress: 0.1 },
+  funded:          { label: 'Funded',          color: '#DD6B20', bg: '#FFFAF0',  icon: 'bank-check',     progress: 0.4 },
+  dispatched:      { label: 'In Transit',      color: '#D69E2E', bg: '#FFFFF0',  icon: 'truck-delivery', progress: 0.6 },
+  delivered:       { label: 'Delivered',       color: '#38A169', bg: '#F0FFF4',  icon: 'package-check',  progress: 0.8 },
+  released:        { label: 'Completed ✓',     color: '#38A169', bg: '#F0FFF4',  icon: 'check-decagram', progress: 1.0 },
+  cancelled:       { label: 'Cancelled',       color: '#E53E3E', bg: '#FFF5F5',  icon: 'close-circle',   progress: 0.0 },
+};
+
+export const LISTING_STATUS_CONFIG = {
+  active:    { label: 'ACTIVE',    color: '#38A169', bg: '#F0FFF4', icon: 'store' },
+  sold:      { label: 'SOLD',      color: '#6B46C1', bg: '#FAF5FF', icon: 'check-decagram' },
+  expired:   { label: 'EXPIRED',   color: '#718096', bg: '#EDF2F7', icon: 'timer-off' },
+  cancelled: { label: 'CANCELLED', color: '#E53E3E', bg: '#FFF5F5', icon: 'close-circle' },
+};
+
+export const BUY_SECTION_CONFIGS = [
+  { key: 'your_turn', label: 'Your Turn to Respond', icon: 'flash',                urgent: true,  accentColor: null },
+  { key: 'waiting',   label: 'Awaiting Response',    icon: 'timer-sand',            urgent: false, accentColor: '#64748B' },
+  { key: 'accepted',  label: 'Deals Accepted',        icon: 'check-decagram',        urgent: false, accentColor: '#38A169' },
+  { key: 'closed',    label: 'Inactive Offers',       icon: 'archive-outline',       urgent: false, accentColor: '#94A3B8' },
+  { key: 'deleted',   label: 'Listing Removed',       icon: 'alert-circle-outline',  urgent: false, accentColor: '#E53E3E' },
+];
+
+export const SELL_SECTION_CONFIGS = [
+  { key: 'active', label: 'Active Listings',     icon: 'storefront-outline',   urgent: false, accentColor: '#38A169' },
+  { key: 'sold',   label: 'Sold — Deals Closed', icon: 'check-decagram',       urgent: false, accentColor: null },
+  { key: 'closed', label: 'Inactive Listings',   icon: 'archive-outline',      urgent: false, accentColor: '#94A3B8' },
+];
+
+export const BUY_TAB_FILTERS  = ['All', 'Active', 'In Negotiation', 'Accepted', 'Closed'];
+export const SELL_TAB_FILTERS = ['All', 'Active', 'In Negotiation', 'Sold', 'Closed'];
+
+// ─── UTILITIES & CLASSIFIERS ──────────────────────────────────────────────────
+
+export const normalizeStatus = (st) => {
+  if (!st || typeof st !== 'string') return 'pending';
+  return st.toLowerCase().replace(/\s+/g, '_');
+};
+
+export const classifyBuyOffer = (offer, userRole) => {
+  const st = normalizeStatus(offer.displayStatus || offer.status);
+  const isTerminal = ['accepted', 'rejected', 'expired', 'cancelled'].includes(st);
+
+  const reqObj = (offer.requirementId && typeof offer.requirementId === 'object') ? offer.requirementId : null;
+  const commodity = offer.commodity || 
+                    (typeof offer.commodityId === 'object' ? offer.commodityId : null) || 
+                    reqObj || 
+                    {};
+
+  const isDeleted = !commodity.commodityName && !commodity.name && !commodity.commodity;
+  if (isDeleted) return 'deleted';
+  if (st === 'accepted') return 'accepted';
+  if (isTerminal) return 'closed';
+
+  const isBuyerRole = userRole === 'FPO';
+  const myTurnValue = isBuyerRole ? 'buyer' : 'seller';
+
+  if (offer.currentTurn === myTurnValue) return 'your_turn';
+  return 'waiting';
+};
+
+export const classifySellListing = (listing) => {
+  const st = (listing.status || 'active').toLowerCase();
+  if (st === 'sold') return 'sold';
+  if (['expired', 'cancelled'].includes(st)) return 'closed';
+  return 'active';
+};
+
+export const formatRelative = (dateStr, t) => {
+  if (!dateStr) return '';
+  const diff = Date.now() - new Date(dateStr).getTime();
+  const h_ = Math.floor(diff / 3600000);
+  if (h_ < 1) return t ? t('Just now') : 'Just now';
+  if (h_ < 24) return t ? t('{hours}h ago').replace('{hours}', String(h_)) : `${h_}h ago`;
+  const d = Math.floor(h_ / 24);
+  return t ? t('{days}d ago').replace('{days}', String(d)) : `${d}d ago`;
+};
+
+export const formatExpiry = (expiresAt, t) => {
+  if (!expiresAt) return null;
+  const diff = Math.max(0, new Date(expiresAt) - Date.now());
+  if (diff === 0) return t ? t('Expired') : 'Expired';
+  const h_ = Math.floor(diff / 3600000);
+  const m = Math.floor((diff % 3600000) / 60000);
+  if (h_ > 0) return t ? t('Expires in {hours}h {mins}m').replace('{hours}', String(h_)).replace('{mins}', String(m)) : `Expires in ${h_}h ${m}m`;
+  return t ? t('Expires in {mins}m').replace('{mins}', String(m)) : `Expires in ${m}m`;
+};
