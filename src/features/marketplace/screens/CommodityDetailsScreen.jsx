@@ -28,15 +28,8 @@ import PlaceBuyOfferModal from '../components/PlaceBuyOfferModal';
 import ReceivedOffersModal from '../components/ReceivedOffersModal';
 import { viewDocument, downloadFile } from '../../../shared/utils/documentUtils';
 import { useTranslation } from '../../../shared/hooks/useTranslation';
+import { ROLE_THEMES } from '../../../theme/roleThemes';
 
-
-
-const ROLE_THEMES = {
-  FPO: { primary: COLORS.fpoPrimary, secondary: COLORS.fpoSecondary, light: COLORS.fpoLight, text: COLORS.fpoText },
-  Trader: { primary: COLORS.traderPrimary, secondary: COLORS.traderSecondary, light: COLORS.traderLight, text: COLORS.traderText },
-  Miller: { primary: COLORS.millerPrimary, secondary: COLORS.millerSecondary, light: COLORS.millerLight, text: COLORS.millerText },
-  Corporate: { primary: COLORS.corporatePrimary, secondary: COLORS.corporateSecondary, light: COLORS.corporateLight, text: COLORS.corporateText },
-};
 
 const { width: screenWidth } = Dimensions.get('window');
 
@@ -203,7 +196,7 @@ export default function CommodityDetailsScreen({ route, navigation }) {
         title: t('Invalid Quantity'),
         message: t('Quantity cannot exceed available quantity of {qty} {unit}.')
           .replace('{qty}', String(availableQty))
-          .replace('{unit}', t(item.unit || 'Ton')),
+          .replace('{unit}', item.unit || 'Ton'),
       });
       return;
     }
@@ -223,7 +216,7 @@ export default function CommodityDetailsScreen({ route, navigation }) {
         title: t('Invalid Price'),
         message: t('Offer price cannot be less than the minimum acceptable price of ₹{price}/{unit}.')
           .replace('{price}', String(minPrice))
-          .replace('{unit}', t(item.sellingPriceUnit || 'Qt')),
+          .replace('{unit}', item.sellingPriceUnit || 'Qt'),
       });
       return;
     }
@@ -479,7 +472,7 @@ export default function CommodityDetailsScreen({ route, navigation }) {
             <View style={styles.termContent}>
               <Text style={styles.termTitle}>{t('Weight Basis & Tolerance')}</Text>
               <Text style={styles.termDesc}>
-                {t(item.weightType || 'Net Weight')}
+                {item.weightType || 'Net Weight'}
                 {item.weightTolerance && item.weightTolerance !== '—' ? t(' with tolerance {tolerance}').replace('{tolerance}', item.weightTolerance) : ''}
               </Text>
             </View>

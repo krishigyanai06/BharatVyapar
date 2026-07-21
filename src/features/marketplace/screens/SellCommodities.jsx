@@ -25,14 +25,7 @@ import KycBanner from '../../../shared/components/KycBanner';
 
 import { useSellCommoditiesForm, IMAGE_MAX_SIZE_MB, UNIT_TO_PRICE_UNIT } from '../hooks/useSellCommoditiesForm';
 import { useTranslation } from '../../../shared/hooks/useTranslation';
-
-
-const ROLE_THEMES = {
-  FPO: { primary: COLORS.fpoPrimary, secondary: COLORS.fpoSecondary, light: COLORS.fpoLight, text: COLORS.fpoText },
-  Trader: { primary: COLORS.traderPrimary, secondary: COLORS.traderSecondary, light: COLORS.traderLight, text: COLORS.traderText },
-  Miller: { primary: COLORS.millerPrimary, secondary: COLORS.millerSecondary, light: COLORS.millerLight, text: COLORS.millerText },
-  Corporate: { primary: COLORS.corporatePrimary, secondary: COLORS.corporateSecondary, light: COLORS.corporateLight, text: COLORS.corporateText },
-};
+import { ROLE_THEMES } from '../../../theme/roleThemes';
 
 
 

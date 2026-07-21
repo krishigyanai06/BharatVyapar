@@ -16,17 +16,12 @@ import { useNavigation } from '@react-navigation/native';
 import { selectUser, selectSelectedRole } from '../../../store/authSelectors';
 import COLORS from '../../../theme/colors';
 import { w, h, f } from '../../../shared/utils/responsive';
+import { getSafeUserName } from '../../../shared/utils/formatters';
+import UserBadge from '../../../shared/components/UserBadge';
+import StatusPill from '../../../shared/components/StatusPill';
 import { getReceivedOffers } from '../marketplace.api';
 import { useTranslation } from '../../../shared/hooks/useTranslation';
-
-
-
-const ROLE_THEMES = {
-  FPO:       { primary: COLORS.fpoPrimary,       secondary: COLORS.fpoSecondary,       light: COLORS.fpoLight,       text: COLORS.fpoText },
-  Trader:    { primary: COLORS.traderPrimary,    secondary: COLORS.traderSecondary,    light: COLORS.traderLight,    text: COLORS.traderText },
-  Miller:    { primary: COLORS.millerPrimary,    secondary: COLORS.millerSecondary,    light: COLORS.millerLight,    text: COLORS.millerText },
-  Corporate: { primary: COLORS.corporatePrimary, secondary: COLORS.corporateSecondary, light: COLORS.corporateLight, text: COLORS.corporateText },
-};
+import { ROLE_THEMES } from '../../../theme/roleThemes';
 
 // All statuses the backend can send
 // NOTE: Multiple buyers can now negotiate simultaneously — no "locked" status exists anymore.
@@ -304,7 +299,6 @@ const OfferCard = React.memo(({ offer, item, theme, onPress, t }) => {
   const statusCfg   = STATUS_CONFIG[statusSt] || STATUS_CONFIG.pending;
   const isTerminal  = TERMINAL_STATUSES.includes(statusSt);
   const maxRounds   = offer.maxRounds ?? item?.maxNegotiationRounds ?? 5;
-  const buyerName   = offer.buyerName || t('Buyer');
   const buyerState  = offer.buyerState || '';
   const roundCount  = offer.roundCount ?? 0;
   const price       = offer.price ?? 0;
@@ -349,7 +343,12 @@ const OfferCard = React.memo(({ offer, item, theme, onPress, t }) => {
 
       <View style={styles.cardHeader}>
         <View style={styles.flex1}>
-          <Text style={styles.buyerName}>{buyerName}</Text>
+          <UserBadge
+            userObj={offer.buyer || offer.buyerId}
+            preResolvedName={offer.buyerName}
+            role={t('Buyer')}
+            style={styles.buyerName}
+          />
           <View style={styles.buyerMeta}>
             {offer.buyerRating && (
               <>
@@ -368,9 +367,7 @@ const OfferCard = React.memo(({ offer, item, theme, onPress, t }) => {
             )}
           </View>
         </View>
-        <View style={[styles.statusBadge, { backgroundColor: statusCfg.bg }]}>
-          <Text style={[styles.statusText, { color: statusCfg.color }]}>{t(statusCfg.label)}</Text>
-        </View>
+        <StatusPill status={offer.status} />
       </View>
 
       <View style={styles.divider} />

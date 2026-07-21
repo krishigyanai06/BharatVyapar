@@ -13,34 +13,31 @@ import {
   Animated,
   Easing,
 } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import UserBadge from '../../../shared/components/UserBadge';
+import NetInfo from '@react-native-community/netinfo';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useSelector } from 'react-redux';
-import { useFocusEffect } from '@react-navigation/native';
 import { selectUser, selectSelectedRole } from '../../../store/authSelectors';
 import { SafeScreen } from '../../../shared/components/SafeScreen';
+import { useNetwork } from '../../../shared/components/NetworkProvider';
 import AppHeader from '../../../shared/components/AppHeader';
 import COLORS from '../../../theme/colors';
 import { w, h, f } from '../../../shared/utils/responsive';
 import { showAlert } from '../../../shared/components/CustomAlertBox';
-
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTranslation } from '../../../shared/hooks/useTranslation';
 import {
-  getOfferDetails,
   submitCounterOffer,
   acceptOffer,
   rejectOffer,
 } from '../../marketplace/marketplace.api';
-
-import { getSellCommodityById } from '../../marketplace/marketplace.api';
-
-
-const ROLE_THEMES = {
-  FPO: { primary: COLORS.fpoPrimary, secondary: COLORS.fpoSecondary, light: COLORS.fpoLight, text: COLORS.fpoText },
-  Trader: { primary: COLORS.traderPrimary, secondary: COLORS.traderSecondary, light: COLORS.traderLight, text: COLORS.traderText },
-  Miller: { primary: COLORS.millerPrimary, secondary: COLORS.millerSecondary, light: COLORS.millerLight, text: COLORS.millerText },
-  Corporate: { primary: COLORS.corporatePrimary, secondary: COLORS.corporateSecondary, light: COLORS.corporateLight, text: COLORS.corporateText },
-};
+import {
+  validatePriceMovement,
+  isRoundsExhausted,
+} from '../utils/negotiationValidators';
+import { useNegotiationDetail } from '../hooks/useNegotiationDetail';
+import { ROLE_THEMES } from '../../../theme/roleThemes';
 
 // ─── Animated Waiting Icon ───────────────────────────────────────────────────
 function WaitingPulseIcon({ color, size = 20 }) {
@@ -48,6 +45,8 @@ function WaitingPulseIcon({ color, size = 20 }) {
   const rotate = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
+    if (typeof process !== 'undefined' && process.env.NODE_ENV === 'test') return;
+
     // Pulse: scale up then back
     const pulseAnim = Animated.loop(
       Animated.sequence([
@@ -84,6 +83,8 @@ function WaitingPulseIcon({ color, size = 20 }) {
 function YourTurnPulse({ color }) {
   const anim = useRef(new Animated.Value(1)).current;
   useEffect(() => {
+    if (typeof process !== 'undefined' && process.env.NODE_ENV === 'test') return;
+
     const loop = Animated.loop(
       Animated.sequence([
         Animated.timing(anim, { toValue: 1.6, duration: 700, easing: Easing.out(Easing.ease), useNativeDriver: true }),
@@ -144,6 +145,7 @@ const STATUS_CONFIG = {
 
 export default function NegotiationDetailsScreen({ route, navigation }) {
   const { t } = useTranslation();
+  const { isConnected: isNetworkConnected } = useNetwork();
   // PERFORMANCE FIX: Two granular selectors — only re-renders when user or
   // selectedRole change, not on profileLoading or other unrelated auth fields.
   const user      = useSelector(selectUser);
@@ -158,13 +160,8 @@ export default function NegotiationDetailsScreen({ route, navigation }) {
   const routeItem = route?.params?.item;
 
   // ─── State ────────────────────────────────────────────────────────────
-  const [offer, setOffer] = useState(null);
-  const [item, setItem] = useState(routeItem || null);
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
-  const [apiError, setApiError] = useState(null);
 
-  // Action state
+  // Action / form state — owned by screen (not data-fetch concern)
   const [counterModalVisible, setCounterModalVisible] = useState(false);
   const [submittingAction, setSubmittingAction] = useState(false);
   const [counterPrice, setCounterPrice] = useState('');
@@ -173,9 +170,110 @@ export default function NegotiationDetailsScreen({ route, navigation }) {
   const [isFinalOfferToggle, setIsFinalOfferToggle] = useState(false);
   const [counterPriceError, setCounterPriceError] = useState('');
   const [historyOpen, setHistoryOpen] = useState(true);
-  // Cooldown countdown (seconds remaining)
-  const [cooldownSecs, setCooldownSecs] = useState(0);
-  const cooldownTimer = useRef(null);
+  const [optimisticRounds, setOptimisticRounds] = useState([]);
+  const OFFLINE_QUEUE_KEY = '@negotiation_offline_counter_offers';
+  const isSyncingRef = useRef(false);
+
+  // Sync offline counter offers when internet connectivity is restored (real or simulated)
+  useEffect(() => {
+    if (isNetworkConnected) {
+      const syncOfflineOffers = async () => {
+        if (isSyncingRef.current) return;
+        isSyncingRef.current = true;
+        try {
+          const queueStr = await AsyncStorage.getItem(OFFLINE_QUEUE_KEY);
+          const queue = queueStr ? JSON.parse(queueStr) : [];
+          if (queue.length === 0) {
+            isSyncingRef.current = false;
+            return;
+          }
+
+          // Filter outbox tasks for this specific negotiation offer
+          const myTasks = queue.filter(t => String(t.offerId) === String(offerId));
+          if (myTasks.length === 0) {
+            isSyncingRef.current = false;
+            return;
+          }
+
+          if (__DEV__) {
+            console.log(`🌐 [OfflineSync] Connectivity active. Syncing ${myTasks.length} queued offline counter offers for offer ${offerId}`);
+          }
+
+          for (const task of myTasks) {
+            try {
+              await submitCounterOffer(task.offerId, task.counterData);
+            } catch (err) {
+              console.warn(`❌ [OfflineSync] Sync failed for task ${task.id}:`, err);
+            }
+          }
+
+          // Remove processed items from local outbox queue
+          const updatedQueue = queue.filter(t => String(t.offerId) !== String(offerId));
+          await AsyncStorage.setItem(OFFLINE_QUEUE_KEY, JSON.stringify(updatedQueue));
+
+          // Reset optimistic UI states and fetch server-side truth
+          setOptimisticRounds([]);
+          refresh();
+
+          const buyerObj = offer?.buyerId || offer?.buyer || {};
+          const sellerObj = offer?.sellerId || offer?.seller || {};
+          const otherPartyName = myRole === 'buyer'
+            ? (sellerObj.firstName ? `${sellerObj.firstName} ${sellerObj.lastName || ''}`.trim() : t('Seller'))
+            : (buyerObj.firstName ? `${buyerObj.firstName} ${buyerObj.lastName || ''}`.trim() : t('Buyer'));
+
+          showAlert({
+            type: 'success',
+            title: t('Offer Delivered!'),
+            message: t('Your offline offer has been successfully sent to {name}.')
+              .replace('{name}', otherPartyName),
+          });
+        } catch (syncErr) {
+          console.warn('[OfflineSync] Outbox synchronization failed:', syncErr);
+        } finally {
+          isSyncingRef.current = false;
+        }
+      };
+
+      syncOfflineOffers();
+    }
+  }, [isNetworkConnected, offerId, refresh, t]);
+
+  // Screen-level mount guard — protects navigation/showAlert calls inside async handlers
+  const isMountedRef = useRef(true);
+  const hasStatusChangedRef = useRef(false);
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => { isMountedRef.current = false; };
+  }, []);
+
+  useEffect(() => {
+    const unsubscribe = navigation.addListener('beforeRemove', (e) => {
+      if (!hasStatusChangedRef.current) {
+        return;
+      }
+      e.preventDefault();
+      hasStatusChangedRef.current = false;
+      navigation.navigate('Trades', { shouldRefresh: true });
+    });
+    return unsubscribe;
+  }, [navigation]);
+
+  // Pre-fill counter form whenever a fresh offer load completes
+  const onOfferLoaded = useCallback((offerData) => {
+    const history = offerData?.negotiationHistory || offerData?.rounds || [];
+    if (history.length > 0) {
+      const lastRound = history[history.length - 1];
+      setCounterPrice(String(lastRound.price || ''));
+      setCounterQty(String(lastRound.quantity || ''));
+    } else {
+      setCounterPrice(String(offerData?.price || ''));
+      setCounterQty(String(offerData?.quantity || ''));
+    }
+  }, []);
+
+  // ─── Data-fetch hook ──────────────────────────────────────────────────
+  const { offer, item, loading, refreshing, apiError, cooldownSecs, refresh, handleRefresh } =
+    useNegotiationDetail({ offerId, routeItem, onOfferLoaded, t });
 
   // ─── Derived from API ────────────────────────────────────────────────
   const userId = user?._id || user?.id;
@@ -227,7 +325,7 @@ export default function NegotiationDetailsScreen({ route, navigation }) {
     const roundsList = [];
     if (!offer) return roundsList;
 
-    const offerRounds = offer.negotiationHistory || offer.rounds || [];
+    const offerRounds = [...(offer.negotiationHistory || offer.rounds || []), ...optimisticRounds];
     const firstRound = offerRounds[0];
     const isFirstRoundBuyer = firstRound && (
       firstRound.role === 'buyer' ||
@@ -277,7 +375,7 @@ export default function NegotiationDetailsScreen({ route, navigation }) {
       }
     });
     return roundsList;
-  }, [offer, buyerId]);
+  }, [offer, buyerId, optimisticRounds]);
 
   const isMyTurn = offer ? currentTurn === myRole : false;
   const lastRound = displayRounds[displayRounds.length - 1];
@@ -286,7 +384,7 @@ export default function NegotiationDetailsScreen({ route, navigation }) {
   const displayRoundCount = Math.max(1, (offer?.roundCount ?? offer?.round_count ?? displayRounds.length));
   // maxNegotiationRounds: use listing value if available; backend enforces default of 5
   const maxRounds = offer?.maxNegotiationRounds || offer?.commodityId?.maxNegotiationRounds || offer?.commodity?.maxNegotiationRounds || item?.maxNegotiationRounds || 5;
-  const roundsMaxed = displayRoundCount >= maxRounds;
+  const roundsMaxed = isRoundsExhausted(displayRoundCount, maxRounds);
   const isTerminal = ['accepted', 'rejected', 'expired', 'cancelled', 'closed'].includes(offer?.status);
   
   // Check if negotiation rounds are allowed
@@ -307,106 +405,6 @@ export default function NegotiationDetailsScreen({ route, navigation }) {
   const priceGap = hasPrices ? Math.abs(listedPrice - currentPrice) : 0;
   const gapPercent = hasPrices ? (priceGap / listedPrice) * 100 : 0;
 
-  // ─── Load Offer Detail ────────────────────────────────────────────────
-  const loadOfferDetails = useCallback(async (isRefresh = false, isBackground = false) => {
-    if (!offerId) {
-      setApiError(t('No offer ID provided.'));
-      if (!isBackground) setLoading(false);
-      return;
-    }
-
-
-
-    try {
-      if (!isBackground) {
-        if (isRefresh) setRefreshing(true);
-        else setLoading(true);
-      }
-      setApiError(null);
-
-      const res = await getOfferDetails(offerId);
-      const offerData = res?.data?.offer || res?.offer || res?.data || res;
-      setOffer(offerData);
-
-      // Set item from embedded commodity and fetch full populated listing details (including sellerName, shopName and sellingPrice)
-      let resolvedCommodity = offerData?.commodity || (typeof offerData?.commodityId === 'object' ? offerData.commodityId : null);
-      const commId = resolvedCommodity?.id || resolvedCommodity?._id || offerData?.commodityId;
-      if (commId && typeof commId === 'string') {
-        try {
-          const fullCommodity = await getSellCommodityById(commId);
-          if (fullCommodity) {
-            resolvedCommodity = { ...resolvedCommodity, ...fullCommodity };
-          }
-        } catch (commErr) {
-          console.warn('[NegotiationDetailsScreen] Failed to fetch full commodity details:', commErr);
-        }
-      }
-
-      if (resolvedCommodity) {
-        setItem(resolvedCommodity);
-      }
-
-      // Pre-fill counter form with last round's price or root price
-      // Backend sends negotiationHistory (not rounds) — support both for safety
-      const history = offerData?.negotiationHistory || offerData?.rounds || [];
-      if (history.length > 0) {
-        const lastRound = history[history.length - 1];
-        setCounterPrice(String(lastRound.price || ''));
-        setCounterQty(String(lastRound.quantity || ''));
-      } else {
-        setCounterPrice(String(offerData?.price || ''));
-        setCounterQty(String(offerData?.quantity || ''));
-      }
-
-      // Setup cooldown timer
-      if (offerData?.cooldownEndsAt) {
-        const remaining = Math.max(0, Math.floor((new Date(offerData.cooldownEndsAt) - Date.now()) / 1000));
-        setCooldownSecs(remaining);
-      } else {
-        setCooldownSecs(0);
-      }
-    } catch (err) {
-      console.warn('[NegotiationDetails] loadOfferDetails error:', err);
-      if (!isBackground) {
-        setApiError(err?.message || t('Failed to load negotiation details.'));
-      }
-    } finally {
-      if (!isBackground) {
-        setLoading(false);
-        setRefreshing(false);
-      }
-    }
-  }, [offerId, t]);
-
-  const handleRefresh = useCallback(() => loadOfferDetails(true), [loadOfferDetails]);
-
-  useFocusEffect(
-    useCallback(() => {
-      loadOfferDetails();
-      
-      const intervalId = setInterval(() => {
-        loadOfferDetails(false, true);
-      }, 300000); // 5 minutes background refresh
-
-      return () => clearInterval(intervalId);
-    }, [loadOfferDetails])
-  );
-
-  // Cooldown timer tick
-  useEffect(() => {
-    if (cooldownSecs > 0) {
-      cooldownTimer.current = setInterval(() => {
-        setCooldownSecs(prev => {
-          if (prev <= 1) {
-            clearInterval(cooldownTimer.current);
-            return 0;
-          }
-          return prev - 1;
-        });
-      }, 1000);
-    }
-    return () => clearInterval(cooldownTimer.current);
-  }, [cooldownSecs]);
 
   // ─── Accept ──────────────────────────────────────────────────────────
   const handleAccept = () => {
@@ -456,6 +454,8 @@ export default function NegotiationDetailsScreen({ route, navigation }) {
             try {
               setSubmittingAction(true);
               const res = await acceptOffer(offerId);
+              if (!isMountedRef.current) return;
+              hasStatusChangedRef.current = true;
               const resolvedDealId = res?.dealId || res?.data?.deal?._id || res?.deal?._id || res?.data?.deal?.id || res?.deal?.id || res?.data?.dealId;
               showAlert({
                 type: 'success',
@@ -465,6 +465,7 @@ export default function NegotiationDetailsScreen({ route, navigation }) {
                   {
                     text: t('View Deal'),
                     onPress: () => {
+                      if (!isMountedRef.current) return;
                       // Backend API not ready yet — navigate without dealId
                       // DealDetails will show 'Order Accepted' pending screen
                       navigation.navigate('DealDetails', {
@@ -484,7 +485,7 @@ export default function NegotiationDetailsScreen({ route, navigation }) {
               });
             } finally {
               setSubmittingAction(false);
-              loadOfferDetails(true);
+              refresh(true);
             }
           },
         },
@@ -508,6 +509,8 @@ export default function NegotiationDetailsScreen({ route, navigation }) {
             try {
               setSubmittingAction(true);
               await rejectOffer(offerId, { reason: 'Rejected by user' });
+              if (!isMountedRef.current) return;
+              hasStatusChangedRef.current = true;
               showAlert({
                 type: 'info',
                 title: t('Offer Rejected'),
@@ -523,7 +526,7 @@ export default function NegotiationDetailsScreen({ route, navigation }) {
               });
             } finally {
               setSubmittingAction(false);
-              loadOfferDetails(true);
+              refresh(true);
             }
           },
         },
@@ -590,11 +593,9 @@ export default function NegotiationDetailsScreen({ route, navigation }) {
 
     const lastRound = displayRounds[displayRounds.length - 1];
     if (lastRound) {
-      const delta = Math.abs(newPrice - lastRound.price) / lastRound.price;
-      if (delta >= 0.05) {
-        const minAllowed = +(lastRound.price * 0.951).toFixed(0);
-        const maxAllowed = +(lastRound.price * 1.049).toFixed(0);
-        setCounterPriceError(t('Price must be within 5%. Allowed: ₹{min} – ₹{max}').replace('{min}', minAllowed).replace('{max}', maxAllowed));
+      const priceCheck = validatePriceMovement(newPrice, lastRound.price);
+      if (!priceCheck.valid) {
+        setCounterPriceError(t('Price must be within 5%. Allowed: ₹{min} – ₹{max}').replace('{min}', priceCheck.min).replace('{max}', priceCheck.max));
         return;
       }
     }
@@ -608,7 +609,57 @@ export default function NegotiationDetailsScreen({ route, navigation }) {
         isFinalOffer: isFinalOfferToggle,
       };
 
+      // Check connectivity before triggering API call
+      const isOnline = isNetworkConnected;
+
+      if (!isOnline) {
+        // Save request payload to local AsyncStorage queue
+        const queueStr = await AsyncStorage.getItem(OFFLINE_QUEUE_KEY);
+        const queue = queueStr ? JSON.parse(queueStr) : [];
+        const newOfflineTask = {
+          id: `task_${Date.now()}`,
+          offerId,
+          counterData,
+        };
+        queue.push(newOfflineTask);
+        await AsyncStorage.setItem(OFFLINE_QUEUE_KEY, JSON.stringify(queue));
+
+        // Inject dynamic round card into local optimistic UI timeline
+        const newOptimisticRound = {
+          roundNumber: displayRounds.length + 1,
+          proposedBy: myRole,
+          price: newPrice,
+          quantity: Number(counterQty),
+          remarks: counterRemarks || '',
+          createdAt: new Date().toISOString(),
+          isFinal: isFinalOfferToggle,
+          status: 'offline_pending',
+        };
+        setOptimisticRounds(prev => [...prev, newOptimisticRound]);
+
+        setCounterModalVisible(false);
+        setCounterRemarks('');
+        setIsFinalOfferToggle(false);
+        setCounterPriceError('');
+
+        const buyerObj = offer?.buyerId || offer?.buyer || {};
+        const sellerObj = offer?.sellerId || offer?.seller || {};
+        const otherPartyName = myRole === 'buyer'
+          ? (sellerObj.firstName ? `${sellerObj.firstName} ${sellerObj.lastName || ''}`.trim() : t('Seller'))
+          : (buyerObj.firstName ? `${buyerObj.firstName} ${buyerObj.lastName || ''}`.trim() : t('Buyer'));
+
+        showAlert({
+          type: 'warning',
+          title: t('Saved Offline'),
+          message: t('No internet connection. Your offer of ₹{price} is saved on this phone. We will send it to {name} automatically when you are back online.')
+            .replace('{price}', counterPrice)
+            .replace('{name}', otherPartyName),
+        });
+        return;
+      }
+
       await submitCounterOffer(offerId, counterData);
+      hasStatusChangedRef.current = true;
       setCounterModalVisible(false);
       setCounterRemarks('');
       setIsFinalOfferToggle(false);
@@ -620,8 +671,8 @@ export default function NegotiationDetailsScreen({ route, navigation }) {
         message: t('Counter of ₹{price}/Qtl sent. Waiting for response.').replace('{price}', counterPrice),
       });
 
-      // Reload to get updated state
-      loadOfferDetails();
+      // Reload to get updated state from server
+      refresh();
     } catch (err) {
       console.warn('[NegotiationDetails] submitCounterOffer error:', err);
 
@@ -645,24 +696,8 @@ export default function NegotiationDetailsScreen({ route, navigation }) {
   };
 
   const buyerObj = offer?.buyerId || offer?.buyer || routeOffer?.buyerId || routeOffer?.buyer || {};
-  const buyerFirstName = buyerObj.firstName || '';
-  const buyerLastName  = buyerObj.lastName || '';
-  const buyerFullName  = (buyerFirstName || buyerLastName)
-    ? `${buyerFirstName} ${buyerLastName}`.trim()
-    : buyerObj.name || routeOffer?.buyerName || 'Buyer';
-  const buyerShopName  = buyerObj.shopName || buyerObj.shopname || '';
-  const rawBuyerName   = buyerShopName ? `${buyerFullName} (${buyerShopName})` : buyerFullName;
-  const buyerName      = (rawBuyerName && rawBuyerName !== '—' && rawBuyerName !== 'Buyer') ? rawBuyerName : t('Buyer');
-
   const sellerObj = offer?.sellerId || offer?.seller || offer?.commodityId?.sellerId || offer?.commodity?.sellerId || routeOffer?.sellerId || routeOffer?.seller || {};
-  const sellerFirstName = typeof sellerObj === 'object' ? (sellerObj.firstName || '') : '';
-  const sellerLastName  = typeof sellerObj === 'object' ? (sellerObj.lastName || '') : '';
-  const sellerFullName  = (sellerFirstName || sellerLastName)
-    ? `${sellerFirstName} ${sellerLastName}`.trim()
-    : (typeof sellerObj === 'object' ? sellerObj.name : '') || item?.sellerName || '—';
-  const sellerShopName  = typeof sellerObj === 'object' ? (sellerObj.shopName || sellerObj.shopname || '') : '';
-  const rawSellerName   = sellerShopName ? `${sellerFullName} (${sellerShopName})` : sellerFullName;
-  const sellerName      = (rawSellerName && rawSellerName !== '—' && rawSellerName !== 'Unknown Seller') ? rawSellerName : t('Seller');
+
   const renderedTimeline = React.useMemo(() => {
     if (displayRounds.length === 0) {
       return (
@@ -686,16 +721,43 @@ export default function NegotiationDetailsScreen({ route, navigation }) {
               styles.roundCard,
               {
                 backgroundColor: isMe ? theme.light : COLORS.white,
-                borderColor: isMe ? theme.primary + '70' : '#3182CE70',
+                borderColor: rd.status === 'offline_pending' ? '#ED8936' : (isMe ? theme.primary + '70' : '#3182CE70'),
                 borderWidth: 1.5,
+                borderStyle: rd.status === 'offline_pending' ? 'dashed' : 'solid',
+                opacity: rd.status === 'offline_pending' ? 0.85 : 1,
               },
               rd.isFinal && styles.finalRoundCard,
             ]}
           >
             <View style={styles.roundHeader}>
-              <Text style={[styles.roundSender, { color: isMe ? theme.primary : '#3182CE' }]}>
-                {isMe ? t('You') : (myRole === 'buyer' ? sellerName : buyerName)}
-              </Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                {isMe ? (
+                  <Text style={[styles.roundSender, { color: theme.primary }]}>{t('You')}</Text>
+                ) : (
+                  <UserBadge
+                    userObj={myRole === 'buyer' ? sellerObj : buyerObj}
+                    preResolvedName={myRole === 'buyer' ? item?.sellerName : routeOffer?.buyerName}
+                    role={myRole === 'buyer' ? t('Seller') : t('Buyer')}
+                    style={[styles.roundSender, { color: '#3182CE' }]}
+                  />
+                )}
+                {rd.status === 'offline_pending' && (
+                  <View style={{
+                    backgroundColor: '#FEEBC8',
+                    paddingHorizontal: w(6),
+                    paddingVertical: h(2),
+                    borderRadius: 4,
+                    marginLeft: w(6),
+                    flexDirection: 'row',
+                    alignItems: 'center'
+                  }}>
+                    <View style={{ width: w(6), height: h(6), borderRadius: 3, backgroundColor: '#DD6B20', marginRight: w(4) }} />
+                    <Text style={{ color: '#DD6B20', fontSize: f(9), fontWeight: '800' }}>
+                      {t('Offline Pending')}
+                    </Text>
+                  </View>
+                )}
+              </View>
               <Text style={styles.roundDate}>
                 {rd.createdAt ? new Date(rd.createdAt).toLocaleString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) : '—'}
               </Text>
@@ -741,7 +803,7 @@ export default function NegotiationDetailsScreen({ route, navigation }) {
         </View>
       );
     });
-  }, [displayRounds, myRole, theme, sellerName, buyerName, isNegotiable, item?.unit, offer?.tradeType, t]);
+  }, [displayRounds, myRole, theme, sellerObj, buyerObj, item?.sellerName, routeOffer?.buyerName, isNegotiable, item?.unit, offer?.tradeType, t]);
 
   // ─── Loading & Error screens ─────────────────────────────────────────
   if (loading) {
@@ -774,7 +836,7 @@ export default function NegotiationDetailsScreen({ route, navigation }) {
           <Icon name="alert-circle-outline" size={48} color={COLORS.error} />
           <Text style={styles.errorTitle}>{t("Failed to Load")}</Text>
           <Text style={styles.errorDesc}>{t(apiError)}</Text>
-          <TouchableOpacity style={[styles.retryBtn, { backgroundColor: theme.primary }]} onPress={() => loadOfferDetails()}>
+          <TouchableOpacity style={[styles.retryBtn, { backgroundColor: theme.primary }]} onPress={() => refresh()}>
             <Text style={styles.retryBtnText}>{t("Retry API")}</Text>
           </TouchableOpacity>
 
@@ -804,7 +866,7 @@ export default function NegotiationDetailsScreen({ route, navigation }) {
       <AppHeader
         backgroundColor={theme.primary}
         title={t("Negotiation")}
-        subtitle={item?.commodityName ? t(item.commodityName) : t('Thread')}
+        subtitle={item?.commodityName ?? t('Thread')}
         showBackButton={true}
         onBackPress={() => navigation.goBack()}
       />
@@ -816,7 +878,7 @@ export default function NegotiationDetailsScreen({ route, navigation }) {
         <View style={styles.errorBanner}>
           <Icon name="alert-circle-outline" size={15} color={COLORS.white} />
           <Text style={styles.errorBannerText}>{t(apiError)}</Text>
-          <TouchableOpacity onPress={() => loadOfferDetails(true)} style={styles.retryBadge}>
+          <TouchableOpacity onPress={() => refresh(true)} style={styles.retryBadge}>
             <Text style={styles.retryBadgeText}>{t("Retry")}</Text>
           </TouchableOpacity>
         </View>
@@ -840,9 +902,9 @@ export default function NegotiationDetailsScreen({ route, navigation }) {
           <View style={styles.dealHeaderTop}>
             <View style={styles.flex1}>
               <Text style={styles.commodityTitle}>
-                {t(item?.name || item?.commodityName || 'Commodity')} {item?.grade ? `(${t('Grade')} ${item.grade})` : ''}
+                {item?.name || item?.commodityName || t('Commodity')} {item?.grade ? `(${t('Grade')} ${item.grade})` : ''}
               </Text>
-              <Text style={styles.commodityVariety}>{item?.type ? t(item.type) : (item?.description ? t(item.description) : '')}</Text>
+              <Text style={styles.commodityVariety}>{item?.type || item?.description || ''}</Text>
               <View style={[styles.partyRow, { alignItems: 'flex-start', backgroundColor: theme.light + '50', borderWidth: 1, borderColor: theme.primary + '12' }]}>
                 <Icon name="account-multiple-outline" size={14} color={COLORS.textMuted} style={{ marginTop: 2 }} />
                 <View style={styles.partiesColumn}>
@@ -873,7 +935,7 @@ export default function NegotiationDetailsScreen({ route, navigation }) {
               <Text style={[styles.pricingVal, myRole === 'seller' && { color: theme.primary }]}>
                 ₹{myRole === 'seller' 
                   ? (lastRound?.price || offer?.price || '--') 
-                  : (item?.basePrice || item?.sellingPrice || '--')}/Qt
+                  : (item?.basePrice || item?.sellingPrice || item?.targetPrice || item?.expectedPrice || '--')}/{item?.priceUnit || (item?.unit === 'Quintal' || item?.unit === 'Qt' ? 'Qt' : (item?.unit || 'Qt'))}
               </Text>
             </View>
             <View style={styles.pricingDivider} />
@@ -883,8 +945,8 @@ export default function NegotiationDetailsScreen({ route, navigation }) {
               </Text>
               <Text style={[styles.pricingVal, myRole !== 'seller' && { color: theme.primary }]}>
                 ₹{myRole === 'seller'
-                  ? (item?.basePrice || item?.sellingPrice || '--')
-                  : (lastRound?.price || offer?.price || '--')}/Qt
+                  ? (item?.basePrice || item?.sellingPrice || item?.targetPrice || item?.expectedPrice || '--')
+                  : (lastRound?.price || offer?.price || '--')}/{item?.priceUnit || (item?.unit === 'Quintal' || item?.unit === 'Qt' ? 'Qt' : (item?.unit || 'Qt'))}
               </Text>
             </View>
             <View style={styles.pricingDivider} />
@@ -998,7 +1060,7 @@ export default function NegotiationDetailsScreen({ route, navigation }) {
             }]}>
               <View style={styles.turnCardLeft}>
                 <YourTurnPulse color="#FFFFFF" />
-                <View style={{ marginLeft: w(10) }}>
+                <View style={{ marginLeft: w(10), flex: 1, flexShrink: 1 }}>
                   <Text style={styles.turnCardTitle}>
                     {roundsMaxed ? t('Final Decision Required') : t('Your Turn to Respond')}
                   </Text>
@@ -1022,7 +1084,7 @@ export default function NegotiationDetailsScreen({ route, navigation }) {
             }]}>
               <View style={styles.turnCardLeft}>
                 <WaitingPulseIcon color={theme.primary} size={22} />
-                <View style={{ marginLeft: w(10) }}>
+                <View style={{ marginLeft: w(10), flex: 1, flexShrink: 1 }}>
                   <Text style={[styles.turnCardTitle, { color: theme.primary }]}>
                     {t('Waiting for Response')}
                   </Text>
@@ -1257,7 +1319,7 @@ export default function NegotiationDetailsScreen({ route, navigation }) {
             )}
 
             <Text style={styles.inputLabel}>
-              {t('Quantity ({unit})').replace('{unit}', item?.unit ? t(item.unit) : 'Ton')}
+              {t('Quantity ({unit})').replace('{unit}', item?.unit || 'Ton')}
             </Text>
             <TextInput
               style={styles.modalInput}
