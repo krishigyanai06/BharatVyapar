@@ -11,14 +11,7 @@ import { useTranslation } from '../../../shared/hooks/useTranslation';
 import { selectSelectedRole, selectUser } from '../../../store/authSelectors';
 import { w, h, f } from '../../../shared/utils/responsive';
 import { getBuyerPurchaseOrders, ORDER_STATUS } from '../orders.service';
-
-
-const ROLE_THEMES = {
-  FPO:       { primary: COLORS.fpoPrimary,       light: COLORS.fpoLight },
-  Trader:    { primary: COLORS.traderPrimary,    light: COLORS.traderLight },
-  Miller:    { primary: COLORS.millerPrimary,    light: COLORS.millerLight },
-  Corporate: { primary: COLORS.corporatePrimary, light: COLORS.corporateLight },
-};
+import { ROLE_THEMES } from '../../../theme/roleThemes';
 
 const BUYER_STATUS = {
   [ORDER_STATUS.PENDING_DISPATCH]: { label: 'Pending', progress: 0.2, icon: 'clock-outline' },

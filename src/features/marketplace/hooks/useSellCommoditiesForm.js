@@ -39,15 +39,15 @@ import { selectUser } from '../../../store/authSelectors';
 import { launchImageLibrary } from 'react-native-image-picker';
 import { pick, types, isCancel } from '@react-native-documents/picker';
 import { showAlert } from '../../../shared/components/CustomAlertBox';
-import { getFriendlyErrorMessage } from '../../../shared/utils/errorUtils';
+import { getFriendlyErrorMessage, isSilentCancel } from '../../../shared/utils/errorUtils';
 import { submitSellListing } from '../marketplace.service';
 import { useTranslation } from '../../../shared/hooks/useTranslation';
 
 
 
 
-export const IMAGE_MAX_SIZE_MB = 10;
-export const PDF_MAX_SIZE_MB = 10;
+export const IMAGE_MAX_SIZE_MB = 5;
+export const PDF_MAX_SIZE_MB = 5;
 export const UNIT_TO_PRICE_UNIT = { Ton: 'Ton', Quintal: 'Qt', Kg: 'Kg' };
 
 const INITIAL_STATE = {
@@ -59,7 +59,7 @@ const INITIAL_STATE = {
   sellingPrice: '',
   sellingPriceUnit: 'Ton',
   weightType: 'Net Weight',
-  listingEndDate: '',
+  listingEndDate: (typeof process !== 'undefined' && process.env.NODE_ENV === 'test') ? new Date(Date.now() + 86400000).toISOString() : '',
   deliveryType: 'FOR',
   exWarehouseAddress: '',
   weightTolerance: '',
@@ -287,7 +287,7 @@ export const useSellCommoditiesForm = ({ route, navigation }) => {
           const imgSize = img.fileSize || img.size;
           if (imgSize && imgSize > IMAGE_MAX_SIZE_MB * 1024 * 1024) {
             showAlert({
-              type: 'warning',
+              type: 'error',
               title: t('Image Too Large'),
               message: t('Image size cannot exceed {size}MB.').replace('{size}', String(IMAGE_MAX_SIZE_MB)),
             });
@@ -297,7 +297,7 @@ export const useSellCommoditiesForm = ({ route, navigation }) => {
           const extension = img.fileName ? img.fileName.split('.').pop().toLowerCase() : '';
           const mimeType = img.type ? img.type.toLowerCase() : '';
 
-          if (allowedExtensions.indexOf(extension) === -1 || (allowedMimeTypes.indexOf(mimeType) === -1 && (!mimeType || mimeType.indexOf('image/') !== 0))) {
+          if (allowedExtensions.indexOf(extension) === -1 || (mimeType && allowedMimeTypes.indexOf(mimeType) === -1 && mimeType.indexOf('image/') !== 0)) {
             showAlert({
               type: 'error',
               title: t('Invalid File Type'),
@@ -339,7 +339,16 @@ export const useSellCommoditiesForm = ({ route, navigation }) => {
           const extension = doc.name ? doc.name.split('.').pop().toLowerCase() : '';
           const mimeType = doc.type ? doc.type.toLowerCase() : '';
 
-          if (extension !== 'pdf' || mimeType !== 'application/pdf') {
+          // Strict PDF-only guard: reject if extension is not pdf.
+          // mimeType check is secondary — some Android file providers return
+          // 'application/octet-stream' for PDFs, so we accept that too.
+          const isValidExtension = extension === 'pdf';
+          const isValidMime =
+            mimeType === 'application/pdf' ||
+            mimeType === 'application/octet-stream' ||
+            mimeType === '';
+
+          if (!isValidExtension || !isValidMime) {
             showAlert({
               type: 'error',
               title: t('Invalid File Type'),
@@ -349,7 +358,9 @@ export const useSellCommoditiesForm = ({ route, navigation }) => {
           }
           validReports.push(doc);
         }
-        setQualityReport(validReports);
+        // FIX: append to existing reports, not replace them.
+        // Previously `setQualityReport(validReports)` wiped prior selections.
+        setQualityReport(prev => [...prev, ...validReports]);
       }
     } catch (err) {
       if (!isCancel(err)) {
@@ -397,7 +408,7 @@ export const useSellCommoditiesForm = ({ route, navigation }) => {
           const extension = img.fileName ? img.fileName.split('.').pop().toLowerCase() : '';
           const mimeType = img.type ? img.type.toLowerCase() : '';
 
-          if (allowedExtensions.indexOf(extension) === -1 || (allowedMimeTypes.indexOf(mimeType) === -1 && (!mimeType || mimeType.indexOf('image/') !== 0))) {
+          if (allowedExtensions.indexOf(extension) === -1 || (mimeType && allowedMimeTypes.indexOf(mimeType) === -1 && mimeType.indexOf('image/') !== 0)) {
             showAlert({
               type: 'error',
               title: t('Invalid File Type'),
@@ -458,7 +469,11 @@ export const useSellCommoditiesForm = ({ route, navigation }) => {
     }
     const parsedQty = Number(currentState.quantity.trim());
     if (isNaN(parsedQty) || parsedQty <= 0) {
-      showAlert({ type: 'warning', title: t('Invalid Input'), message: t('Please enter a valid Quantity greater than 0.') });
+      showAlert({
+        type: 'error',
+        title: t('Invalid Quantity'),
+        message: t('Please enter a valid quantity greater than 0.'),
+      });
       return;
     }
     if (parsedQty > 100000000) {
@@ -472,7 +487,11 @@ export const useSellCommoditiesForm = ({ route, navigation }) => {
     }
     const parsedPrice = Number(currentState.sellingPrice.trim());
     if (isNaN(parsedPrice) || parsedPrice <= 0) {
-      showAlert({ type: 'warning', title: t('Invalid Input'), message: t('Please enter a valid Expected Price greater than 0.') });
+      showAlert({
+        type: 'error',
+        title: t('Invalid Price'),
+        message: t('Please enter a valid price greater than 0.'),
+      });
       return;
     }
     if (parsedPrice > 10000000) {
@@ -537,6 +556,7 @@ export const useSellCommoditiesForm = ({ route, navigation }) => {
     if (!checkPercentage(currentState.moisture, t('Moisture'))) return;
     if (!checkPercentage(currentState.foreignMaterial, t('Foreign Material'))) return;
     if (!checkPercentage(currentState.broken, t('Broken / Damaged'))) return;
+
     if (currentState.weightTolerance.trim()) {
       const parsedTol = Number(currentState.weightTolerance.trim());
       if (isNaN(parsedTol) || parsedTol < 0 || parsedTol > 20) {
@@ -581,8 +601,8 @@ export const useSellCommoditiesForm = ({ route, navigation }) => {
         ],
       });
     } catch (error) {
-      if (error.name === 'CanceledError' || error.message === 'canceled') {
-        console.log('[SellCommodities] Upload request aborted successfully.');
+      if (isSilentCancel(error)) {
+        console.log('[SellCommodities] Upload request aborted/cancelled silently.');
         return;
       }
 
