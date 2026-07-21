@@ -1,10 +1,23 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { View, Modal, StyleSheet, TouchableOpacity, Text } from 'react-native';
+import { View, Modal, StyleSheet, TouchableOpacity, Text, StatusBar } from 'react-native';
 import NetInfo from '@react-native-community/netinfo';
 import NoInternetScreen from '../../screen/NoInternetScreen';
+import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
+import COLORS from '../../theme/colors';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 
 const NetworkContext = createContext({ isConnected: true });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// MODULE-LEVEL STATIC NETWORK STATUS
+// client.js is a plain JS file — it cannot use React hooks or context.
+// This module-level variable is the ONLY safe bridge between the React
+// NetworkProvider and the Axios infrastructure layer.
+// Updated synchronously whenever real or simulated connectivity changes.
+// ─────────────────────────────────────────────────────────────────────────────
+let _networkStatusStatic = true; // default: assume connected on boot
+export const getNetworkStatusStatic = () => _networkStatusStatic;
 
 // ─── DEV-ONLY: Simulate network off without turning off WiFi ───────────────
 // __DEV__ = true only in debug builds, automatically false in production APK
@@ -70,10 +83,37 @@ export const NetworkProvider = ({ children }) => {
 
   // Show NoInternet if: real network is down OR dev is simulating offline
   const showNoInternet = !isConnected || (__DEV__ && devOffline);
+  const effectiveIsConnected = isConnected && !devOffline;
+
+  const insets = useSafeAreaInsets();
+
+  // Keep static variable in sync — used by client.js (outside React tree)
+  _networkStatusStatic = effectiveIsConnected;
 
   return (
-    <NetworkContext.Provider value={{ isConnected, isChecking, handleReconnect }}>
+    <NetworkContext.Provider value={{ isConnected: effectiveIsConnected, isChecking, handleReconnect }}>
+      <StatusBar hidden={showNoInternet} animated={true} />
       <View style={styles.container}>
+        {/*
+          SLICED OFFLINE WARNING BANNER (Approach 2)
+          Premium, non-blocking notification bar showing cache status.
+          Allows farmers to browse prices, bids, and listings without screen freezes.
+          Dynamic padding top prevents notch or camera punch hole overlaps.
+        */}
+        {showNoInternet && (
+          <View style={[
+            styles.offlineBannerContainer, 
+            { paddingTop: Math.max(insets.top, 12) } // Safeguard for physical notch height
+          ]}>
+            <View style={styles.offlineBanner}>
+              <Icon name="wifi-strength-off" size={16} color="#FFFFFF" style={styles.offlineIcon} />
+              <Text style={styles.offlineBannerText}>
+                Offline. Check your connection to sync.
+              </Text>
+            </View>
+          </View>
+        )}
+
         {children}
 
         {/* ─── DEV-ONLY floating toggle button ─────────────────────────────
@@ -92,24 +132,6 @@ export const NetworkProvider = ({ children }) => {
           </TouchableOpacity>
         )}
       </View>
-
-      {/*
-        Modal renders at the NATIVE layer — completely outside the React navigation
-        zIndex stacking context. This ensures it covers:
-          - Bottom tab bar
-          - Status bar (via statusBarTranslucent)
-          - All screens, headers, and overlays
-      */}
-      <Modal
-        visible={showNoInternet}
-        transparent={false}
-        animationType="fade"
-        statusBarTranslucent={true}
-        hardwareAccelerated={true}
-        onRequestClose={() => {}}
-      >
-        <NoInternetScreen isChecking={isChecking} onReconnect={handleReconnect} />
-      </Modal>
     </NetworkContext.Provider>
   );
 };
@@ -117,6 +139,27 @@ export const NetworkProvider = ({ children }) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+  },
+
+  // ─── OFFLINE BANNER STYLES ───────────────────────────────────────────────
+  offlineBannerContainer: {
+    backgroundColor: '#D97706', // Premium Amber/Orange
+  },
+  offlineBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+  },
+  offlineIcon: {
+    marginRight: 8,
+  },
+  offlineBannerText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '600',
+    letterSpacing: 0.2,
   },
 
   // ─── DEV-ONLY styles — never ship to users ───────────────────────────────

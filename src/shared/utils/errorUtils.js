@@ -134,6 +134,12 @@ export const getFriendlyErrorMessage = (errorMsg) => {
 
   // 3. Network Connectivity & Timeout issues
   if (
+    /NO_INTERNET_WRITE_BLOCKED/i.test(message)
+  ) {
+    return 'Please connect to Wi-Fi or mobile data to perform this action.';
+  }
+
+  if (
     /econnrefused/i.test(message) ||
     /enotfound/i.test(message) ||
     /network error/i.test(message) ||
@@ -181,4 +187,21 @@ export const getFriendlyErrorMessage = (errorMsg) => {
 
   // Actionable messages pass through as-is
   return message;
+};
+
+/**
+ * Determines if a caught error represents a silent cancellation (e.g., user-aborted or unmount)
+ * that should not trigger any user-facing error UI.
+ *
+ * @param {any} err - The caught error object
+ * @returns {boolean} True if it is a silent cancel
+ */
+export const isSilentCancel = (err) => {
+  if (!err) return false;
+  if (err.message === 'NO_INTERNET_WRITE_BLOCKED' || err.message?.includes('NO_INTERNET_WRITE_BLOCKED')) {
+    return false;
+  }
+  const isAxiosCancel = !!err.__CANCEL__;
+  const isAbortError = err.name === 'AbortError' || err.name === 'CanceledError' || err.code === 'ERR_CANCELED';
+  return isAxiosCancel || isAbortError;
 };

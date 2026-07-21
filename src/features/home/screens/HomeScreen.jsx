@@ -23,6 +23,8 @@ import { useTranslation } from '../../../shared/hooks/useTranslation';
 import AddYourRequirement from '../../orders/components/AddYourRequirement';
 import { requirementService } from '../../orders/orders.requirements';
 import { storage } from '../../../shared/utils/storage';
+import { notificationService } from '../../pushNotification/notificationService';
+
 
 
 
@@ -176,6 +178,12 @@ function HomeScreen({ navigation }) {
   const user = useSelector(selectUser);
   const stateRole = useSelector(selectSelectedRole);
   const { t } = useTranslation();
+
+  // Boot push notifications on home screen load (post-auth)
+  useEffect(() => {
+    notificationService.initialize();
+  }, []);
+
 
   const [requirements, setRequirements] = React.useState([]);
   const [loadingRequirements, setLoadingRequirements] = React.useState(false);
@@ -398,6 +406,40 @@ function HomeScreen({ navigation }) {
     });
   }, [config.actions, roleTheme.primary, roleTheme.light, t]);
 
+  // QA Push Notification Simulator Callback (DEV only)
+  const simulateNotification = useCallback((mode, delayMs) => {
+    const trigger = async () => {
+      const notifee = require('@notifee/react-native').default;
+      const { AndroidImportance } = require('@notifee/react-native');
+
+      await notifee.displayNotification({
+        title: `Mock ${mode.toUpperCase()} Notification 🌾`,
+        body: 'Deal confirmation trigger payload test.',
+        data: {
+          type: 'DEAL_DONE',
+          dealId: 'mock_deal_87410',
+          offerId: 'offer_1122',
+        },
+        android: {
+          channelId: 'transactional_deals',
+          importance: AndroidImportance.HIGH,
+          pressAction: { id: 'default' },
+        },
+      });
+    };
+
+    if (delayMs > 0) {
+      showAlert({
+        type: 'success',
+        title: 'Simulator Scheduled',
+        message: `Notification will arrive in ${delayMs / 1000}s. Immediately ${mode === 'background' ? 'minimize' : 'kill'} the app now!`,
+      });
+      setTimeout(trigger, delayMs);
+    } else {
+      trigger();
+    }
+  }, []);
+
   return (
     <SafeScreen style={styles.safeContainer} top={false} bottom={false}>
       <AppHeader
@@ -453,6 +495,42 @@ function HomeScreen({ navigation }) {
             </View>
           </View>
         </View>
+
+        {/* DEV ONLY: Push Notification Tester Panel */}
+        {__DEV__ && (
+          <View style={[styles.devPanel, { borderColor: roleTheme.primary + '30' }]}>
+            <Text style={[styles.devPanelTitle, { color: roleTheme.primary }]}>
+              🛠️ QA Push Notification Simulator
+            </Text>
+            <View style={styles.devButtonRow}>
+              <TouchableOpacity
+                style={[styles.devBtn, { backgroundColor: roleTheme.primary }]}
+                onPress={() => simulateNotification('foreground', 0)}
+              >
+                <Text style={styles.devBtnText}>Foreground</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.devBtn, { backgroundColor: roleTheme.primary }]}
+                onPress={() => simulateNotification('background', 5000)}
+              >
+                <Text style={styles.devBtnText}>Background</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.devBtn, { backgroundColor: roleTheme.primary }]}
+                onPress={() => simulateNotification('killed', 10000)}
+              >
+                <Text style={styles.devBtnText}>Killed State</Text>
+              </TouchableOpacity>
+            </View>
+            <Text style={styles.devPanelHelper}>
+              * Background: Click, minimize app within 5s.{"\n"}
+              * Killed State: Click, force-quit app within 10s.
+            </Text>
+          </View>
+        )}
+
 
         {/* Stats Grid - Hidden in production, kept only to pass integration tests */}
         {process.env.NODE_ENV === 'test' && stats.length > 0 && (
@@ -1391,5 +1469,46 @@ const styles = StyleSheet.create({
   tooltipDismissText: {
     fontSize: f(11),
     fontWeight: '700',
+  },
+  devPanel: {
+    backgroundColor: COLORS.white,
+    borderRadius: 16,
+    borderWidth: 1,
+    padding: w(14),
+    marginBottom: h(16),
+    elevation: 3,
+    shadowColor: '#0F172A',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.04,
+    shadowRadius: 8,
+  },
+  devPanelTitle: {
+    fontSize: f(13),
+    fontWeight: '800',
+    marginBottom: h(10),
+  },
+  devButtonRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: w(8),
+    marginBottom: h(8),
+  },
+  devBtn: {
+    flex: 1,
+    paddingVertical: h(10),
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  devBtnText: {
+    color: COLORS.white,
+    fontSize: f(11),
+    fontWeight: '700',
+  },
+  devPanelHelper: {
+    fontSize: f(10.5),
+    color: '#64748B',
+    lineHeight: h(14),
+    fontWeight: '500',
   },
 });

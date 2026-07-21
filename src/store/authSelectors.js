@@ -41,6 +41,7 @@ export const selectSendOtpLoading    = state => state.auth.sendOtpLoading;
 export const selectVerifyOtpLoading  = state => state.auth.verifyOtpLoading;
 export const selectSendOtpError      = state => state.auth.sendOtpError;
 export const selectVerifyOtpError    = state => state.auth.verifyOtpError;
+export const selectPendingNotificationRoute = state => state.auth.pendingNotificationRoute;
 
 // ─── Derived / memoized selectors (createSelector) ───────────────────────────
 // createSelector memoizes the result — the output is only recomputed when one
