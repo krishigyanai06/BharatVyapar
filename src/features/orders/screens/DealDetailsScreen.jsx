@@ -23,14 +23,7 @@ import DynamicDocumentUploader from '../../../shared/components/DynamicDocumentU
 import DebitNoteBottomSheet from '../components/DebitNoteBottomSheet';
 
 import { dealService } from '../orders.service';
-
-
-const ROLE_THEMES = {
-  FPO:       { primary: COLORS.fpoPrimary,       secondary: COLORS.fpoSecondary,       light: COLORS.fpoLight,       text: COLORS.fpoText },
-  Trader:    { primary: COLORS.traderPrimary,    secondary: COLORS.traderSecondary,    light: COLORS.traderLight,    text: COLORS.traderText },
-  Miller:    { primary: COLORS.millerPrimary,    secondary: COLORS.millerSecondary,    light: COLORS.millerLight,    text: COLORS.millerText },
-  Corporate: { primary: COLORS.corporatePrimary, secondary: COLORS.corporateSecondary, light: COLORS.corporateLight, text: COLORS.corporateText },
-};
+import { ROLE_THEMES } from '../../../theme/roleThemes';
 
 // Escrow stages for stepper
 const STAGES = [
@@ -428,7 +421,7 @@ export default function DealDetailsScreen({ route, navigation }) {
         <View style={styles.dealCard}>
           <View style={styles.cardHeader}>
             <View style={styles.flex1}>
-              <Text style={styles.commodityTitle}>{t(commodityName)}</Text>
+              <Text style={styles.commodityTitle}>{commodityName}</Text>
               <Text style={styles.dealMeta}>{t('Deal Date: {date}').replace('{date}', formatDate(deal?.createdAt) || '—')}</Text>
             </View>
             <View style={[styles.badge, styles.badgeRow, { backgroundColor: theme.primary + '15' }]}>

@@ -15,14 +15,9 @@ import {
   getReceivedQuotesOnRequirements,
   rejectRequirementQuote,
 } from '../orders.service';
-
-
-const ROLE_THEMES = {
-  FPO:       { primary: COLORS.fpoPrimary,       light: COLORS.fpoLight },
-  Trader:    { primary: COLORS.traderPrimary,    light: COLORS.traderLight },
-  Miller:    { primary: COLORS.millerPrimary,    light: COLORS.millerLight },
-  Corporate: { primary: COLORS.corporatePrimary, light: COLORS.corporateLight },
-};
+import { getSafeUserName } from '../../../shared/utils/formatters';
+import StatusPill from '../../../shared/components/StatusPill';
+import { ROLE_THEMES } from '../../../theme/roleThemes';
 
 export default function BuyerQuoteDashboard({ navigation, route }) {
   const { t } = useTranslation();
@@ -59,6 +54,15 @@ export default function BuyerQuoteDashboard({ navigation, route }) {
     return `${requirement.commodity || t('Requirement')} • ${requirement.remainingQuantity ?? requirement.quantity ?? 0} ${unit} ${t('remaining')}`;
   }, [requirement, t]);
 
+  const handleNegotiatePress = useCallback((quote) => {
+    navigation.navigate('NegotiationDetails', {
+      offerId: quote.id || quote._id,
+      offer: { id: quote.id || quote._id, ...quote },
+      item: requirement,
+      role: 'buyer',
+    });
+  }, [navigation, requirement]);
+
   const handleAccept = useCallback(async (quote) => {
     try {
       const response = await acceptRequirementQuote(quote.id || quote._id);
@@ -71,11 +75,11 @@ export default function BuyerQuoteDashboard({ navigation, route }) {
           .replace('{status}', status || '')
           .replace('{remaining}', String(remaining ?? 0)),
       });
-      loadQuotes(true);
+      navigation.navigate('BuyerOrders');
     } catch (error) {
       showAlert({ type: 'error', title: t('Accept Failed'), message: t(error?.message || 'Please try again.') });
     }
-  }, [loadQuotes, t]);
+  }, [navigation, t]);
 
   const handleReject = useCallback(async (quote) => {
     try {
@@ -88,21 +92,43 @@ export default function BuyerQuoteDashboard({ navigation, route }) {
   }, [loadQuotes, t]);
 
   const renderQuote = ({ item }) => {
-    const sellerName = item.sellerName || item.sellerId?.shopName || item.sellerId?.firstName || t('Seller');
+    const sellerObj = item.sellerId || item.userId || item.seller || {};
+    let sellerName = typeof sellerObj === 'object'
+      ? (item.sellerName || sellerObj.shopName || sellerObj.shopname || [sellerObj.firstName, sellerObj.lastName].filter(Boolean).join(' ') || t('Seller'))
+      : (item.sellerName || String(sellerObj) || t('Seller'));
+      
+    // Fallback to tokenized role if the backend returns an ID instead of a name
+    if (/^[a-fA-F0-9]{24}$/.test(sellerName)) {
+      const sellerIdForFallback = typeof sellerObj === 'string' ? sellerObj : (sellerObj._id || sellerObj.id || item.sellerId || '');
+      sellerName = getSafeUserName(sellerIdForFallback, t('Seller'));
+    }
+    
     const isPending = String(item.status || '').toLowerCase() === 'pending';
+    
     return (
-      <View style={styles.card}>
+      <TouchableOpacity
+        style={[styles.card, { borderColor: theme.primary + '35' }]}
+        activeOpacity={0.9}
+        onPress={() => handleNegotiatePress(item)}
+      >
         <View style={styles.cardHeader}>
-          <View>
+          <View style={{ flex: 1 }}>
             <Text style={styles.sellerName}>{sellerName}</Text>
-            <View style={styles.ratingRow}>
-              <Icon name="star" size={13} color="#D69E2E" />
-              <Text style={styles.ratingText}>{item.sellerRating || item.sellerId?.rating || '—'}</Text>
-            </View>
+            {(() => {
+              const rating = typeof sellerObj === 'object' ? (item.sellerRating || sellerObj.rating) : null;
+              return rating ? (
+                <View style={styles.ratingRow}>
+                  <Icon name="star" size={13} color="#D69E2E" />
+                  <Text style={styles.ratingText}>{rating}</Text>
+                </View>
+              ) : (
+                <View style={styles.newBadge}>
+                  <Text style={styles.newBadgeText}>{t('New')}</Text>
+                </View>
+              );
+            })()}
           </View>
-          <View style={styles.statusBadge}>
-            <Text style={styles.statusText}>{item.status || 'Pending'}</Text>
-          </View>
+          <StatusPill status={item.status || 'Pending'} />
         </View>
 
         <View style={styles.metricRow}>
@@ -114,10 +140,17 @@ export default function BuyerQuoteDashboard({ navigation, route }) {
             <Text style={styles.metricLabel}>{t('Quote Price')}</Text>
             <Text style={[styles.metricValue, { color: theme.primary }]}>₹{item.quotePrice || item.price}</Text>
           </View>
-          <View style={styles.metric}>
-            <Text style={styles.metricLabel}>{t('Dispatch Time')}</Text>
-            <Text style={styles.metricValue}>{item.dispatchTime || '—'}</Text>
-          </View>
+          {item.dispatchTime ? (
+            <View style={styles.metric}>
+              <Text style={styles.metricLabel}>{t('Dispatch Time')}</Text>
+              <Text style={styles.metricValue}>{item.dispatchTime}</Text>
+            </View>
+          ) : (
+            <View style={styles.metric}>
+              <Text style={styles.metricLabel}>{t('Dispatch Time')}</Text>
+              <Text style={[styles.metricValue, styles.notSetText]}>{t('Not Set')}</Text>
+            </View>
+          )}
         </View>
 
         <View style={styles.actionRow}>
@@ -126,21 +159,13 @@ export default function BuyerQuoteDashboard({ navigation, route }) {
             <Text style={[styles.profileText, { color: theme.primary }]}>{t('View Seller Profile')}</Text>
           </TouchableOpacity>
           <TouchableOpacity
-            style={[styles.rejectBtn, !isPending && styles.disabledBtn]}
-            onPress={() => isPending && handleReject(item)}
-            disabled={!isPending}
+            style={[styles.acceptBtn, { backgroundColor: theme.primary }]}
+            onPress={() => handleNegotiatePress(item)}
           >
-            <Text style={styles.rejectText}>{t('Reject')}</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.acceptBtn, { backgroundColor: isPending ? theme.primary : '#CBD5E1' }]}
-            onPress={() => isPending && handleAccept(item)}
-            disabled={!isPending}
-          >
-            <Text style={styles.acceptText}>{t('Accept Quote')}</Text>
+            <Text style={styles.acceptText}>{isPending ? t('Negotiate / Counter') : t('View Details')}</Text>
           </TouchableOpacity>
         </View>
-      </View>
+      </TouchableOpacity>
     );
   };
 
@@ -176,11 +201,25 @@ const styles = StyleSheet.create({
   list: { padding: w(16), paddingBottom: h(30) },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: w(20), gap: h(8) },
   loadingText: { color: COLORS.textMuted, fontSize: f(13) },
-  card: { backgroundColor: COLORS.white, borderRadius: 14, padding: w(14), marginBottom: h(12), borderWidth: 1, borderColor: '#E2E8F0' },
+  card: {
+    backgroundColor: COLORS.white,
+    borderRadius: 16,
+    padding: w(14),
+    marginBottom: h(12),
+    borderWidth: 1.5,
+    elevation: 2,
+    shadowColor: '#0F172A',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.03,
+    shadowRadius: 6,
+  },
   cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: h(12) },
   sellerName: { fontSize: f(15), fontWeight: '800', color: '#0F172A' },
   ratingRow: { flexDirection: 'row', alignItems: 'center', gap: w(4), marginTop: h(4) },
   ratingText: { fontSize: f(12), color: '#64748B', fontWeight: '700' },
+  newBadge: { marginTop: h(4), alignSelf: 'flex-start', backgroundColor: '#D1FAE5', borderRadius: 6, paddingHorizontal: w(6), paddingVertical: h(2) },
+  newBadgeText: { fontSize: f(10), color: '#065F46', fontWeight: '800' },
+  notSetText: { color: '#94A3B8', fontStyle: 'italic', fontSize: f(12) },
   statusBadge: { backgroundColor: '#F8FAFC', borderRadius: 8, paddingHorizontal: w(8), paddingVertical: h(4) },
   statusText: { color: '#475569', fontWeight: '800', fontSize: f(11) },
   metricRow: { flexDirection: 'row', gap: w(8), marginBottom: h(12) },

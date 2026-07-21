@@ -8,6 +8,7 @@ import {
   ActivityIndicator,
   RefreshControl,
   FlatList,
+  Modal,
 } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useSelector } from 'react-redux';
@@ -17,6 +18,7 @@ import { SafeScreen } from '../../../shared/components/SafeScreen';
 import AppHeader from '../../../shared/components/AppHeader';
 import COLORS from '../../../theme/colors';
 import ReceivedOffersModal from '../../marketplace/components/ReceivedOffersModal';
+import StatusFilterTooltip from '../components/StatusFilterTooltip';
 import { w, h, f } from '../../../shared/utils/responsive';
 import { getOffers, getReceivedOffers, getSellCommodities } from '../../marketplace/marketplace.api';
 import { getMySubmittedQuotes } from '../orders.service';
@@ -24,14 +26,7 @@ import { showAlert } from '../../../shared/components/CustomAlertBox';
 
 import { getFriendlyErrorMessage } from '../../../shared/utils/errorUtils';
 import { useTranslation } from '../../../shared/hooks/useTranslation';
-
-
-const ROLE_THEMES = {
-  FPO:       { primary: COLORS.fpoPrimary,       secondary: COLORS.fpoSecondary,       light: COLORS.fpoLight,       text: COLORS.fpoText },
-  Trader:    { primary: COLORS.traderPrimary,    secondary: COLORS.traderSecondary,    light: COLORS.traderLight,    text: COLORS.traderText },
-  Miller:    { primary: COLORS.millerPrimary,    secondary: COLORS.millerSecondary,    light: COLORS.millerLight,    text: COLORS.millerText },
-  Corporate: { primary: COLORS.corporatePrimary, secondary: COLORS.corporateSecondary, light: COLORS.corporateLight, text: COLORS.corporateText },
-};
+import { ROLE_THEMES } from '../../../theme/roleThemes';
 
 const OFFER_STATUS_CONFIG = {
   pending:        { label: 'Awaiting Response',  color: '#718096', bg: '#EDF2F7',  icon: 'clock-outline' },
@@ -75,15 +70,27 @@ const SELL_SECTION_CONFIGS = [
   { key: 'closed', label: 'Inactive Listings',   icon: 'archive-outline',      urgent: false, accentColor: '#94A3B8' },
 ];
 
-function classifyBuyOffer(offer) {
+function classifyBuyOffer(offer, userRole) {
   const st = normalizeStatus(offer.displayStatus || offer.status);
   const isTerminal = ['accepted', 'rejected', 'expired', 'cancelled'].includes(st);
-  const commodity = offer.commodity || (typeof offer.commodityId === 'object' ? offer.commodityId : null) || {};
-  const isDeleted = !commodity.commodityName && !commodity.name;
+
+  const reqObj = (offer.requirementId && typeof offer.requirementId === 'object') ? offer.requirementId : null;
+  const commodity = offer.commodity || 
+                    (typeof offer.commodityId === 'object' ? offer.commodityId : null) || 
+                    reqObj || 
+                    {};
+
+  const isDeleted = !commodity.commodityName && !commodity.name && !commodity.commodity;
   if (isDeleted) return 'deleted';
   if (st === 'accepted') return 'accepted';
   if (isTerminal) return 'closed';
-  if (offer.currentTurn === 'buyer') return 'your_turn';
+
+  // Role-aware turn verification:
+  // FPO (Buyer) is 'buyer', Traders/Millers/Corporates (Sellers) are 'seller'
+  const isBuyerRole = userRole === 'FPO';
+  const myTurnValue = isBuyerRole ? 'buyer' : 'seller';
+
+  if (offer.currentTurn === myTurnValue) return 'your_turn';
   return 'waiting';
 }
 
@@ -138,9 +145,9 @@ const INITIAL_STATE = {
 function tradesReducer(state, action) {
   switch (action.type) {
     case 'SET_MODE':
-      return { ...state, tradeMode: action.mode, selectedCrop: 'All' };
+      return { ...state, tradeMode: action.mode, selectedCrop: 'All', activeTab: 'Active' };
     case 'SET_TAB':
-      return { ...state, activeTab: action.tab };
+      return { ...state, activeTab: action.tab, selectedCrop: 'All' };
     case 'SET_CROP':
       return { ...state, selectedCrop: action.crop };
     case 'FETCH_START':
@@ -185,7 +192,7 @@ function tradesReducer(state, action) {
 
 
 
-export default function TradesScreen({ navigation }) {
+export default function TradesScreen({ navigation, route }) {
   const { t } = useTranslation();
   // PERFORMANCE FIX: Two granular selectors — TradesScreen only re-renders
   // when user or selectedRole change (not profileLoading, sendOtpError, etc.).
@@ -202,6 +209,7 @@ export default function TradesScreen({ navigation }) {
 
   // Accordion expand/collapse state — {} means all sections open by default
   const [expandedSections, setExpandedSections] = useState({});
+  const [showTooltip, setShowTooltip] = useState(false);
 
   const isMountedRef = useRef(true);
   const isFetchingRef = useRef(false);
@@ -240,14 +248,17 @@ export default function TradesScreen({ navigation }) {
       }
 
       // Services now return normalized arrays directly — no more response guessing
-      const [offersListRaw, sellList] = await Promise.all([
+      // Services now return normalized arrays directly — no more response guessing
+      const [offersListRaw, submittedQuotesRaw, sellList] = await Promise.all([
         getOffers({ page: 1, limit: 50 }, { signal: controller.signal }),
+        getMySubmittedQuotes({ sellerId: user?.id || user?._id }, { signal: controller.signal }),
         getSellCommodities({ sellerId: user?.id || user?._id }, { signal: controller.signal }),
       ]);
 
-      // Merge: buy-commodity offers (dedupe by id)
+      // Merge: buy-commodity offers & submitted requirement quotes (dedupe by id)
+      const combinedOffers = [...(offersListRaw || []), ...(submittedQuotesRaw || [])];
       const seen = new Set();
-      const offersList = (offersListRaw || []).filter(o => {
+      const offersList = combinedOffers.filter(o => {
         const key = o?.id || o?._id;
         if (!key || seen.has(key)) return false;
         seen.add(key);
@@ -330,22 +341,29 @@ export default function TradesScreen({ navigation }) {
     useCallback(() => {
       const cacheExpiry = 30_000;
       const timeSinceLastFetch = Date.now() - lastFetchTimeRef.current;
+      const shouldRefresh = route.params?.shouldRefresh;
 
-      if (loadingRef.current || timeSinceLastFetch > cacheExpiry) {
+      if (loadingRef.current || shouldRefresh || timeSinceLastFetch > cacheExpiry) {
         loadData();
-      } else {
-        loadData(false, true);
+        if (shouldRefresh) {
+          navigation.setParams({ shouldRefresh: null });
+        }
       }
 
       const intervalId = setInterval(() => {
-        loadData(false, true);
+        // Guard: only refresh if still mounted (prevents teardown crash)
+        if (isMountedRef.current) {
+          loadData(false, true);
+        } else {
+          clearInterval(intervalId);
+        }
       }, 300000);
 
       return () => {
         clearInterval(intervalId);
         abortControllerRef.current?.abort();
       };
-    }, [loadData])
+    }, [loadData, route.params?.shouldRefresh, navigation])
   );
 
   const uniqueOffers = useMemo(() => {
@@ -354,55 +372,57 @@ export default function TradesScreen({ navigation }) {
     ).values());
   }, [offers]);
 
+  const statusFilteredOffers = useMemo(() => {
+    return uniqueOffers.filter(offer => {
+      const st = normalizeStatus(offer.displayStatus || offer.status);
+      if (activeTab === 'Active') return ['pending', 'in_negotiation', 'negotiating', 'countered'].includes(st);
+      if (activeTab === 'In Negotiation') return ['in_negotiation', 'negotiating', 'countered'].includes(st);
+      if (activeTab === 'Accepted') return st === 'accepted';
+      if (activeTab === 'Closed') return ['rejected', 'expired', 'cancelled'].includes(st);
+      return true; // 'All'
+    });
+  }, [uniqueOffers, activeTab]);
+
+  const statusFilteredSellListings = useMemo(() => {
+    return sellListings.filter(listing => {
+      const st = (listing.status || 'active').toLowerCase();
+      if (activeTab === 'Active') return st === 'active';
+      if (activeTab === 'In Negotiation') return st === 'active' && listing.isNegotiable !== false;
+      if (activeTab === 'Accepted') return st === 'sold';
+      if (activeTab === 'Closed') return ['expired', 'cancelled'].includes(st);
+      return true; // 'All'
+    });
+  }, [sellListings, activeTab]);
+
   const cropChips = useMemo(() => {
     if (tradeMode === 'buy') {
-      return ['All', ...Array.from(new Set(uniqueOffers.map(o => {
-        const commodity = o.commodity || (typeof o.commodityId === 'object' ? o.commodityId : null) || {};
-        return commodity.commodityName || commodity.name;
+      return ['All', ...Array.from(new Set(statusFilteredOffers.map(o => {
+        const reqObj = (o.requirementId && typeof o.requirementId === 'object') ? o.requirementId : null;
+        const commodity = o.commodity || (typeof o.commodityId === 'object' ? o.commodityId : null) || reqObj || {};
+        return commodity.commodityName || commodity.name || commodity.commodity;
       }).filter(Boolean)))];
     } else {
-      return ['All', ...Array.from(new Set(sellListings.map(l => {
+      return ['All', ...Array.from(new Set(statusFilteredSellListings.map(l => {
         return l.commodityName || l.name;
       }).filter(Boolean)))];
     }
-  }, [tradeMode, uniqueOffers, sellListings]);
+  }, [tradeMode, statusFilteredOffers, statusFilteredSellListings]);
 
   const filteredOffers = useMemo(() => {
-    return uniqueOffers.filter(offer => {
-      const st = normalizeStatus(offer.displayStatus || offer.status);
-      
-      let tabMatch = true;
-      if (activeTab === 'Active') tabMatch = ['pending', 'in_negotiation', 'negotiating', 'countered'].includes(st);
-      else if (activeTab === 'In Negotiation') tabMatch = ['in_negotiation', 'negotiating', 'countered'].includes(st);
-      else if (activeTab === 'Accepted') tabMatch = (st === 'accepted');
-      else if (activeTab === 'Closed') tabMatch = ['rejected', 'expired', 'cancelled'].includes(st);
-      
-      const commodity = offer.commodity || (typeof offer.commodityId === 'object' ? offer.commodityId : null) || {};
-      const cropName = commodity.commodityName || commodity.name || '';
-      const cropMatch = selectedCrop === 'All' || cropName === selectedCrop;
-
-      return tabMatch && cropMatch;
+    return statusFilteredOffers.filter(offer => {
+      const reqObj = (offer.requirementId && typeof offer.requirementId === 'object') ? offer.requirementId : null;
+      const commodity = offer.commodity || (typeof offer.commodityId === 'object' ? offer.commodityId : null) || reqObj || {};
+      const cropName = commodity.commodityName || commodity.name || commodity.commodity || '';
+      return selectedCrop === 'All' || cropName === selectedCrop;
     });
-  }, [uniqueOffers, activeTab, selectedCrop]);
+  }, [statusFilteredOffers, selectedCrop]);
 
   const filteredSellListings = useMemo(() => {
-    return sellListings.filter(listing => {
-      const st = (listing.status || 'active').toLowerCase();
-      
-      let tabMatch = true;
-      if (activeTab === 'Active') tabMatch = (st === 'active');
-      else if (activeTab === 'In Negotiation') {
-        tabMatch = (st === 'active' && listing.isNegotiable !== false);
-      }
-      else if (activeTab === 'Accepted') tabMatch = (st === 'sold');
-      else if (activeTab === 'Closed') tabMatch = ['expired', 'cancelled'].includes(st);
-      
+    return statusFilteredSellListings.filter(listing => {
       const cropName = listing.commodityName || listing.name || '';
-      const cropMatch = selectedCrop === 'All' || cropName === selectedCrop;
-
-      return tabMatch && cropMatch;
+      return selectedCrop === 'All' || cropName === selectedCrop;
     });
-  }, [sellListings, activeTab, selectedCrop]);
+  }, [statusFilteredSellListings, selectedCrop]);
 
   // ─── Grouped + typed flat array for accordion FlatList ───────────────────────
   const groupedListData = useMemo(() => {
@@ -411,7 +431,7 @@ export default function TradesScreen({ navigation }) {
     if (tradeMode === 'buy') {
       const groups = {};
       for (const offer of filteredOffers) {
-        const key = classifyBuyOffer(offer);
+        const key = classifyBuyOffer(offer, selectedRole);
         if (!groups[key]) groups[key] = [];
         groups[key].push(offer);
       }
@@ -419,7 +439,8 @@ export default function TradesScreen({ navigation }) {
         const items = groups[cfg.key];
         if (!items?.length) continue;
         const accentColor = cfg.key === 'your_turn' ? theme.primary : (cfg.accentColor || theme.primary);
-        const isExpanded = expandedSections[cfg.key] === true; // default closed
+        // Smart Default: expand "your_turn" section by default if the user hasn't toggled it yet
+        const isExpanded = expandedSections[cfg.key] ?? (cfg.key === 'your_turn');
         result.push({
           type: 'section_header',
           sectionKey: cfg.key,
@@ -447,7 +468,8 @@ export default function TradesScreen({ navigation }) {
         const items = groups[cfg.key];
         if (!items?.length) continue;
         const accentColor = cfg.key === 'sold' ? theme.primary : (cfg.accentColor || theme.primary);
-        const isExpanded = expandedSections[cfg.key] === true; // default closed
+        // Smart Default: expand "active" listing section by default if the user hasn't toggled it yet
+        const isExpanded = expandedSections[cfg.key] ?? (cfg.key === 'active');
         result.push({
           type: 'section_header',
           sectionKey: cfg.key,
@@ -471,21 +493,27 @@ export default function TradesScreen({ navigation }) {
 
   const handleOfferPress = useCallback((offer) => {
     const resolvedDealId = offer.dealId || offer.id || offer._id || offer.deal?.id || offer.deal?._id;
-    const resolvedCommodity = offer.commodity || (typeof offer.commodityId === 'object' ? offer.commodityId : null) || {};
+    const resolvedCommodity = offer.commodity || 
+                             (typeof offer.commodityId === 'object' ? offer.commodityId : null) || 
+                             (typeof offer.requirementId === 'object' ? offer.requirementId : null) ||
+                             {};
+    const isSeller = user && offer.sellerId && String(offer.sellerId) === String(user._id || user.id);
+    const resolvedRole = isSeller ? 'seller' : 'buyer';
+
     if (offer.status === 'accepted' && resolvedDealId) {
       navigation.navigate('DealDetails', {
         dealId: resolvedDealId,
         item: resolvedCommodity,
-        role: 'buyer',
+        role: resolvedRole,
       });
     } else {
       navigation.navigate('NegotiationDetails', {
         offer: { id: offer.id || offer._id, ...offer },
         item: resolvedCommodity,
-        role: 'buyer'
+        role: resolvedRole
       });
     }
-  }, [navigation]);
+  }, [navigation, user]);
 
   const toggleSection = useCallback((sectionKey) => {
     setExpandedSections(prev => ({
@@ -537,16 +565,20 @@ export default function TradesScreen({ navigation }) {
         bg: ['in_negotiation', 'negotiating', 'countered', 'accepted'].includes(displaySt) ? theme.primary + '15' : baseStatusCfg.bg,
       };
       
-      const isMyTurn = offer.currentTurn === 'buyer';
+      const isMyTurn = offer.currentTurn === (selectedRole === 'FPO' ? 'buyer' : 'seller');
       const isTerminal = ['accepted', 'rejected', 'expired', 'cancelled'].includes(displaySt);
       const history = offer.negotiationHistory || offer.rounds || [];
       const lastRound = history[history.length - 1];
       const lastPrice = lastRound?.price || offer.price || 0;
       const qty = offer.quantity || 0;
-      const commodity = offer.commodity || (typeof offer.commodityId === 'object' ? offer.commodityId : null) || {};
+      const reqObj = (offer.requirementId && typeof offer.requirementId === 'object') ? offer.requirementId : null;
+      const commodity = offer.commodity || 
+                        (typeof offer.commodityId === 'object' ? offer.commodityId : null) || 
+                        reqObj || 
+                        {};
       const expiry = formatExpiry(offer.expiresAt, t);
       
-      const isDeletedListing = !commodity.commodityName && !commodity.name;
+      const isDeletedListing = !commodity.commodityName && !commodity.name && !commodity.commodity;
 
       return (
         <TouchableOpacity
@@ -586,7 +618,7 @@ export default function TradesScreen({ navigation }) {
             <View style={styles.compactCardLeft}>
               <View style={styles.compactCardTitleRow}>
                 <Text style={styles.compactCropTitle} numberOfLines={1}>
-                  {commodity.commodityName || commodity.name || t('Listing Removed')}
+                  {commodity.commodityName || commodity.name || commodity.commodity || t('Listing Removed')}
                   {commodity.type ? ` (${commodity.type})` : ''}
                 </Text>
                 {commodity.state && (
@@ -794,14 +826,14 @@ export default function TradesScreen({ navigation }) {
             activeOpacity={0.7}
             accessible={true}
             accessibilityRole="button"
-            accessibilityLabel={t('My Bids (Buying)')}
+            accessibilityLabel={t('My Bids & Quotes')}
             accessibilityState={{ selected: tradeMode === 'buy' }}
           >
             <Text style={[
               styles.switcherText,
               tradeMode === 'buy' ? { color: theme.primary, fontWeight: '800' } : { color: '#64748B' }
             ]}>
-              {t('My Bids (Buying)')}
+              {t('My Bids & Quotes')}
             </Text>
           </TouchableOpacity>
           <TouchableOpacity
@@ -816,14 +848,14 @@ export default function TradesScreen({ navigation }) {
             activeOpacity={0.7}
             accessible={true}
             accessibilityRole="button"
-            accessibilityLabel={t('My Listings & Quotes')}
+            accessibilityLabel={t('My Listings')}
             accessibilityState={{ selected: tradeMode === 'sell' }}
           >
             <Text style={[
               styles.switcherText,
               tradeMode === 'sell' ? { color: theme.primary, fontWeight: '800' } : { color: '#64748B' }
             ]}>
-              {t('My Listings & Quotes')}
+              {t('My Listings')}
             </Text>
           </TouchableOpacity>
         </View>
@@ -831,9 +863,19 @@ export default function TradesScreen({ navigation }) {
         {/* Section label — visual identity separator between switcher and tab filters */}
         <View style={styles.filterLabelRow}>
           <View style={[styles.filterLabelLine, { backgroundColor: theme.primary + '25' }]} />
-          <Text style={[styles.filterLabelText, { color: theme.primary }]}>
-            {t('Filter by Status')}
-          </Text>
+          <TouchableOpacity
+            style={styles.infoButton}
+            onPress={() => setShowTooltip(true)}
+            activeOpacity={0.75}
+            accessible={true}
+            accessibilityRole="button"
+            accessibilityLabel={t('Show status filter guide')}
+          >
+            <Text style={[styles.filterLabelText, { color: theme.primary }]}>
+              {t('Filter by Status')}
+            </Text>
+            <Icon name="information-outline" size={13.5} color={theme.primary} style={{ marginLeft: w(4) }} />
+          </TouchableOpacity>
           <View style={[styles.filterLabelLine, { backgroundColor: theme.primary + '25' }]} />
         </View>
 
@@ -845,7 +887,7 @@ export default function TradesScreen({ navigation }) {
                 {tabFilters.map(tab => {
                   const isSelected = tab === activeTab;
                   const inNegBadge = tradeMode === 'buy' && tab === 'In Negotiation' &&
-                    uniqueOffers.some(o => ['in_negotiation', 'negotiating', 'countered'].includes(normalizeStatus(o.displayStatus || o.status)) && o.currentTurn === 'buyer');
+                    uniqueOffers.some(o => ['in_negotiation', 'negotiating', 'countered'].includes(normalizeStatus(o.displayStatus || o.status)) && o.currentTurn === (selectedRole === 'FPO' ? 'buyer' : 'seller'));
                   return (
                     <TouchableOpacity
                       key={tab}
@@ -903,14 +945,14 @@ export default function TradesScreen({ navigation }) {
                     onPress={() => dispatch({ type: 'SET_CROP', crop })}
                     accessible={true}
                     accessibilityRole="button"
-                    accessibilityLabel={t('Filter by crop {crop}').replace('{crop}', t(crop))}
+                    accessibilityLabel={t('Filter by crop {crop}').replace('{crop}', crop)}
                     accessibilityState={{ selected: isSelected }}
                   >
                     <Text style={[
                       styles.cropChipText,
                       isSelected && { color: COLORS.white, fontWeight: '700' }
                     ]}>
-                      {t(crop)}
+                      {crop === 'All' ? t('All') : crop}
                     </Text>
                   </TouchableOpacity>
                 );
@@ -945,7 +987,7 @@ export default function TradesScreen({ navigation }) {
               <Text style={styles.emptyText}>
                 {activeTab === 'All'
                   ? t("You haven't submitted any offers yet.\nBrowse the marketplace to find commodities.")
-                  : t('No offers with "{status}" status.').replace('{status}', t(activeTab))}
+                  : t('No offers with "{status}" status.').replace('{status}', activeTab)}
               </Text>
             </>
           )}
@@ -1038,6 +1080,12 @@ export default function TradesScreen({ navigation }) {
         visible={!!selectedOfferForModal}
         onClose={() => dispatch({ type: 'SET_MODAL_OFFER', offer: null })}
         item={selectedOfferForModal}
+      />
+
+      <StatusFilterTooltip
+        visible={showTooltip}
+        onClose={() => setShowTooltip(false)}
+        theme={theme}
       />
     </SafeScreen>
   );
@@ -1707,5 +1755,12 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     textTransform: 'uppercase',
     letterSpacing: 0.2,
+  },
+  
+  // ─── Tooltip Styles ───────────────────────────────────────────────
+  infoButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 });

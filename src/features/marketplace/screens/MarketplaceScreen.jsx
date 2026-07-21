@@ -20,24 +20,19 @@ import { SafeScreen } from '../../../shared/components/SafeScreen';
 import AppHeader from '../../../shared/components/AppHeader';
 import COLORS from '../../../theme/colors';
 import { w, h, f, mw } from '../../../shared/utils/responsive';
+import { safeText, safeLocation, safePrice, safeRating, safeQuantity, resolveName, getStatusBadgeConfig } from '../../../shared/utils/formatters';
 import { showAlert } from '../../../shared/components/CustomAlertBox';
 import { getSellCommodities, deleteSellCommodity, getReceivedOffers } from '../marketplace.api';
 import { getFriendlyErrorMessage } from '../../../shared/utils/errorUtils';
 import { normalizeCommodity } from '../marketplace.normalizer';
-// import { requirementService } from '../../orders/orders.requirements';
-// import { submitQuoteAgainstRequirement } from '../../orders/orders.service';
+import { requirementService, normalizeRequirement } from '../../orders/orders.requirements';
+import { submitQuoteAgainstRequirement } from '../../orders/orders.service';
 import FulfillRequirementBottomSheet from '../../orders/components/FulfillBuyerRequirement';
-import { selectRequirements } from '../../../store/mockDataSlice';
 
 
 
 
-const ROLE_THEMES = {
-  FPO:       { primary: COLORS.fpoPrimary,       secondary: COLORS.fpoSecondary,       light: COLORS.fpoLight,       text: COLORS.fpoText },
-  Trader:    { primary: COLORS.traderPrimary,    secondary: COLORS.traderSecondary,    light: COLORS.traderLight,    text: COLORS.traderText },
-  Miller:    { primary: COLORS.millerPrimary,    secondary: COLORS.millerSecondary,    light: COLORS.millerLight,    text: COLORS.millerText },
-  Corporate: { primary: COLORS.corporatePrimary, secondary: COLORS.corporateSecondary, light: COLORS.corporateLight, text: COLORS.corporateText },
-};
+import { ROLE_THEMES } from '../../../theme/roleThemes';
 
 const PAGE_SIZE = 10;
 
@@ -345,7 +340,7 @@ const OfferCard = React.memo(function OfferCard({ offer, theme, onPress, onEditP
               {displayName}
             </Text>
             <Text style={{ fontSize: f(10.5), color: COLORS.textMuted }}>
-              {t(offer.sellerRole) || t('Seller')}
+              {offer.sellerRole || t('Seller')}
             </Text>
           </View>
         </View>
@@ -371,12 +366,12 @@ const OfferCard = React.memo(function OfferCard({ offer, theme, onPress, onEditP
       <View style={[styles.offerHeader, { marginTop: h(4) }]}>
         <View style={styles.cropInfoWrapper}>
           <Text style={[styles.offerCrop, { fontSize: f(16.5), fontWeight: '900', color: theme.text }]} numberOfLines={1}>
-            {t(offer.name) || '—'}{offer.variety ? ` (${t(offer.variety)})` : ''}
+            {offer.name || t('Unknown Crop')}{offer.variety ? ` (${offer.variety})` : ''}
           </Text>
           <View style={styles.locationRow}>
             <Icon name="map-marker" size={14} color={theme.primary} />
             <Text style={[styles.offerLocation, { color: COLORS.text, fontWeight: '600' }]}>
-              {t(offer.location) || '—'}
+              {safeLocation(offer.location)}
             </Text>
           </View>
         </View>
@@ -402,14 +397,14 @@ const OfferCard = React.memo(function OfferCard({ offer, theme, onPress, onEditP
             <Text style={styles.detailLabel}>{t('Quantity')}</Text>
           </View>
           <Text style={[styles.detailVal, { fontSize: f(14.5), color: theme.text }]}>
-            {offer.quantityLabel ? offer.quantityLabel.split(' ').map(word => t(word)).join(' ') : '—'}
+            {offer.quantityLabel || t('Qty N/A')}
           </Text>
         </View>
 
         <View style={[styles.detailCol, styles.detailColCenter]}>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: w(4), marginBottom: h(2) }}>
             <Icon name="tag-outline" size={13} color={COLORS.textMuted} />
-            <Text style={styles.detailLabel}>{t('Price')} / {t(offer.priceUnit || 'Qt')}</Text>
+            <Text style={styles.detailLabel}>{t('Price')} / {offer.priceUnit || 'Qt'}</Text>
           </View>
           <Text style={[styles.detailVal, { color: theme.primary, fontSize: f(15), fontWeight: '900' }]}>
             {priceDisplay ? `₹${priceDisplay}` : t('N/A')}
@@ -422,7 +417,7 @@ const OfferCard = React.memo(function OfferCard({ offer, theme, onPress, onEditP
             <Text style={styles.detailLabel}>{t('Moisture')}</Text>
           </View>
           <Text style={[styles.detailVal, { fontSize: f(14.5), color: theme.text }]}>
-            {offer.moisture || '—'}
+            {safeText(offer.moisture, 'N/A')}
           </Text>
         </View>
       </View>
@@ -555,12 +550,11 @@ const DemandCard = React.memo(({ demand, theme, t, onFulfillPress }) => {
   if (!demand) return null;
   
   const buyerObj = demand.buyerId;
+  const displayName = resolveName(buyerObj, '', t('Buyer'));
   const shopName = typeof buyerObj === 'object' && buyerObj?.shopName ? buyerObj.shopName : '';
   const contactPerson = typeof buyerObj === 'object'
     ? [buyerObj.firstName, buyerObj.lastName].filter(Boolean).join(' ')
-    : (typeof buyerObj === 'string' && buyerObj ? buyerObj : '');
-  
-  const displayName = shopName || contactPerson || t('Buyer');
+    : '';
   const subName = shopName && contactPerson ? contactPerson : '';
   const avatarChar = displayName.substring(0, 1).toUpperCase();
   const postedTime = formatDemandPostedTime(demand.createdAt, t);
@@ -625,12 +619,12 @@ const DemandCard = React.memo(({ demand, theme, t, onFulfillPress }) => {
       <View style={[styles.offerHeader, { marginTop: h(4) }]}>
         <View style={styles.cropInfoWrapper}>
           <Text style={[styles.offerCrop, { fontSize: f(16.5), fontWeight: '900', color: theme.text }]}>
-            {t(demand.commodity) || '—'}
+            {safeText(t(demand.commodity), t('Unknown Commodity'))}
           </Text>
           <View style={styles.locationRow}>
             <Icon name="map-marker" size={14} color={theme.primary} />
             <Text style={[styles.offerLocation, { color: COLORS.text, fontWeight: '600' }]}>
-              {t(demand.location) || '—'}
+              {safeLocation(demand.location)}
             </Text>
           </View>
         </View>
@@ -671,7 +665,7 @@ const DemandCard = React.memo(({ demand, theme, t, onFulfillPress }) => {
             <Text style={styles.detailLabel}>{t('Req Qty')}</Text>
           </View>
           <Text style={[styles.detailVal, { fontSize: f(14.5), color: theme.text }]}>
-            {demand.quantity || '—'} {t(demand.unit || 'Qt')}
+            {safeQuantity(demand.quantity, demand.unit || 'Qt')}
           </Text>
         </View>
 
@@ -748,10 +742,7 @@ function MarketplaceScreenInner({ route, navigation }) {
   const theme = ROLE_THEMES[selectedRole] || ROLE_THEMES.FPO;
   const { t } = useTranslation();
 
-  // Read requirements from Redux mockData slice (written by HomeScreen)
-  const contextRequirements = useSelector(selectRequirements);
-  const contextRequirementsRef = useRef(contextRequirements);
-  contextRequirementsRef.current = contextRequirements;
+  // Replaced local mock context requirements with live API calls
 
   const bottomTabBarHeight = useBottomTabBarHeight();
 
@@ -842,13 +833,12 @@ function MarketplaceScreenInner({ route, navigation }) {
 
       let response;
       if (tab === 'DEMANDS') {
-        // Use requirements from context (posted in HomeScreen) — no API call
-        response = {
-          success: true,
-          data: {
-            requirements: contextRequirementsRef.current,
-          },
-        };
+        response = await requirementService.getMarketplaceRequirements({
+          commodityName: trimmedSearch || undefined,
+          page: pageNum,
+          limit: PAGE_SIZE,
+          excludeBuyerId: currentUserId,
+        });
       } else {
         response = await getSellCommodities(params, { signal: controller.signal });
       }
@@ -869,6 +859,8 @@ function MarketplaceScreenInner({ route, navigation }) {
       }
       if (!Array.isArray(items)) {
         items = [];
+      } else if (tab === 'OFFERS') {
+        items = items.map(item => item && (item.sellerName || item.shopName) ? item : normalizeCommodity(item));
       }
 
       // Local filtering for demands (since mock API doesn't support query filters)
@@ -942,13 +934,7 @@ function MarketplaceScreenInner({ route, navigation }) {
   useEffect(() => { searchTextRef.current = searchText; }, [searchText]);
   useEffect(() => { selectedCropRef.current = selectedCrop; }, [selectedCrop]);
 
-  // Re-fetch DEMANDS tab whenever a new requirement is added in HomeScreen
-  useEffect(() => {
-    if (activeTabRef.current === 'DEMANDS') {
-      fetchListings({ pageNum: 1, isRefresh: true });
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [contextRequirements]);
+
 
 
 
@@ -967,6 +953,7 @@ function MarketplaceScreenInner({ route, navigation }) {
   useFocusEffect(
     useCallback(() => {
       let idleHandle;
+      const cacheExpiry = 30_000;
       const timeSinceLastFetch = Date.now() - lastFetchTimeRef.current;
 
       if (!hasListingsRef.current) {
@@ -974,8 +961,8 @@ function MarketplaceScreenInner({ route, navigation }) {
         idleHandle = requestIdle(() => {
           fetchListings({ pageNum: 1, isRefresh: false });
         });
-      } else {
-        // Force a background fetch on every screen focus to ensure we catch updates from other screens (like HomeScreen submit)
+      } else if (timeSinceLastFetch > cacheExpiry) {
+        // Force a background fetch on screen focus only when the cache expiry is exceeded
         idleHandle = requestIdle(() => {
           fetchListings({ pageNum: 1, isBackground: true });
         });
@@ -1252,7 +1239,7 @@ function MarketplaceScreenInner({ route, navigation }) {
     const emptyText = searchText.trim()
       ? `${t('No active sell offers found for')} "${searchText.trim()}".`
       : selectedCrop !== 'All'
-      ? `${t('No active')} ${t(selectedCrop)} ${t('listings right now.')}`
+      ? `${t('No active')} ${selectedCrop} ${t('listings right now.')}`
       : t('No active sell listings at the moment.\nCheck back soon!');
 
     return (
@@ -1351,12 +1338,12 @@ function MarketplaceScreenInner({ route, navigation }) {
                 onPress={() => handleChipPress(crop)}
                 accessible={true}
                 accessibilityRole="button"
-                accessibilityLabel={`${t(crop)} ${t('filter')}`}
+                accessibilityLabel={`${crop === 'All' ? t('All') : crop} ${t('filter')}`}
                 accessibilityState={{ selected: isSelected }}
-                accessibilityHint={`${t('Filter marketplace listings by')} ${t(crop)}`}
+                accessibilityHint={`${t('Filter marketplace listings by')} ${crop === 'All' ? t('All') : crop}`}
               >
                 <Text style={[styles.chipText, isSelected && activeChipTextStyle]}>
-                  {t(crop)}
+                  {crop === 'All' ? t('All') : crop}
                 </Text>
               </TouchableOpacity>
             );
@@ -1398,7 +1385,7 @@ function MarketplaceScreenInner({ route, navigation }) {
       {!loading && !error && listings.length > 0 && (
         <Text style={styles.resultsCount} accessibilityLiveRegion="polite">
           {listings.length} {listings.length !== 1 ? t('active listings found') : t('active listing found')}
-          {selectedCrop !== 'All' ? ` ${t('for')} ${t(selectedCrop)}` : ''}
+          {selectedCrop !== 'All' ? ` ${t('for')} ${selectedCrop}` : ''}
           {searchText.trim() ? ` ${t('matching')} "${searchText.trim()}"` : ''}
         </Text>
       )}
@@ -1451,10 +1438,20 @@ function MarketplaceScreenInner({ route, navigation }) {
         visible={!!selectedDemandForQuote}
         requirement={selectedDemandForQuote}
         onClose={() => setSelectedDemandForQuote(null)}
+        theme={theme}
         onSubmit={async (payload) => {
           try {
-            // Mock delay and show success directly to avoid active backend API calls
-            await new Promise((res) => setTimeout(res, 400));
+            const reqId = selectedDemandForQuote?.id || selectedDemandForQuote?._id;
+            await submitQuoteAgainstRequirement(reqId, {
+              offeredQuantity: payload.offeredQuantity,
+              quotePrice: payload.quotePrice,
+              dispatchTime: payload.dispatchTime,
+              remarks: payload.remarks,
+              unit: selectedDemandForQuote?.unit || 'Quintal',
+              priceUnit: selectedDemandForQuote?.unit || selectedDemandForQuote?.priceUnit || 'Quintal',
+              tradeType: selectedDemandForQuote?.tradeType || 'FOR',
+            });
+
             showAlert({
               type: 'success',
               title: t('Quote Submitted'),
