@@ -1,13 +1,13 @@
 import React from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
-import COLORS from '../../../theme/colors';
-import { w, h, f } from '../../../shared/utils/responsive';
+import COLORS from '../../../../theme/colors';
+import { w, h, f } from '../../../../shared/utils/responsive';
 import {
   normalizeStatus,
   BUY_TAB_FILTERS,
   SELL_TAB_FILTERS,
-} from '../procurement.rules';
+} from '../../procurement.rules';
 
 export default function TradeTabHeader({
   tradeMode,

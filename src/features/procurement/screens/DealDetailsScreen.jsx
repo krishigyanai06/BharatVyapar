@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useRef, useEffect } from 'react';
+import React, { useMemo } from 'react';
 import {
   View,
   Text,
@@ -9,23 +9,20 @@ import {
   RefreshControl,
 } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
-import { useSelector } from 'react-redux';
-import { useFocusEffect } from '@react-navigation/native';
-import { selectUser, selectSelectedRole } from '../../../store/authSelectors';
 import { SafeScreen } from '../../../shared/components/SafeScreen';
 import AppHeader from '../../../shared/components/AppHeader';
 import COLORS from '../../../theme/colors';
 import { w, h, f } from '../../../shared/utils/responsive';
-import { showAlert } from '../../../shared/components/CustomAlertBox';
-import { getDealDetails, updateEscrowStatus } from '../../marketplace/marketplace.api';
-import { useTranslation } from '../../../shared/hooks/useTranslation';
 import DynamicDocumentUploader from '../../../shared/components/DynamicDocumentUploader';
-import DebitNoteBottomSheet from '../components/DebitNoteBottomSheet';
+import { useTranslation } from '../../../shared/hooks/useTranslation';
 
+// Hook and Sub-components
+import { useDealDetails } from '../hooks/useDealDetails';
+import EscrowProgressStepper from '../components/deal/EscrowProgressStepper';
+import DebitNoteBottomSheet from '../components/deal/DebitNoteBottomSheet';
 import { dealService } from '../procurement.api';
-import { ROLE_THEMES } from '../../../theme/roleThemes';
 
-// Escrow stages for stepper
+// Escrow stages for stepper config
 const STAGES = [
   { key: 'pending_payment', title: 'Pending Payment', icon: 'cash-clock',     desc: 'Waiting for buyer to fund escrow account.' },
   { key: 'funded',          title: 'Funded',           icon: 'bank-check',     desc: 'Escrow secured. Seller to prepare dispatch.' },
@@ -34,7 +31,6 @@ const STAGES = [
   { key: 'released',        title: 'Released ✓',       icon: 'check-decagram', desc: 'Funds released to seller. Deal complete!' },
 ];
 
-// Format date display
 function formatDate(dateStr) {
   if (!dateStr) return null;
   return new Date(dateStr).toLocaleString('en-IN', {
@@ -48,219 +44,61 @@ function formatDate(dateStr) {
 
 export default function DealDetailsScreen({ route, navigation }) {
   const { t } = useTranslation();
-  // PERFORMANCE FIX: Two granular selectors — DealDetailsScreen only re-renders
-  // when user or selectedRole change, not on profileLoading or other auth fields.
-  const user      = useSelector(selectUser);
-  const stateRole = useSelector(selectSelectedRole);
-  const selectedRole = stateRole || user?.role || 'FPO';
-  const theme = ROLE_THEMES[selectedRole] || ROLE_THEMES.FPO;
+  const hook = useDealDetails({ route, navigation, t });
+  const {
+    deal,
+    dealId,
+    routeDeal,
+    loading,
+    refreshing,
+    apiError,
+    updatingEscrow,
+    showDebitNoteModal,
+    setShowDebitNoteModal,
+    isBuyer,
+    isSeller,
+    theme,
+    handleBackPress,
+    handleRefresh,
+    handleRetry,
+    handleEscrowUpdate,
+    handleDispute,
+    handleSubmitDebitNote,
+    handleOpenContract,
+    handleOpenInvoice,
+    handleOpenLorryReceipt,
+    handleFundEscrow,
+    handleMarkDispatched,
+  } = hook;
 
-  let rawDealId = route?.params?.dealId || route?.params?.deal?.id || route?.params?.deal?._id;
-  // If the dealId is a mock ID, treat it as null so we show the professional fallback screen
-  const dealId = (typeof rawDealId === 'string' && rawDealId.startsWith('mock')) ? null : rawDealId;
-  const routeDeal = route?.params?.deal || null;
+  // Stepper states helper mapping
+  const escrowStatus   = deal?.escrowStatus || 'pending_payment';
+  const isCancelled    = escrowStatus === 'cancelled';
+  const isReleased     = escrowStatus === 'released';
+  const currentStageIdx = STAGES.findIndex(s => s.key === escrowStatus);
 
-  const [deal, setDeal] = useState(routeDeal);
-  const [loading, setLoading] = useState(!routeDeal);
-  const [refreshing, setRefreshing] = useState(false);
-  const [apiError, setApiError] = useState(null);
-  const [updatingEscrow, setUpdatingEscrow] = useState(false);
-  const [showDebitNoteModal, setShowDebitNoteModal] = useState(false);
+  const stageTimestamps = {
+    pending_payment: deal?.createdAt,
+    funded:          deal?.fundedAt,
+    dispatched:      deal?.dispatchedAt,
+    delivered:       deal?.deliveredAt,
+    released:        deal?.releasedAt,
+  };
 
-  // Fix 2: guard against setState calls after unmount
-  const isMountedRef = useRef(true);
-  useEffect(() => {
-    return () => { isMountedRef.current = false; };
-  }, []);
+  const showFundEscrow   = isBuyer  && escrowStatus === 'pending_payment';
+  const showDispatchPO   = isBuyer  && escrowStatus === 'funded';
+  const showReadyToDispatch = isSeller && escrowStatus === 'funded';
+  const showDispatchDocs = isSeller && escrowStatus === 'dispatched_pending';
+  const showConfirmDelivery = isBuyer && escrowStatus === 'dispatched';
+  const showAnyAction    = showFundEscrow || showDispatchPO || showReadyToDispatch || showDispatchDocs || showConfirmDelivery;
+  const showRaiseDispute = (escrowStatus === 'delivered' || escrowStatus === 'dispatched');
 
-  const loadDeal = useCallback(async (isRefresh = false) => {
-    if (!dealId && !routeDeal) {
-      if (isMountedRef.current) {
-        setApiError(t('No deal ID provided.'));
-        setLoading(false);
-      }
-      return;
-    }
-    if (!dealId && routeDeal) { if (isMountedRef.current) setLoading(false); return; }
-    try {
-      if (isMountedRef.current) {
-        if (isRefresh) setRefreshing(true);
-        else setLoading(true);
-        setApiError(null);
-      }
-      const res = await getDealDetails(dealId);
-      if (!isMountedRef.current) return;
-      const dealData = res?.data?.deal || res?.deal || res?.data || res;
-      setDeal(dealData);
-    } catch (err) {
-      console.warn('[DealDetails] loadDeal backend error:', err);
-      if (isMountedRef.current) {
-        setApiError(err?.message || 'Could not load deal details.');
-      }
-    } finally {
-      if (isMountedRef.current) {
-        setLoading(false);
-        setRefreshing(false);
-      }
-    }
-  }, [dealId, routeDeal, t, route?.params?.item]);
-
-  useFocusEffect(
-    useCallback(() => {
-      loadDeal();
-    }, [loadDeal])
-  );
-
-  // Determine current user's role in this deal
-  const userId = user?._id || user?.id;
-  const routeRole = route?.params?.role;
-  const isBuyer  = routeRole
-    ? routeRole === 'buyer'
-    : !!(deal && userId &&
-        String(deal.buyerId  || deal.buyer_id  || deal.buyer?.id  || deal.buyer?._id)  === String(userId));
-  const isSeller = routeRole
-    ? routeRole === 'seller'
-    : !!(deal && userId &&
-        String(deal.sellerId || deal.seller_id || deal.seller?.id || deal.seller?._id) === String(userId));
-
-  // ─── Stable callbacks to prevent inline function churn ──────────────────────
-  const handleBackPress = useCallback(() => {
-    navigation.goBack();
-  }, [navigation]);
-
-  const handleRefresh = useCallback(() => {
-    loadDeal(true);
-  }, [loadDeal]);
-
-  const handleRetry = useCallback(() => {
-    loadDeal();
-  }, [loadDeal]);
-
-  // Escrow action handler
-  const handleEscrowUpdate = useCallback((newStatus, confirmTitle, confirmMsg) => {
-    const activeDealId = deal?.id || deal?._id || dealId;
-    if (!activeDealId) return;
-
-    showAlert({
-      type: 'confirm',
-      title: confirmTitle,
-      message: confirmMsg,
-      buttons: [
-        { text: t('Cancel'), style: 'cancel' },
-        {
-          text: t('Confirm'),
-          onPress: async () => {
-            try {
-              setUpdatingEscrow(true);
-              await updateEscrowStatus(activeDealId, newStatus);
-              showAlert({
-                type: 'success',
-                title: t('Updated!'),
-                message: t('Deal stage updated to "{status}".').replace('{status}', t(newStatus.replace('_', ' '))),
-              });
-              loadDeal(true);
-            } catch (err) {
-              console.error('[DealDetails] updateEscrowStatus error:', err);
-              showAlert({
-                type: 'error',
-                title: t('Update Failed'),
-                message: err?.message || t('Could not update escrow status. Please try again.'),
-              });
-            } finally {
-              setUpdatingEscrow(false);
-            }
-          },
-        },
-      ],
-    });
-  }, [deal, dealId, loadDeal, t]);
-
-  const handleDispute = useCallback(() => {
-    const activeDealId = deal?.id || deal?._id || dealId;
-    if (!activeDealId) return;
-
-    setShowDebitNoteModal(true);
-  }, [deal, dealId]);
-
-  const handleSubmitDebitNote = useCallback(async (payload) => {
-    const activeDealId = deal?.id || deal?._id || dealId;
-    if (!activeDealId) return;
-    try {
-      setUpdatingEscrow(true);
-      await dealService.submitDebitNote(activeDealId, payload);
-      showAlert({
-        type: 'info',
-        title: t('Dispute Raised'),
-        message: t('Debit note submitted. Our support team will contact you within 24 hours.'),
-      });
-      loadDeal(true);
-    } catch (err) {
-      showAlert({
-        type: 'error',
-        title: t('Failed'),
-        message: err?.message || t('Could not raise dispute. Please try again.'),
-      });
-    } finally {
-      setUpdatingEscrow(false);
-    }
-  }, [deal, dealId, loadDeal, t]);
-
-  const handleOpenContract = useCallback(() => {
-    showAlert({
-      type: 'info',
-      title: t('Contract'),
-      message: t('Opening digitally signed tripartite contract agreement.')
-    });
-  }, [t]);
-
-  const handleOpenInvoice = useCallback(() => {
-    showAlert({
-      type: 'info',
-      title: t('Commercial Invoice'),
-      message: t('Opening seller commercial invoice.')
-    });
-  }, [t]);
-
-  const handleOpenLorryReceipt = useCallback(() => {
-    showAlert({
-      type: 'info',
-      title: t('Lorry Receipt'),
-      message: t('Opening transport lorry receipt.')
-    });
-  }, [t]);
-
-  const handleFundEscrow = useCallback(() => {
-    const totalValue = (deal?.finalPrice || deal?.price || 0) * (deal?.finalQuantity || deal?.quantity || 0);
-    handleEscrowUpdate(
-      'funded',
-      t('Confirm Escrow Payment'),
-      t('Transfer ₹{amount} to secure escrow account to initiate deal?').replace('{amount}', Number(totalValue).toLocaleString('en-IN'))
-    );
-  }, [deal, handleEscrowUpdate, t]);
-
-  const handleMarkDispatched = useCallback(async () => {
-    const activeDealId = deal?.id || deal?._id || dealId;
-    try {
-      setUpdatingEscrow(true);
-      // Wait for all 3 docs to be confirmed uploaded
-      await dealService.confirmDispatch(activeDealId);
-      // Fallback for UI if escrow status hasn't updated immediately
-      await updateEscrowStatus(activeDealId, 'dispatched'); 
-      loadDeal(true);
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setUpdatingEscrow(false);
-    }
-  }, [deal, dealId, loadDeal]);
-
-  const handleConfirmDelivery = useCallback(() => {
-    handleEscrowUpdate(
-      'delivered',
-      t('Confirm Delivery'),
-      t('Confirm that you have received the goods in good condition? This will trigger quality verification and escrow release.')
-    );
-  }, [handleEscrowUpdate, t]);
+  const finalPrice    = deal?.finalPrice    || deal?.price    || 0;
+  const finalQty      = deal?.finalQuantity || deal?.quantity || 0;
+  const totalValue    = deal?.totalValue    || (finalPrice * finalQty);
+  const commodityName = deal?.commodity?.commodityName || deal?.commodity?.name ||
+                        route?.params?.item?.commodityName || route?.params?.item?.name || '—';
+  const tradeType     = deal?.tradeType || 'FOR';
 
   // ─── Missing Deal ID (Fallback UI instead of Error) ────────────────────────
   if (!dealId && !routeDeal) {
@@ -310,7 +148,7 @@ export default function DealDetailsScreen({ route, navigation }) {
     );
   }
 
-  // ─── Error (no data) — Backend deal not found, show pending state ───────────
+  // ─── Error (no data) ────────────────────────────────────────────────
   if (apiError && !deal) {
     return (
       <SafeScreen style={{ backgroundColor: theme.light }} top={false} bottom={false}>
@@ -339,38 +177,6 @@ export default function DealDetailsScreen({ route, navigation }) {
     );
   }
 
-  const escrowStatus   = deal?.escrowStatus || 'pending_payment';
-  const isCancelled    = escrowStatus === 'cancelled';
-  const isReleased     = escrowStatus === 'released';
-  const currentStageIdx = STAGES.findIndex(s => s.key === escrowStatus);
-
-  // Timestamps per stage
-  const stageTimestamps = {
-    pending_payment: deal?.createdAt,
-    funded:          deal?.fundedAt,
-    dispatched:      deal?.dispatchedAt,
-    delivered:       deal?.deliveredAt,
-    released:        deal?.releasedAt,
-  };
-
-  // Determine which CTA to show
-  // We use existing escrowStatus mapped slightly differently for the new flows
-  const showFundEscrow   = isBuyer  && escrowStatus === 'pending_payment';
-  const showDispatchPO   = isBuyer  && escrowStatus === 'funded'; // PO Upload replaces just "waiting"
-  const showReadyToDispatch = isSeller && escrowStatus === 'funded';
-  const showDispatchDocs = isSeller && escrowStatus === 'dispatched_pending'; // Custom status for the 3 doc upload
-  const showConfirmDelivery = isBuyer && escrowStatus === 'dispatched';
-  const showAnyAction    = showFundEscrow || showDispatchPO || showReadyToDispatch || showDispatchDocs || showConfirmDelivery;
-  const showRaiseDispute = (escrowStatus === 'delivered' || escrowStatus === 'dispatched');
-
-  const finalPrice    = deal?.finalPrice    || deal?.price    || 0;
-  const finalQty      = deal?.finalQuantity || deal?.quantity || 0;
-  const totalValue    = deal?.totalValue    || (finalPrice * finalQty);
-  // Backend sends commodityName (not name) on the commodity object
-  const commodityName = deal?.commodity?.commodityName || deal?.commodity?.name ||
-                        route?.params?.item?.commodityName || route?.params?.item?.name || '—';
-  const tradeType     = deal?.tradeType || 'FOR';
-
   return (
     <SafeScreen style={{ backgroundColor: theme.light }} top={false} bottom={false}>
       <AppHeader
@@ -381,7 +187,6 @@ export default function DealDetailsScreen({ route, navigation }) {
         onBackPress={handleBackPress}
       />
 
-      {/* Error banner */}
       {apiError && deal && (
         <View style={styles.errorBanner}>
           <Icon name="alert-circle-outline" size={15} color={COLORS.white} />
@@ -404,7 +209,6 @@ export default function DealDetailsScreen({ route, navigation }) {
           />
         }
       >
-        {/* Cancelled Banner */}
         {isCancelled && (
           <View style={styles.cancelledBanner}>
             <Icon name="close-circle" size={22} color={COLORS.error} />
@@ -417,7 +221,6 @@ export default function DealDetailsScreen({ route, navigation }) {
           </View>
         )}
 
-        {/* Deal Summary Card */}
         <View style={styles.dealCard}>
           <View style={styles.cardHeader}>
             <View style={styles.flex1}>
@@ -460,67 +263,21 @@ export default function DealDetailsScreen({ route, navigation }) {
           </View>
         </View>
 
-        {/* Escrow Stepper */}
-        <View style={styles.stepperContainer}>
-          <Text style={[styles.sectionTitle, { color: theme.primary }]}>{t('Escrow & Logistics Progress')}</Text>
+        <EscrowProgressStepper
+          escrowStatus={escrowStatus}
+          deal={deal}
+          STAGES={STAGES}
+          theme={theme}
+          t={t}
+          isCancelled={isCancelled}
+          currentStageIdx={currentStageIdx}
+          stageTimestamps={stageTimestamps}
+        />
 
-          {STAGES.map((stage, idx) => {
-            const isCompleted = !isCancelled && idx < currentStageIdx;
-            const isActive    = !isCancelled && idx === currentStageIdx;
-            const isFuture    = idx > currentStageIdx;
-            const ts          = stageTimestamps[stage.key];
-
-            let iconName  = 'checkbox-blank-circle-outline';
-            let iconColor = COLORS.textMuted;
-            if (isCancelled && idx === currentStageIdx) {
-              iconName  = 'close-circle';
-              iconColor = COLORS.error;
-            } else if (isCompleted) {
-              iconName  = 'check-circle';
-              iconColor = COLORS.success;
-            } else if (isActive) {
-              iconName  = 'circle-slice-8';
-              iconColor = theme.primary;
-            }
-
-            return (
-              <View key={stage.key} style={styles.stepRow}>
-                <View style={styles.stepIndicator}>
-                  <Icon name={iconName} size={22} color={iconColor} />
-                  {idx < STAGES.length - 1 && (
-                    <View style={[styles.stepLine, isCompleted ? styles.stepLineCompleted : styles.stepLinePending]} />
-                  )}
-                </View>
-                <View style={[styles.stepContent, isActive && styles.activeStepContent]}>
-                  <Text style={[
-                    styles.stepTitle,
-                    isActive     && styles.activeStepTitle,
-                    isActive     && { color: theme.primary },
-                    isCompleted  && styles.completedStepTitle,
-                    isFuture     && styles.futureStepTitle,
-                  ]}>
-                    {t(stage.title)}
-                  </Text>
-                  <Text style={styles.stepDesc}>{t(stage.desc)}</Text>
-                  {ts ? (
-                    <Text style={styles.stepTimestamp}>✓ {formatDate(ts)}</Text>
-                  ) : (
-                    isActive && <Text style={styles.stepPending}>{t('Pending action...')}</Text>
-                  )}
-                </View>
-              </View>
-            );
-          })}
-        </View>
-
-        {/* Deal Documents */}
         <View style={styles.docsCard}>
           <Text style={[styles.sectionTitle, { color: theme.primary }]}>{t('Deal Documents')}</Text>
 
-          <TouchableOpacity
-            style={styles.docItem}
-            onPress={handleOpenContract}
-          >
+          <TouchableOpacity style={styles.docItem} onPress={handleOpenContract}>
             <View style={styles.docInfo}>
               <Icon name="file-sign" size={22} color="#007799" />
               <View>
@@ -532,10 +289,7 @@ export default function DealDetailsScreen({ route, navigation }) {
           </TouchableOpacity>
 
           {(escrowStatus === 'dispatched' || escrowStatus === 'delivered' || escrowStatus === 'released') && (
-            <TouchableOpacity
-              style={styles.docItem}
-              onPress={handleOpenInvoice}
-            >
+            <TouchableOpacity style={styles.docItem} onPress={handleOpenInvoice}>
               <View style={styles.docInfo}>
                 <Icon name="file-percent" size={22} color="#D69E2E" />
                 <View>
@@ -548,10 +302,7 @@ export default function DealDetailsScreen({ route, navigation }) {
           )}
 
           {(escrowStatus === 'dispatched' || escrowStatus === 'delivered' || escrowStatus === 'released') && (
-            <TouchableOpacity
-              style={styles.docItem}
-              onPress={handleOpenLorryReceipt}
-            >
+            <TouchableOpacity style={styles.docItem} onPress={handleOpenLorryReceipt}>
               <View style={styles.docInfo}>
                 <Icon name="file-cabinet" size={22} color="#805AD5" />
                 <View>
@@ -564,7 +315,6 @@ export default function DealDetailsScreen({ route, navigation }) {
           )}
         </View>
 
-        {/* Role-Based Escrow Action */}
         {!isCancelled && !isReleased && (
           <View style={styles.actionCard}>
             <Text style={[styles.sectionTitle, { color: theme.primary }]}>{t('Action Required')}</Text>
@@ -586,7 +336,6 @@ export default function DealDetailsScreen({ route, navigation }) {
                     await dealService.uploadDealDocument(deal?.id || deal?._id, type, file);
                   }}
                   onAllUploaded={() => {
-                    // Once PO is uploaded, fund escrow
                     handleFundEscrow();
                   }}
                 />
@@ -605,7 +354,7 @@ export default function DealDetailsScreen({ route, navigation }) {
                   </View>
                 </View>
                 <TouchableOpacity
-                  style={[styles.actionBtn, styles.dispatchBtn]}
+                  style={[styles.actionBtn, { backgroundColor: '#DD6B20' }]}
                   disabled={updatingEscrow}
                   onPress={() => handleEscrowUpdate('dispatched_pending', 'Ready to Dispatch', 'Begin dispatch document upload?')}
                 >
@@ -657,7 +406,7 @@ export default function DealDetailsScreen({ route, navigation }) {
                   </View>
                 </View>
                 <TouchableOpacity
-                  style={[styles.actionBtn, styles.deliveryBtn]}
+                  style={[styles.actionBtn, { backgroundColor: '#38A169' }]}
                   disabled={updatingEscrow}
                   onPress={handleConfirmDelivery}
                 >
@@ -685,25 +434,14 @@ export default function DealDetailsScreen({ route, navigation }) {
               </View>
             )}
 
-            {/* Raise Dispute / Cancel Link */}
             <View style={styles.disputeContainer}>
               <TouchableOpacity
-                style={[
-                  styles.disputeLink,
-                  !showRaiseDispute && styles.disputeLinkDisabled
-                ]}
+                style={[styles.disputeLink, !showRaiseDispute && styles.disputeLinkDisabled]}
                 onPress={handleDispute}
                 disabled={updatingEscrow || !showRaiseDispute}
               >
-                <Icon
-                  name="alert-octagon-outline"
-                  size={16}
-                  color={showRaiseDispute ? COLORS.error : COLORS.textMuted}
-                />
-                <Text style={[
-                  styles.disputeLinkText,
-                  !showRaiseDispute && styles.disputeLinkTextDisabled
-                ]}>
+                <Icon name="alert-octagon-outline" size={16} color={showRaiseDispute ? COLORS.error : COLORS.textMuted} />
+                <Text style={[styles.disputeLinkText, !showRaiseDispute && styles.disputeLinkTextDisabled]}>
                   {t('Report Quality Issue / Raise Debit Note')}
                 </Text>
               </TouchableOpacity>
@@ -716,7 +454,6 @@ export default function DealDetailsScreen({ route, navigation }) {
           </View>
         )}
 
-        {/* Released — Success state */}
         {isReleased && (
           <View style={styles.completedCard}>
             <Icon name="check-decagram" size={36} color={COLORS.success} />
@@ -861,6 +598,11 @@ const styles = StyleSheet.create({
     fontSize: f(10),
     fontWeight: '700',
   },
+  badgeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: w(4),
+  },
   divider: {
     height: 1,
     backgroundColor: '#F1F3F5',
@@ -883,72 +625,17 @@ const styles = StyleSheet.create({
     flex: 1,
     marginLeft: w(12),
   },
-  // Stepper
-  stepperContainer: {
-    backgroundColor: COLORS.white,
-    borderRadius: 16,
-    padding: w(16),
-    marginBottom: h(16),
-    elevation: 3,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 10,
+  boldValue: {
+    fontWeight: '800',
+  },
+  flex1: {
+    flex: 1,
   },
   sectionTitle: {
     fontSize: f(14),
     fontWeight: '800',
     marginBottom: h(16),
   },
-  stepRow: {
-    flexDirection: 'row',
-    marginBottom: h(4),
-  },
-  stepIndicator: {
-    alignItems: 'center',
-    width: w(30),
-  },
-  stepLine: {
-    width: 2,
-    flex: 1,
-    backgroundColor: '#E9ECEF',
-    marginVertical: h(4),
-    minHeight: h(24),
-  },
-  stepContent: {
-    flex: 1,
-    paddingBottom: h(16),
-    paddingHorizontal: w(10),
-    borderRadius: 8,
-    marginBottom: h(2),
-  },
-  activeStepContent: {
-    backgroundColor: '#F8F9FA',
-  },
-  stepTitle: {
-    fontSize: f(13),
-    fontWeight: '700',
-    color: COLORS.text,
-  },
-  stepDesc: {
-    fontSize: f(11),
-    color: COLORS.textMuted,
-    marginTop: h(2),
-    lineHeight: h(14),
-  },
-  stepTimestamp: {
-    fontSize: f(10),
-    color: COLORS.success,
-    marginTop: h(3),
-    fontWeight: '600',
-  },
-  stepPending: {
-    fontSize: f(10),
-    color: COLORS.textMuted,
-    marginTop: h(3),
-    fontStyle: 'italic',
-  },
-  // Documents
   docsCard: {
     backgroundColor: COLORS.white,
     borderRadius: 16,
@@ -984,7 +671,6 @@ const styles = StyleSheet.create({
     color: COLORS.textMuted,
     marginTop: h(1),
   },
-  // Action Card
   actionCard: {
     backgroundColor: COLORS.white,
     borderRadius: 16,
@@ -999,28 +685,28 @@ const styles = StyleSheet.create({
     borderTopColor: '#3182CE',
   },
   actionBlock: {
-    marginBottom: h(12),
+    gap: h(12),
+    marginBottom: h(14),
   },
   actionDesc: {
     flexDirection: 'row',
     alignItems: 'flex-start',
     gap: w(10),
-    marginBottom: h(12),
   },
   actionTitle: {
-    fontSize: f(14),
+    fontSize: f(13.5),
     fontWeight: '800',
     color: COLORS.text,
   },
   actionSubtitle: {
     fontSize: f(11),
-    color: COLORS.textLight,
-    lineHeight: h(16),
+    color: COLORS.textMuted,
     marginTop: h(2),
+    lineHeight: h(15),
   },
   actionBtn: {
-    height: h(46),
-    borderRadius: 12,
+    borderRadius: 10,
+    paddingVertical: h(12),
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
@@ -1029,114 +715,74 @@ const styles = StyleSheet.create({
   actionBtnText: {
     color: COLORS.white,
     fontWeight: '800',
-    fontSize: f(14),
+    fontSize: f(13),
   },
   waitingBlock: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: w(10),
     backgroundColor: '#F8F9FA',
-    borderRadius: 10,
+    borderRadius: 12,
     padding: w(14),
-    marginBottom: h(12),
+    borderWidth: 1,
+    borderColor: '#E9ECEF',
+    marginVertical: h(10),
   },
   waitingText: {
     fontSize: f(12),
     color: COLORS.textLight,
+    fontWeight: '600',
     flex: 1,
-    lineHeight: h(17),
   },
   disputeContainer: {
-    marginTop: h(4),
+    marginTop: h(8),
+    borderTopWidth: 1,
+    borderTopColor: '#ECEEF4',
+    paddingTop: h(12),
   },
   disputeLink: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
     gap: w(6),
-    paddingVertical: h(10),
-    borderTopWidth: 1,
-    borderTopColor: '#F1F3F5',
   },
   disputeLinkDisabled: {
-    opacity: 0.5,
+    opacity: 0.65,
   },
   disputeLinkText: {
     fontSize: f(12),
-    fontWeight: '700',
     color: COLORS.error,
+    fontWeight: '700',
   },
   disputeLinkTextDisabled: {
     color: COLORS.textMuted,
   },
   disputeHelpText: {
-    fontSize: f(11),
+    fontSize: f(10.5),
     color: COLORS.textMuted,
-    textAlign: 'center',
-    marginTop: h(2),
-    paddingHorizontal: w(12),
-    lineHeight: h(15),
+    marginTop: h(4),
   },
-  // Completed
   completedCard: {
     backgroundColor: '#F0FFF4',
     borderRadius: 16,
-    padding: w(24),
-    marginBottom: h(16),
+    padding: w(16),
     alignItems: 'center',
     borderWidth: 1.5,
-    borderColor: '#9AE6B4',
-    gap: h(10),
+    borderColor: '#C6F6D5',
+    marginBottom: h(16),
+    gap: h(8),
   },
   completedTitle: {
-    fontSize: f(16),
+    fontSize: f(14.5),
     fontWeight: '800',
     color: '#22543D',
-    textAlign: 'center',
   },
   completedDesc: {
     fontSize: f(12),
-    color: '#276749',
+    color: '#2F855A',
     textAlign: 'center',
     lineHeight: h(18),
   },
-  // Interned helpers — prevent new JSObject allocation every render
-  flex1: {
-    flex: 1,
-  },
   bottomSpacer: {
     height: h(40),
-  },
-  badgeRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: w(4),
-  },
-  boldValue: {
-    fontWeight: '800',
-  },
-  stepLineCompleted: {
-    backgroundColor: COLORS.success,
-  },
-  stepLinePending: {
-    backgroundColor: '#E9ECEF',
-  },
-  activeStepTitle: {
-    fontWeight: '800',
-  },
-  completedStepTitle: {
-    color: COLORS.success,
-  },
-  futureStepTitle: {
-    color: COLORS.textMuted,
-  },
-  fundBtn: {
-    backgroundColor: '#3182CE',
-  },
-  dispatchBtn: {
-    backgroundColor: '#DD6B20',
-  },
-  deliveryBtn: {
-    backgroundColor: '#38A169',
   },
 });

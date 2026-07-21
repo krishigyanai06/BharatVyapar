@@ -7,9 +7,9 @@ import {
   TouchableOpacity,
 } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
-import COLORS from '../../../theme/colors';
-import { w, h, f } from '../../../shared/utils/responsive';
-import { useTranslation } from '../../../shared/hooks/useTranslation';
+import COLORS from '../../../../theme/colors';
+import { w, h, f } from '../../../../shared/utils/responsive';
+import { useTranslation } from '../../../../shared/hooks/useTranslation';
 
 export default function StatusFilterTooltip({ visible, onClose, theme }) {
   const { t } = useTranslation();

@@ -22,9 +22,9 @@ import { validatePriceMovement } from '../procurement.rules';
 import { submitCounterOffer, acceptOffer, rejectOffer } from '../../marketplace/marketplace.api';
 
 // Sub-components
-import { CounterOfferBottomSheetModal } from '../components/CounterOfferBottomSheetModal';
-import { NegotiationTimelineList } from '../components/NegotiationTimelineList';
-import { NegotiationHeaderCard } from '../components/NegotiationHeaderCard';
+import { CounterOfferBottomSheetModal } from '../components/negotiation/CounterOfferBottomSheetModal';
+import { NegotiationTimelineList } from '../components/negotiation/NegotiationTimelineList';
+import { NegotiationHeaderCard } from '../components/negotiation/NegotiationHeaderCard';
 
 const STATUS_CONFIG = {
   pending:        { label: 'Awaiting Response', color: '#718096', bg: '#EDF2F7' },

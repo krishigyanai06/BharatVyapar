@@ -13,7 +13,7 @@ import {
   Platform,
 } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
-import COLORS from '../../../theme/colors';
+import COLORS from '../../../../theme/colors';
 
 /**
  * CounterOfferBottomSheetModal

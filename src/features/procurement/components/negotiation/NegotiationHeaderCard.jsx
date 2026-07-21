@@ -1,8 +1,8 @@
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
-import COLORS from '../../../theme/colors';
-import { safeText, safePrice } from '../../../shared/utils/formatters';
+import COLORS from '../../../../theme/colors';
+import { safeText, safePrice } from '../../../../shared/utils/formatters';
 
 /**
  * NegotiationHeaderCard

@@ -19,7 +19,7 @@ import { w, h, f } from '../../../shared/utils/responsive';
 import { useTranslation } from '../../../shared/hooks/useTranslation';
 import { selectSelectedRole, selectUser } from '../../../store/authSelectors';
 import { requirementService } from '../procurement.api';
-import AddYourRequirement from '../components/AddYourRequirement';
+import AddYourRequirement from '../components/shared/AddYourRequirement';
 import { ROLE_THEMES } from '../../../theme/roleThemes';
 
 // Status color + icon mapping

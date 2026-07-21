@@ -1,16 +1,16 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
-import COLORS from '../../../theme/colors';
-import { w, h, f } from '../../../shared/utils/responsive';
-import { showAlert } from '../../../shared/components/CustomAlertBox';
+import COLORS from '../../../../theme/colors';
+import { w, h, f } from '../../../../shared/utils/responsive';
+import { showAlert } from '../../../../shared/components/CustomAlertBox';
 import {
   normalizeStatus,
   OFFER_STATUS_CONFIG,
   LISTING_STATUS_CONFIG,
   formatExpiry,
   formatRelative,
-} from '../procurement.rules';
+} from '../../procurement.rules';
 
 export default function TradeItemCard({
   item,

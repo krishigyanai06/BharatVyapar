@@ -14,13 +14,13 @@ import AppHeader from '../../../shared/components/AppHeader';
 import COLORS from '../../../theme/colors';
 import { w, h, f } from '../../../shared/utils/responsive';
 import ReceivedOffersModal from '../../marketplace/components/ReceivedOffersModal';
-import StatusFilterTooltip from '../components/StatusFilterTooltip';
+import StatusFilterTooltip from '../components/trades/StatusFilterTooltip';
 import { useTranslation } from '../../../shared/hooks/useTranslation';
 import { useTradesScreen } from '../hooks/useTradesScreen';
 
 // Sub-components
-import TradeTabHeader from '../components/TradeTabHeader';
-import TradeItemCard from '../components/TradeItemCard';
+import TradeTabHeader from '../components/trades/TradeTabHeader';
+import TradeItemCard from '../components/trades/TradeItemCard';
 
 export default function TradesScreen({ navigation, route }) {
   const { t } = useTranslation();

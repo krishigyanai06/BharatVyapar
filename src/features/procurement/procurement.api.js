@@ -1,5 +1,5 @@
 /**
- * orders.api.js — Consolidated Network API Layer for Orders & Requirements
+ * procurement.api.js — Consolidated Network API Layer for Procurement & Requirements
  *
  * 10x MNC RULE:
  * 1. ONLY network calls (apiClient.get/post/patch)

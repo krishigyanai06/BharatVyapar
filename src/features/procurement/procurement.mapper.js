@@ -1,5 +1,5 @@
 /**
- * orders.mapper.js — 10x MNC Production-Grade DTO Mapper & Data Guard for Orders & Bids
+ * procurement.mapper.js — 10x MNC Production-Grade DTO Mapper & Data Guard for Procurement & Bids
  *
  * SAFETIES & GUARDS:
  * 1. Defensive Type Converters: toSafeNumber, toSafeString, toSafeArray, toSafeStatus
