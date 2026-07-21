@@ -21,7 +21,7 @@ import { syncUserToDisplayData } from '../../profile/profile.service';
 import { showAlert } from '../../../shared/components/CustomAlertBox';
 import { useTranslation } from '../../../shared/hooks/useTranslation';
 import AddYourRequirement from '../../orders/components/AddYourRequirement';
-import { requirementService } from '../../orders/orders.requirements';
+import { requirementService } from '../../orders/orders.api';
 import { storage } from '../../../shared/utils/storage';
 import { notificationService } from '../../pushNotification/notificationService';
 

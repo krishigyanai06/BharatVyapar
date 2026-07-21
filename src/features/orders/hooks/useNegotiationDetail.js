@@ -1,4 +1,4 @@
-﻿// src/features/orders/hooks/useNegotiationDetail.js
+// src/features/orders/hooks/useNegotiationDetail.js
 // Data-fetch hook for NegotiationDetailsScreen.
 // Owns: offer, item, loading, refreshing, apiError, cooldownSecs,
 //       isMountedRef, loadOfferDetails, useFocusEffect background refresh,
@@ -12,7 +12,7 @@ import {
   getOfferDetails,
   getSellCommodityById,
 } from '../../marketplace/marketplace.api';
-import { computeRemainingCooldown } from '../utils/negotiationValidators';
+import { computeRemainingCooldown } from '../orders.rules';
 
 /**
  * Manages offer data-fetching, item resolution, cooldown timer, and

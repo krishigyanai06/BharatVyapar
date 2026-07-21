@@ -35,7 +35,7 @@ import {
 import {
   validatePriceMovement,
   isRoundsExhausted,
-} from '../utils/negotiationValidators';
+} from '../orders.rules';
 import { useNegotiationDetail } from '../hooks/useNegotiationDetail';
 import { ROLE_THEMES } from '../../../theme/roleThemes';
 

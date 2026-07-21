@@ -11,10 +11,10 @@ import { useTranslation } from '../../../shared/hooks/useTranslation';
 import { selectSelectedRole, selectUser } from '../../../store/authSelectors';
 import { w, h, f } from '../../../shared/utils/responsive';
 import {
+  getRequirementQuotes,
   acceptRequirementQuote,
-  getReceivedQuotesOnRequirements,
   rejectRequirementQuote,
-} from '../orders.service';
+} from '../orders.api';
 import { getSafeUserName } from '../../../shared/utils/formatters';
 import StatusPill from '../../../shared/components/StatusPill';
 import { ROLE_THEMES } from '../../../theme/roleThemes';

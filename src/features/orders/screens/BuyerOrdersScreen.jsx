@@ -10,7 +10,8 @@ import COLORS from '../../../theme/colors';
 import { useTranslation } from '../../../shared/hooks/useTranslation';
 import { selectSelectedRole, selectUser } from '../../../store/authSelectors';
 import { w, h, f } from '../../../shared/utils/responsive';
-import { getBuyerPurchaseOrders, ORDER_STATUS } from '../orders.service';
+import { getBuyerPurchaseOrders } from '../orders.api';
+import { ORDER_STATUS } from '../orders.rules';
 import { ROLE_THEMES } from '../../../theme/roleThemes';
 
 const BUYER_STATUS = {

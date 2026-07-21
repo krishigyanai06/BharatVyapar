@@ -24,9 +24,8 @@ import { safeText, safeLocation, safePrice, safeRating, safeQuantity, resolveNam
 import { showAlert } from '../../../shared/components/CustomAlertBox';
 import { getSellCommodities, deleteSellCommodity, getReceivedOffers } from '../marketplace.api';
 import { getFriendlyErrorMessage } from '../../../shared/utils/errorUtils';
-import { normalizeCommodity } from '../marketplace.normalizer';
-import { requirementService, normalizeRequirement } from '../../orders/orders.requirements';
-import { submitQuoteAgainstRequirement } from '../../orders/orders.service';
+import { requirementService, submitQuoteAgainstRequirement } from '../../orders/orders.api';
+import { mapOrder as normalizeRequirement } from '../../orders/orders.mapper';
 import FulfillRequirementBottomSheet from '../../orders/components/FulfillBuyerRequirement';
 
 

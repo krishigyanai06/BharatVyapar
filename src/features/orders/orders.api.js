@@ -1,28 +1,14 @@
-// features/orders/orders.service.js
+/**
+ * orders.api.js — Consolidated Network API Layer for Orders & Requirements
+ *
+ * 10x MNC RULE:
+ * 1. ONLY network calls (apiClient.get/post/patch)
+ * 2. Zero business rules, Zero UI styling
+ * 3. Reads generic config flags
+ */
+
 import apiClient from '../../api/client';
-
-export const REQUIREMENT_STATUS = {
-  OPEN: 'OPEN',
-  PARTIALLY_FILLED: 'PARTIALLY_FILLED',
-  FILLED: 'FILLED',
-  EXPIRED: 'EXPIRED',
-  CANCELLED: 'CANCELLED',
-};
-
-export const QUOTE_STATUS = {
-  PENDING: 'Pending',
-  ACCEPTED: 'Accepted',
-  REJECTED: 'Rejected',
-  WITHDRAWN: 'Withdrawn',
-  EXPIRED: 'Expired',
-};
-
-export const ORDER_STATUS = {
-  PENDING_DISPATCH: 'Pending Dispatch',
-  DISPATCHED: 'Dispatched',
-  DELIVERED: 'Delivered',
-  COMPLETED: 'Completed',
-};
+import { mapOrder, mapOrdersList } from './orders.mapper';
 
 // Fallback dummy quotes
 const dummyQuotes = [
@@ -122,13 +108,15 @@ const dummyPurchaseOrders = [
   },
 ];
 
+// ─── DEALS API ────────────────────────────────────────────────────────────────
+
 export const dealService = {
   updateDealStatus: async (dealId, status) => {
     try {
       const response = await apiClient.patch(`/buy-commodity/deals/${dealId}/status`, { status });
       return response.data;
     } catch (error) {
-      console.warn('[OrdersService] API not available, using fallback:', error.message);
+      console.warn('[OrdersAPI] API not available, using fallback:', error.message);
       return {
         success: true,
         data: {
@@ -152,7 +140,7 @@ export const dealService = {
       const response = await apiClient.post(`/buy-commodity/deals/${dealId}/document`, formData);
       return response.data;
     } catch (error) {
-      console.warn('[OrdersService] API not available, using fallback:', error.message);
+      console.warn('[OrdersAPI] API not available, using fallback:', error.message);
       return {
         success: true,
         data: {
@@ -170,7 +158,7 @@ export const dealService = {
       const response = await apiClient.post(`/buy-commodity/deals/${dealId}/dispatch`);
       return response.data;
     } catch (error) {
-      console.warn('[OrdersService] API not available, using fallback:', error.message);
+      console.warn('[OrdersAPI] API not available, using fallback:', error.message);
       return {
         success: true,
         data: {
@@ -190,7 +178,7 @@ export const dealService = {
       });
       return response.data;
     } catch (error) {
-      console.warn('[OrdersService] API not available, using fallback:', error.message);
+      console.warn('[OrdersAPI] API not available, using fallback:', error.message);
       return {
         success: true,
         data: {
@@ -208,6 +196,8 @@ export const dealService = {
   }
 };
 
+// ─── QUOTES & REQUIREMENTS API ───────────────────────────────────────────────
+
 export const submitQuoteAgainstRequirement = async (requirementId, payload) => {
   try {
     const apiPayload = {
@@ -218,73 +208,45 @@ export const submitQuoteAgainstRequirement = async (requirementId, payload) => {
       unit: payload.unit ?? 'Quintal',
       tradeType: payload.tradeType ?? 'FOR',
       paymentTimeline: payload.paymentTimeline || 'Immediate',
-      remarks: payload.remarks,
     };
-    const response = await apiClient.post('/buy-commodity/quotations', apiPayload);
+    const response = await apiClient.post('/buy-commodity/offers', apiPayload);
     return response.data;
   } catch (error) {
-    console.warn('[OrdersService] API not available, using fallback:', error.message);
-    const newQuote = {
-      _id: `quote_${Math.random().toString(36).slice(2, 9)}`,
-      id: `quote_${Math.random().toString(36).slice(2, 9)}`,
+    console.warn('[OrdersAPI] API not available, using fallback:', error.message);
+    const mockQuote = {
+      _id: `quote_${Date.now()}`,
+      id: `quote_${Date.now()}`,
       requirementId,
       offeredQuantity: Number(payload.offeredQuantity ?? payload.quantity),
-      quotePrice: Number(payload.quotePrice ?? payload.offeredPrice ?? payload.price),
-      dispatchTime: payload.dispatchTime,
-      remarks: payload.remarks,
+      quotePrice: Number(payload.quotePrice ?? payload.price),
+      dispatchTime: payload.dispatchTime || '2 days',
+      remarks: payload.remarks || '',
       status: 'Pending',
-      displayStatus: 'pending',
       createdAt: new Date().toISOString(),
     };
-    dummyQuotes.unshift(newQuote);
-    return { success: true, data: newQuote };
+    return { success: true, data: mockQuote };
   }
 };
 
-export const getMySubmittedQuotes = async (_sellerId = null) => {
+export const getRequirementQuotes = async (requirementId) => {
   try {
-    const response = await apiClient.get('/buy-commodity/quotations/sent');
-    const rawData = response.data;
-    if (rawData?.data?.offers && Array.isArray(rawData.data.offers)) {
-      return rawData.data.offers;
-    }
-    if (rawData?.data?.quotations && Array.isArray(rawData.data.quotations)) {
-      return rawData.data.quotations;
-    }
-    if (rawData?.data && Array.isArray(rawData.data)) {
-      return rawData.data;
-    }
-    if (Array.isArray(rawData)) {
-      return rawData;
-    }
-    return [];
+    const response = await apiClient.get(`/buy-commodity/offers/requirement/${requirementId}`);
+    const rawList = response.data?.offers || response.data?.data || response.data || [];
+    return mapOrdersList(rawList);
   } catch (error) {
-    console.warn('[OrdersService] API not available, using fallback:', error.message);
-    return dummyQuotes;
+    console.warn('[OrdersAPI] API not available, using fallback:', error.message);
+    return mapOrdersList(dummyQuotes);
   }
 };
 
-export const getReceivedQuotesOnRequirements = async (_buyerId = null, options = {}) => {
+export const getMySubmittedQuotes = async () => {
   try {
-    const params = options.requirementId ? { requirementId: options.requirementId } : undefined;
-    const response = await apiClient.get('/buy-commodity/offers', { params });
-    const rawData = response.data;
-    if (rawData?.data?.offers && Array.isArray(rawData.data.offers)) {
-      return rawData.data.offers;
-    }
-    if (rawData?.offers && Array.isArray(rawData.offers)) {
-      return rawData.offers;
-    }
-    if (rawData?.data && Array.isArray(rawData.data)) {
-      return rawData.data;
-    }
-    if (Array.isArray(rawData)) {
-      return rawData;
-    }
-    return [];
+    const response = await apiClient.get('/buy-commodity/offers/my');
+    const rawList = response.data?.offers || response.data?.data || response.data || [];
+    return mapOrdersList(rawList);
   } catch (error) {
-    console.warn('[OrdersService] API not available, using fallback:', error.message);
-    return dummyQuotes.filter((q) => !options.requirementId || q.requirementId === options.requirementId);
+    console.warn('[OrdersAPI] API not available, using fallback:', error.message);
+    return mapOrdersList(dummyQuotes);
   }
 };
 
@@ -293,10 +255,10 @@ export const acceptRequirementQuote = async (quoteId) => {
     const response = await apiClient.post(`/buy-commodity/offers/${quoteId}/accept`);
     return response.data;
   } catch (error) {
-    console.warn('[OrdersService] API not available, using fallback:', error.message);
+    console.warn('[OrdersAPI] API not available, using fallback:', error.message);
     const quote = dummyQuotes.find((q) => q.id === quoteId || q._id === quoteId);
     if (quote) quote.status = 'Accepted';
-    return { success: true, data: { quote } };
+    return { success: true, data: quote };
   }
 };
 
@@ -305,7 +267,7 @@ export const rejectRequirementQuote = async (quoteId) => {
     const response = await apiClient.post(`/buy-commodity/offers/${quoteId}/reject`);
     return response.data;
   } catch (error) {
-    console.warn('[OrdersService] API not available, using fallback:', error.message);
+    console.warn('[OrdersAPI] API not available, using fallback:', error.message);
     const quote = dummyQuotes.find((q) => q.id === quoteId || q._id === quoteId);
     if (quote) quote.status = 'Rejected';
     return { success: true, data: quote };
@@ -315,20 +277,20 @@ export const rejectRequirementQuote = async (quoteId) => {
 export const getSellerPurchaseOrders = async () => {
   try {
     const response = await apiClient.get('/purchase-orders/seller');
-    return response.data?.data || response.data || [];
+    return mapOrdersList(response.data?.data || response.data || []);
   } catch (error) {
-    console.warn('[OrdersService] API not available, using fallback:', error.message);
-    return dummyPurchaseOrders;
+    console.warn('[OrdersAPI] API not available, using fallback:', error.message);
+    return mapOrdersList(dummyPurchaseOrders);
   }
 };
 
 export const getBuyerPurchaseOrders = async () => {
   try {
     const response = await apiClient.get('/purchase-orders/buyer');
-    return response.data?.data || response.data || [];
+    return mapOrdersList(response.data?.data || response.data || []);
   } catch (error) {
-    console.warn('[OrdersService] API not available, using fallback:', error.message);
-    return dummyPurchaseOrders;
+    console.warn('[OrdersAPI] API not available, using fallback:', error.message);
+    return mapOrdersList(dummyPurchaseOrders);
   }
 };
 
@@ -337,9 +299,83 @@ export const updatePurchaseOrderStatus = async (orderId, status) => {
     const response = await apiClient.patch(`/purchase-orders/${orderId}/status`, { status });
     return response.data;
   } catch (error) {
-    console.warn('[OrdersService] API not available, using fallback:', error.message);
+    console.warn('[OrdersAPI] API not available, using fallback:', error.message);
     const order = dummyPurchaseOrders.find((o) => o.id === orderId || o._id === orderId);
     if (order) order.orderStatus = status;
     return { success: true, data: order };
   }
+};
+
+let myRequirementsCache = null;
+let cacheTime = 0;
+const CACHE_DURATION = 15000;
+
+export const requirementService = {
+  getMyRequirements: async (options = {}, forceRefresh = false) => {
+    const now = Date.now();
+    if (!forceRefresh && myRequirementsCache && (now - cacheTime < CACHE_DURATION)) {
+      return myRequirementsCache;
+    }
+    try {
+      const response = await apiClient.get('/buyer-requirement/my', {
+        params: {
+          status: options.status,
+          page:   options.page  || 1,
+          limit:  options.limit || 20,
+        },
+      });
+      const items = response.data?.requirements ?? response.data ?? response;
+      const normalized = mapOrdersList(items);
+      myRequirementsCache = normalized;
+      cacheTime = now;
+      return normalized;
+    } catch (error) {
+      console.warn('[RequirementService] getMyRequirements failed:', error?.response?.status, error.message);
+      return myRequirementsCache || [];
+    }
+  },
+
+  getMarketplaceRequirements: async (options = {}) => {
+    try {
+      const response = await apiClient.get('/buyer-requirement', {
+        params: {
+          commodityName: options.commodityName,
+          page:          options.page  || 1,
+          limit:         options.limit || 10,
+        },
+      });
+      const items = response.data?.requirements ?? response.data ?? response;
+      let mapped = mapOrdersList(items);
+      if (options.excludeBuyerId) {
+        mapped = mapped.filter(item => {
+          const buyerId = item.buyerId?._id || item.buyerId;
+          if (!buyerId) return true;
+          return String(buyerId) !== String(options.excludeBuyerId);
+        });
+      }
+      return { requirements: mapped };
+    } catch (error) {
+      console.warn('[RequirementService] getMarketplaceRequirements failed:', error?.response?.status, error.message);
+      return { requirements: [] };
+    }
+  },
+
+  submitRequirement: async (payload) => {
+    const apiPayload = {
+      commodityName:    payload.commodity,
+      quantity:         Number(payload.quantity),
+      unit:             payload.unit === 'Quintal' ? 'Qt' : (payload.unit || 'Qt'),
+      targetPrice:      Number(payload.expectedPrice),
+      deliveryLocation: payload.location,
+      remarks:          payload.remarks,
+      grade:            payload.grade,
+      moisture:         payload.moisture,
+      harvestYear:      payload.harvestYear,
+      deliveryDate:     payload.deliveryDate,
+    };
+    const response = await apiClient.post('/buyer-requirement', apiPayload);
+    myRequirementsCache = null;
+    cacheTime = 0;
+    return response.data;
+  },
 };
