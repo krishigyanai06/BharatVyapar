@@ -18,6 +18,8 @@ global.FormData = MockFormData;
 jest.mock('react-native-safe-area-context', () => {
   const React = require('react');
   const { View } = require('react-native');
+  const SafeAreaInsetsContext = React.createContext({ top: 20, right: 0, bottom: 0, left: 0 });
+  const SafeAreaFrameContext = React.createContext({ x: 0, y: 0, width: 375, height: 812 });
   return {
     SafeAreaProvider: ({ children }) => children,
     SafeAreaView: ({ children, style, ...props }) => (
@@ -26,6 +28,9 @@ jest.mock('react-native-safe-area-context', () => {
       </View>
     ),
     useSafeAreaInsets: () => ({ top: 20, right: 0, bottom: 0, left: 0 }),
+    useSafeAreaFrame: () => ({ x: 0, y: 0, width: 375, height: 812 }),
+    SafeAreaInsetsContext,
+    SafeAreaFrameContext,
   };
 });
 
@@ -214,7 +219,7 @@ jest.mock('./src/shared/hooks/useTranslation', () => ({
 
 // Mock NetInfo Native Module
 jest.mock('@react-native-community/netinfo', () => ({
-  addEventListener: jest.fn(),
+  addEventListener: jest.fn(() => () => {}),
   fetch: jest.fn(() => Promise.resolve({ isConnected: true })),
 }));
 

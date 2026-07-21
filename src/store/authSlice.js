@@ -1,5 +1,4 @@
 import { createSlice, createAsyncThunk } from '@reduxjs/toolkit';
-import axios from 'axios';
 import {
   saveAuthSession,
   getStoredAuthSession,
@@ -12,7 +11,7 @@ import authApi from '../features/auth/auth.api';
 import userApi from '../features/profile/profile.api';
 import COLORS from '../theme/colors';
 import { normalizeUser, mergeWithLocalProfile } from '../features/auth/auth.normalizer';
-import { extractErrorMessage } from '../shared/utils/errorUtils';
+import { extractErrorMessage, isSilentCancel } from '../shared/utils/errorUtils';
 
 
 // THUNK: App start pe disk check
@@ -166,11 +165,17 @@ export const updateProfile = createAsyncThunk(
 
       return mergedUser;
     } catch (err) {
-      if (err?.name === 'CanceledError' || err?.name === 'AbortError' || err?.code === 'ERR_CANCELED' || axios.isCancel(err)) {
-        if (__DEV__) console.log('🚫 [UPDATE PROFILE] Cancelled by user');
+      if (isSilentCancel(err)) {
+        if (__DEV__) console.log('🚫 [UPDATE PROFILE] Cancelled silently');
         return rejectWithValue({ cancelled: true });
       }
-      if (__DEV__) console.error('❌ [UPDATE PROFILE] Failed:', err?.message);
+      if (__DEV__) {
+        if (err?.message === 'NO_INTERNET_WRITE_BLOCKED') {
+          console.log('ℹ️ [UPDATE PROFILE] Blocked (offline):', err?.message);
+        } else {
+          console.error('❌ [UPDATE PROFILE] Failed:', err?.message);
+        }
+      }
       return rejectWithValue(err?.message || 'Failed to update profile');
     }
   },
@@ -227,6 +232,7 @@ const initialState = {
   profileError: null,
 
   isAuthChecked: false,
+  pendingNotificationRoute: null,
 };
 
 const authSlice = createSlice({
@@ -236,6 +242,12 @@ const authSlice = createSlice({
     setSelectedRole: (state, action) => {
       state.selectedRole = action.payload.role || action.payload;
       state.roleColor = action.payload.color || null;
+    },
+    setPendingNotificationRoute: (state, action) => {
+      state.pendingNotificationRoute = action.payload;
+    },
+    clearPendingNotificationRoute: (state) => {
+      state.pendingNotificationRoute = null;
     },
     clearAuth: state => {
       state.token = null;
@@ -364,5 +376,10 @@ const authSlice = createSlice({
   },
 });
 
-export const { setSelectedRole, clearAuth } = authSlice.actions;
+export const {
+  setSelectedRole,
+  clearAuth,
+  setPendingNotificationRoute,
+  clearPendingNotificationRoute,
+} = authSlice.actions;
 export default authSlice.reducer;

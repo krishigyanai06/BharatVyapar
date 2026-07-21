@@ -10,6 +10,7 @@ import DealDetailsScreen from '../../features/orders/screens/DealDetailsScreen';
 import BuyerQuoteDashboard from '../../features/orders/screens/BuyerQuoteDashboard';
 import SellerOrdersScreen from '../../features/orders/screens/SellerOrdersScreen';
 import BuyerOrdersScreen from '../../features/orders/screens/BuyerOrdersScreen';
+import MyRequirementsScreen from '../../features/orders/screens/MyRequirementsScreen';
 
 const Stack = createNativeStackNavigator();
 
@@ -28,6 +29,7 @@ export default function AppStack() {
       <Stack.Screen name="BuyerQuoteDashboard" component={BuyerQuoteDashboard} />
       <Stack.Screen name="SellerOrders" component={SellerOrdersScreen} />
       <Stack.Screen name="BuyerOrders" component={BuyerOrdersScreen} />
+      <Stack.Screen name="MyRequirements" component={MyRequirementsScreen} />
     </Stack.Navigator>
   );
 }

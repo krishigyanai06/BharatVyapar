@@ -9,103 +9,141 @@ export const REQUIREMENT_STATUS = {
   CANCELLED: 'CANCELLED',
 };
 
-// Fallback dummy requirements
-const dummyRequirements = [
-  {
-    _id: 'req_001',
-    id: 'req_001',
-    commodity: 'Wheat',
-    quantity: 50,
-    remainingQuantity: 50,
-    unit: 'Qt',
-    expectedPrice: 2400,
-    location: 'Indore, MP',
-    grade: 'A',
-    moisture: '11%',
-    harvestYear: '2026',
-    deliveryDate: '2026-07-15',
-    remarks: 'Need clean, mill-ready stock.',
-    buyerId: { _id: 'buyer_001', firstName: 'Raghav', lastName: 'Gupta', shopName: 'Raghav Procurement' },
-    status: 'OPEN',
-    createdAt: new Date().toISOString(),
-  },
-  {
-    _id: 'req_002',
-    id: 'req_002',
-    commodity: 'Soybean',
-    quantity: 120,
-    remainingQuantity: 70,
-    unit: 'Qt',
-    expectedPrice: 4550,
-    location: 'Ujjain, MP',
-    grade: 'FAQ',
-    moisture: '10%',
-    harvestYear: '2025',
-    deliveryDate: '2026-07-20',
-    remarks: 'Partial supply accepted.',
-    buyerId: { _id: 'buyer_001', firstName: 'Raghav', lastName: 'Gupta', shopName: 'Raghav Procurement' },
-    status: 'PARTIALLY_FILLED',
-    createdAt: new Date().toISOString(),
-  },
-];
+// Map backend lowercase status → display label
+const STATUS_MAP = {
+  active:           'OPEN',
+  open:             'OPEN',
+  fulfilled:        'FILLED',
+  filled:           'FILLED',
+  partially_filled: 'PARTIALLY FILLED',
+  expired:          'EXPIRED',
+  cancelled:        'CANCELLED',
+};
+
+function normalizeStatus(status) {
+  if (!status) return 'OPEN';
+  return STATUS_MAP[String(status).toLowerCase()] || String(status).toUpperCase();
+}
+
+/**
+ * Safely extract an array of requirement items from any API response shape:
+ *   - plain array
+ *   - { requirements: [...] }
+ *   - { data: [...] }
+ *   - { data: { requirements: [...] } }
+ *   - { docs: [...] }
+ */
+function extractItems(response) {
+  if (Array.isArray(response)) return response;
+  if (!response) return [];
+  const d = response.data;
+  if (Array.isArray(d)) return d;
+  if (Array.isArray(d?.requirements)) return d.requirements;
+  if (Array.isArray(response.requirements)) return response.requirements;
+  if (Array.isArray(response.docs)) return response.docs;
+  return [];
+}
+
+export const normalizeRequirement = (req) => {
+  if (!req) return null;
+  const commodity = req.commodityName || req.commodity || '';
+  return {
+    _id:               req._id,
+    id:                req._id,
+    commodity:         commodity,
+    quantity:          req.quantity || 0,
+    remainingQuantity: req.remainingQuantity ?? req.quantity ?? 0,
+    unit:              req.unit === 'Qt' ? 'Quintal' : (req.unit || 'Quintal'),
+    expectedPrice:     req.targetPrice || req.expectedPrice || 0,
+    location:          req.deliveryLocation || req.location || '',
+    grade:             req.grade || '',
+    moisture:          req.moisture || '',
+    harvestYear:       req.harvestYear || '',
+    deliveryDate:      req.deliveryDate || '',
+    remarks:           req.remarks || '',
+    status:            normalizeStatus(req.status),
+    createdAt:         req.createdAt || new Date().toISOString(),
+    buyerId:           req.buyerId || null,
+  };
+};
+
+let myRequirementsCache = null;
+let cacheTime = 0;
+const CACHE_DURATION = 15000; // 15 seconds caching to prevent double-fetches on focus changes
 
 export const requirementService = {
-  getAllRequirements: async (options = {}) => {
+  getMyRequirements: async (options = {}, forceRefresh = false) => {
+    const now = Date.now();
+    if (!forceRefresh && myRequirementsCache && (now - cacheTime < CACHE_DURATION)) {
+      console.log('[RequirementService] getMyRequirements → returning cached items');
+      return myRequirementsCache;
+    }
     try {
-      const response = await apiClient.get('/requirements');
-      return response.data?.requirements || response.data || dummyRequirements;
+      const response = await apiClient.get('/buyer-requirement/my', {
+        params: {
+          status: options.status,
+          page:   options.page  || 1,
+          limit:  options.limit || 20,
+        },
+      });
+      const items = extractItems(response.data ?? response);
+      console.log('[RequirementService] getMyRequirements → raw items count:', items.length);
+      const normalized = items.map(normalizeRequirement).filter(Boolean);
+      myRequirementsCache = normalized;
+      cacheTime = now;
+      return normalized;
     } catch (error) {
-      console.warn('[OrdersRequirements] API not available, using fallback:', error.message);
-      return dummyRequirements;
+      console.warn('[RequirementService] getMyRequirements failed:', error?.response?.status, error.message);
+      return myRequirementsCache || [];
     }
   },
 
-  getMarketplaceRequirements: async ({ excludeBuyerId = null } = {}) => {
+  getMarketplaceRequirements: async (options = {}) => {
     try {
-      const response = await apiClient.get('/requirements', {
-        params: { status: 'OPEN,PARTIALLY_FILLED' }
+      const response = await apiClient.get('/buyer-requirement', {
+        params: {
+          commodityName: options.commodityName,
+          page:          options.page  || 1,
+          limit:         options.limit || 10,
+        },
       });
-      let reqs = response.data?.requirements || response.data || dummyRequirements;
-      if (excludeBuyerId) {
-        reqs = reqs.filter((item) => {
+      const items = extractItems(response.data ?? response);
+      console.log('[RequirementService] getMarketplaceRequirements → raw items count:', items.length);
+      let mapped = items.map(normalizeRequirement).filter(Boolean);
+      if (options.excludeBuyerId) {
+        mapped = mapped.filter(item => {
           const buyerId = item.buyerId?._id || item.buyerId;
-          return String(buyerId) !== String(excludeBuyerId);
+          if (!buyerId) return true;
+          return String(buyerId) !== String(options.excludeBuyerId);
         });
       }
-      return { requirements: reqs };
+      return { requirements: mapped };
     } catch (error) {
-      console.warn('[OrdersRequirements] API not available, using fallback:', error.message);
-      let reqs = dummyRequirements;
-      if (excludeBuyerId) {
-        reqs = reqs.filter((item) => {
-          const buyerId = item.buyerId?._id || item.buyerId;
-          return String(buyerId) !== String(excludeBuyerId);
-        });
-      }
-      return { requirements: reqs };
+      console.warn('[RequirementService] getMarketplaceRequirements failed:', error?.response?.status, error.message);
+      return { requirements: [] };
     }
   },
 
   submitRequirement: async (payload) => {
-    try {
-      const response = await apiClient.post('/requirements', {
-        ...payload,
-        remainingQuantity: payload.quantity,
-        status: 'OPEN',
-      });
-      return response.data;
-    } catch (error) {
-      console.warn('[OrdersRequirements] API not available, using fallback:', error.message);
-      const newReq = {
-        ...payload,
-        _id: `req_${Math.random().toString(36).slice(2, 9)}`,
-        id: `req_${Math.random().toString(36).slice(2, 9)}`,
-        remainingQuantity: payload.quantity,
-        status: 'OPEN',
-        createdAt: new Date().toISOString(),
-      };
-      dummyRequirements.unshift(newReq);
-      return { success: true, data: newReq };
-    }
+    const apiPayload = {
+      commodityName:    payload.commodity,
+      quantity:         Number(payload.quantity),
+      unit:             payload.unit === 'Quintal' ? 'Qt' : (payload.unit || 'Qt'),
+      targetPrice:      Number(payload.expectedPrice),
+      deliveryLocation: payload.location,
+      remarks:          payload.remarks,
+      grade:            payload.grade,
+      moisture:         payload.moisture,
+      harvestYear:      payload.harvestYear,
+      deliveryDate:     payload.deliveryDate,
+    };
+    const response = await apiClient.post('/buyer-requirement', apiPayload);
+    // Invalidate the cache upon successful submission
+    myRequirementsCache = null;
+    cacheTime = 0;
+    return response.data;
   },
 };
+
+
+

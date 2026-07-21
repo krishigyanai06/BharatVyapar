@@ -32,11 +32,26 @@ export const getOfferDetails = async (offerId) => {
   return normalizeOffer(response.data?.offer || response.data?.data || response.data);
 };
 
+// ─── COUNTER OFFER ─────────────────────────────────────────────────────────
+// _offlineSync: true → idempotent bid, safe to queue in outbox when offline.
+// The outbox processor in NegotiationDetailsScreen will retry this on reconnect.
+// WHY this flag is HERE and NOT inside client.js:
+//   client.js is generic infrastructure — it must never know about '/counter' URL.
+//   This service file OWNS the business decision: "counter bids can be queued offline."
 export const submitCounterOffer = async (offerId, counterData) => {
-  const response = await api.post(`${BUY_BASE_URL}/offers/${offerId}/counter`, counterData);
+  const response = await api.post(
+    `${BUY_BASE_URL}/offers/${offerId}/counter`,
+    counterData,
+    { _offlineSync: true }, // ← Call-site config flag (Config Flags pattern)
+  );
   return normalizeOffer(response.data?.offer || response.data?.data || response.data);
 };
 
+// ─── ACCEPT / REJECT OFFER ─────────────────────────────────────────────────
+// NO _offlineSync flag → these are one-time compliance events.
+// Accepting/Rejecting offline is dangerous: user may change their mind, price
+// may have changed, or server state may differ. These MUST be blocked offline.
+// client.js interceptor will cancel these with 'NO_INTERNET_WRITE_BLOCKED'.
 export const acceptOffer = async (offerId) => {
   const response = await api.post(`${BUY_BASE_URL}/offers/${offerId}/accept`);
   return normalizeOffer(response.data?.offer || response.data?.data || response.data);

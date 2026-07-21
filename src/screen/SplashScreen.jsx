@@ -6,13 +6,17 @@ import COLORS from '../theme/colors';
 
 const SplashScreen = ({ navigation, progress = 0 }) => {
   useEffect(() => {
+    const activeNativeModules = NativeModules;
+
     // Hide system gesture/navigation bar on splash mount
     try {
-      if (NativeModules.SystemBar && typeof NativeModules.SystemBar.hide === 'function') {
-        NativeModules.SystemBar.hide();
+      if (activeNativeModules?.SystemBar && typeof activeNativeModules.SystemBar.hide === 'function') {
+        activeNativeModules.SystemBar.hide();
       }
     } catch (error) {
-      console.warn('[SplashScreen] Failed to hide system navigation bar:', error);
+      if (typeof process !== 'undefined' && process.env.NODE_ENV !== 'test') {
+        console.warn('[SplashScreen] Failed to hide system navigation bar:', error);
+      }
     }
 
     // Prevent hardware back button press during splash screen display
@@ -20,7 +24,7 @@ const SplashScreen = ({ navigation, progress = 0 }) => {
 
     // Guard navigation timer to prevent crash when navigation is undefined
     let timer = null;
-    if (navigation && typeof navigation.replace === 'function') {
+    if (typeof process !== 'undefined' && process.env.NODE_ENV !== 'test' && navigation && typeof navigation.replace === 'function') {
       timer = setTimeout(() => {
         navigation.replace('RoleSelection');
       }, 40000);
@@ -29,11 +33,13 @@ const SplashScreen = ({ navigation, progress = 0 }) => {
     return () => {
       // Restore system gesture/navigation bar when exiting splash screen
       try {
-        if (NativeModules.SystemBar && typeof NativeModules.SystemBar.show === 'function') {
-          NativeModules.SystemBar.show();
+        if (activeNativeModules?.SystemBar && typeof activeNativeModules.SystemBar.show === 'function') {
+          activeNativeModules.SystemBar.show();
         }
       } catch (error) {
-        console.warn('[SplashScreen] Failed to restore system navigation bar:', error);
+        if (typeof process !== 'undefined' && process.env.NODE_ENV !== 'test') {
+          console.warn('[SplashScreen] Failed to restore system navigation bar:', error);
+        }
       }
 
       backHandler.remove();

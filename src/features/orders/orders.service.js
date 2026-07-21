@@ -29,7 +29,16 @@ const dummyQuotes = [
   {
     _id: 'quote_001',
     id: 'quote_001',
-    requirementId: 'req_001',
+    requirementId: {
+      _id: 'req_001',
+      id: 'req_001',
+      commodity: 'Wheat',
+      commodityName: 'Wheat',
+      name: 'Wheat',
+      status: 'OPEN',
+      quantity: 50,
+      expectedPrice: 2200,
+    },
     sellerId: { _id: 'seller_001', firstName: 'Current', lastName: 'Seller', shopName: 'Seller Agro', rating: 4.6 },
     sellerName: 'Suresh Patel',
     sellerRating: 4.3,
@@ -45,7 +54,16 @@ const dummyQuotes = [
   {
     _id: 'quote_002',
     id: 'quote_002',
-    requirementId: 'req_001',
+    requirementId: {
+      _id: 'req_001',
+      id: 'req_001',
+      commodity: 'Wheat',
+      commodityName: 'Wheat',
+      name: 'Wheat',
+      status: 'OPEN',
+      quantity: 50,
+      expectedPrice: 2200,
+    },
     sellerId: { _id: 'seller_002', firstName: 'Mohan', lastName: 'Verma', shopName: 'Verma Agro', rating: 4.8 },
     sellerName: 'Mohan Verma',
     sellerRating: 4.8,
@@ -192,7 +210,17 @@ export const dealService = {
 
 export const submitQuoteAgainstRequirement = async (requirementId, payload) => {
   try {
-    const response = await apiClient.post(`/requirements/${requirementId}/quotes`, payload);
+    const apiPayload = {
+      requirementId: requirementId,
+      price: Number(payload.quotePrice ?? payload.offeredPrice ?? payload.price),
+      priceUnit: payload.priceUnit ?? payload.unit ?? 'Quintal',
+      quantity: Number(payload.offeredQuantity ?? payload.quantity),
+      unit: payload.unit ?? 'Quintal',
+      tradeType: payload.tradeType ?? 'FOR',
+      paymentTimeline: payload.paymentTimeline || 'Immediate',
+      remarks: payload.remarks,
+    };
+    const response = await apiClient.post('/buy-commodity/quotations', apiPayload);
     return response.data;
   } catch (error) {
     console.warn('[OrdersService] API not available, using fallback:', error.message);
@@ -200,8 +228,9 @@ export const submitQuoteAgainstRequirement = async (requirementId, payload) => {
       _id: `quote_${Math.random().toString(36).slice(2, 9)}`,
       id: `quote_${Math.random().toString(36).slice(2, 9)}`,
       requirementId,
-      offeredQuantity: Number(payload.offeredQuantity),
-      quotePrice: Number(payload.quotePrice ?? payload.offeredPrice),
+      offeredQuantity: Number(payload.offeredQuantity ?? payload.quantity),
+      quotePrice: Number(payload.quotePrice ?? payload.offeredPrice ?? payload.price),
+      dispatchTime: payload.dispatchTime,
       remarks: payload.remarks,
       status: 'Pending',
       displayStatus: 'pending',
@@ -214,8 +243,21 @@ export const submitQuoteAgainstRequirement = async (requirementId, payload) => {
 
 export const getMySubmittedQuotes = async (_sellerId = null) => {
   try {
-    const response = await apiClient.get('/quotes/my-submitted');
-    return response.data?.data || response.data || [];
+    const response = await apiClient.get('/buy-commodity/quotations/sent');
+    const rawData = response.data;
+    if (rawData?.data?.offers && Array.isArray(rawData.data.offers)) {
+      return rawData.data.offers;
+    }
+    if (rawData?.data?.quotations && Array.isArray(rawData.data.quotations)) {
+      return rawData.data.quotations;
+    }
+    if (rawData?.data && Array.isArray(rawData.data)) {
+      return rawData.data;
+    }
+    if (Array.isArray(rawData)) {
+      return rawData;
+    }
+    return [];
   } catch (error) {
     console.warn('[OrdersService] API not available, using fallback:', error.message);
     return dummyQuotes;
@@ -225,8 +267,21 @@ export const getMySubmittedQuotes = async (_sellerId = null) => {
 export const getReceivedQuotesOnRequirements = async (_buyerId = null, options = {}) => {
   try {
     const params = options.requirementId ? { requirementId: options.requirementId } : undefined;
-    const response = await apiClient.get('/quotes/received', { params });
-    return response.data?.data || response.data || [];
+    const response = await apiClient.get('/buy-commodity/offers', { params });
+    const rawData = response.data;
+    if (rawData?.data?.offers && Array.isArray(rawData.data.offers)) {
+      return rawData.data.offers;
+    }
+    if (rawData?.offers && Array.isArray(rawData.offers)) {
+      return rawData.offers;
+    }
+    if (rawData?.data && Array.isArray(rawData.data)) {
+      return rawData.data;
+    }
+    if (Array.isArray(rawData)) {
+      return rawData;
+    }
+    return [];
   } catch (error) {
     console.warn('[OrdersService] API not available, using fallback:', error.message);
     return dummyQuotes.filter((q) => !options.requirementId || q.requirementId === options.requirementId);
@@ -235,7 +290,7 @@ export const getReceivedQuotesOnRequirements = async (_buyerId = null, options =
 
 export const acceptRequirementQuote = async (quoteId) => {
   try {
-    const response = await apiClient.post(`/quotes/${quoteId}/accept`);
+    const response = await apiClient.post(`/buy-commodity/offers/${quoteId}/accept`);
     return response.data;
   } catch (error) {
     console.warn('[OrdersService] API not available, using fallback:', error.message);
@@ -247,7 +302,7 @@ export const acceptRequirementQuote = async (quoteId) => {
 
 export const rejectRequirementQuote = async (quoteId) => {
   try {
-    const response = await apiClient.post(`/quotes/${quoteId}/reject`);
+    const response = await apiClient.post(`/buy-commodity/offers/${quoteId}/reject`);
     return response.data;
   } catch (error) {
     console.warn('[OrdersService] API not available, using fallback:', error.message);
