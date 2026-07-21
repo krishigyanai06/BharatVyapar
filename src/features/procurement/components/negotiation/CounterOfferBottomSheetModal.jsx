@@ -102,7 +102,7 @@ export function CounterOfferBottomSheetModal({
                   value={counterQty}
                   onChangeText={setCounterQty}
                   keyboardType="numeric"
-                  placeholder="Enter quantity"
+                  placeholder="e.g. 50"
                   placeholderTextColor="#A0AEC0"
                 />
               </View>
@@ -156,7 +156,7 @@ export function CounterOfferBottomSheetModal({
               {submittingAction ? (
                 <ActivityIndicator color="#FFFFFF" size="small" />
               ) : (
-                <Text style={styles.submitBtnText}>{t('Send Counter Offer')}</Text>
+                <Text style={styles.submitBtnText}>{t('Submit Counter')}</Text>
               )}
             </TouchableOpacity>
           </View>

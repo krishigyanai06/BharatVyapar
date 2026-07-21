@@ -26,6 +26,7 @@ import { getSellCommodities, deleteSellCommodity, getReceivedOffers } from '../m
 import { getFriendlyErrorMessage } from '../../../shared/utils/errorUtils';
 import { requirementService, submitQuoteAgainstRequirement } from '../../procurement/procurement.api';
 import { mapOrder as normalizeRequirement } from '../../procurement/procurement.mapper';
+import { normalizeCommodity } from '../marketplace.normalizer';
 import FulfillRequirementBottomSheet from '../../procurement/components/shared/FulfillBuyerRequirement';
 
 

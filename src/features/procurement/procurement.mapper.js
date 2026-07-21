@@ -139,3 +139,38 @@ export const mapOrder = (raw) => {
 export const mapOrdersList = (rawArray) => {
   return toSafeArray(rawArray).map(mapOrder).filter(Boolean);
 };
+
+/**
+ * mapRequirementPayload: Transforms UI form payload into exact Backend DTO schema for POST /buyer-requirement
+ */
+export const mapRequirementPayload = (raw) => {
+  if (!raw || typeof raw !== 'object') return {};
+  return {
+    commodityName:    toSafeString(raw.commodityName ?? raw.commodity ?? raw.cropName),
+    quantity:         toSafeNumber(raw.quantity ?? raw.quantityKg),
+    unit:             toSafeString(raw.unit, 'Qt'),
+    targetPrice:      toSafeNumber(raw.targetPrice ?? raw.expectedPrice ?? raw.price),
+    deliveryLocation: toSafeString(raw.deliveryLocation ?? raw.location),
+    remarks:          toSafeString(raw.remarks),
+    grade:            toSafeString(raw.grade),
+    moisture:         toSafeString(raw.moisture),
+    harvestYear:      toSafeString(raw.harvestYear),
+    deliveryDate:     toSafeString(raw.deliveryDate),
+  };
+};
+
+/**
+ * mapQuotePayload: Transforms UI form payload into exact Backend DTO schema for POST /buy-commodity/offers
+ */
+export const mapQuotePayload = (requirementId, raw) => {
+  if (!raw || typeof raw !== 'object') return { requirementId };
+  return {
+    requirementId: toSafeString(requirementId),
+    price: toSafeNumber(raw.quotePrice ?? raw.offeredPrice ?? raw.price),
+    priceUnit: toSafeString(raw.priceUnit ?? raw.unit, 'Quintal'),
+    quantity: toSafeNumber(raw.offeredQuantity ?? raw.quantity),
+    unit: toSafeString(raw.unit, 'Quintal'),
+    tradeType: toSafeString(raw.tradeType, 'FOR'),
+    paymentTimeline: toSafeString(raw.paymentTimeline, 'Immediate'),
+  };
+};

@@ -68,7 +68,7 @@ export default function NegotiationDetailsScreen({ route, navigation }) {
     }
   }, []);
 
-  const { offer, item, loading, refreshing, apiError, refresh, handleRefresh } =
+  const { offer, item, loading, refreshing, apiError, cooldownSecs, refresh, handleRefresh } =
     useNegotiationDetail({ offerId, routeItem, onOfferLoaded, t });
 
   const rawStatus = (offer?.status || 'pending').toLowerCase();
@@ -78,6 +78,9 @@ export default function NegotiationDetailsScreen({ route, navigation }) {
   const sellerId = offer?.sellerId?._id || offer?.sellerId || offer?.seller?.id;
   const myRole = (userId && sellerId && String(userId) === String(sellerId)) ? 'seller' : 'buyer';
   const isMyTurn = !isClosed && (offer?.currentTurn === myRole || offer?.current_turn === myRole || !offer?.currentTurn);
+
+  const negotiationRounds = offer?.negotiationHistory || offer?.rounds || [];
+  const roundsExhausted = negotiationRounds.length >= 5;
 
   const handleCounterSubmit = async () => {
     const valResult = validatePriceMovement(offer?.price, counterPrice, myRole.toUpperCase());
@@ -105,21 +108,86 @@ export default function NegotiationDetailsScreen({ route, navigation }) {
     }
   };
 
-  const handleAcceptDeal = async () => {
-    setSubmittingAction(true);
-    try {
-      await acceptOffer(offerId);
-      refresh();
-      showAlert({ type: 'success', title: t('Deal Closed'), message: t('Offer accepted successfully!') });
-    } catch (err) {
-      showAlert({ type: 'error', title: t('Error'), message: err?.message || t('Failed to accept deal.') });
-    } finally {
-      setSubmittingAction(false);
-    }
+  const handleAcceptDeal = () => {
+    showAlert({
+      type: 'confirm',
+      title: t('Accept Offer'),
+      message: t('Are you sure you want to accept this offer and proceed?'),
+      buttons: [
+        { text: t('Cancel'), style: 'cancel' },
+        {
+          text: t('Accept'),
+          onPress: async () => {
+            setSubmittingAction(true);
+            try {
+              await acceptOffer(offerId);
+              refresh();
+              showAlert({ type: 'success', title: t('Deal Closed'), message: t('Offer accepted successfully!') });
+            } catch (err) {
+              showAlert({ type: 'error', title: t('Error'), message: err?.message || t('Failed to accept deal.') });
+            } finally {
+              setSubmittingAction(false);
+            }
+          },
+        },
+      ],
+    });
   };
 
+  const handleDeclineOffer = () => {
+    showAlert({
+      type: 'confirm',
+      title: t('Decline Offer'),
+      message: t('Are you sure you want to decline this offer?'),
+      buttons: [
+        { text: t('Cancel'), style: 'cancel' },
+        {
+          text: t('Decline'),
+          style: 'destructive',
+          onPress: async () => {
+            setSubmittingAction(true);
+            try {
+              await rejectOffer(offerId);
+              refresh();
+              showAlert({ type: 'success', title: t('Offer Declined'), message: t('Offer declined successfully.') });
+            } catch (err) {
+              showAlert({ type: 'error', title: t('Error'), message: err?.message || t('Failed to decline offer.') });
+            } finally {
+              setSubmittingAction(false);
+            }
+          },
+        },
+      ],
+    });
+  };
+
+  // Loading Screen
+  if (loading && !refreshing) {
+    return (
+      <SafeScreen style={{ backgroundColor: '#F7FAFC' }}>
+        <AppHeader title={t('Negotiation Details')} showBack={true} onBackPress={() => navigation.goBack()} />
+        <View style={styles.centeredContainer}>
+          <ActivityIndicator size="large" color={theme.primary} />
+        </View>
+      </SafeScreen>
+    );
+  }
+
+  // Error Screen
+  if (apiError && !offer) {
+    return (
+      <SafeScreen style={{ backgroundColor: '#F7FAFC' }}>
+        <AppHeader title={t('Negotiation Details')} showBack={true} onBackPress={() => navigation.goBack()} />
+        <View style={styles.centeredContainer}>
+          <Icon name="alert-circle-outline" size={64} color="#E53E3E" />
+          <Text style={styles.errorText}>{apiError}</Text>
+        </View>
+      </SafeScreen>
+    );
+  }
+
   return (
-    <SafeScreen loading={loading && !refreshing} error={apiError} onRetry={refresh}>
+    <SafeScreen>
       <AppHeader title={t('Negotiation Details')} showBack={true} onBackPress={() => navigation.goBack()} />
 
       <ScrollView
@@ -138,7 +206,7 @@ export default function NegotiationDetailsScreen({ route, navigation }) {
         />
 
         <NegotiationTimelineList
-          rounds={offer?.negotiationHistory || offer?.rounds || []}
+          rounds={negotiationRounds}
           myRole={myRole}
           theme={theme}
           t={t}
@@ -150,8 +218,28 @@ export default function NegotiationDetailsScreen({ route, navigation }) {
       {/* Footer Action Buttons */}
       {!isClosed && isMyTurn ? (
         <View style={styles.footerRow}>
-          <TouchableOpacity style={styles.counterBtn} onPress={() => setCounterModalOpen(true)}>
-            <Text style={styles.counterBtnText}>{t('Counter Offer')}</Text>
+          {!roundsExhausted ? (
+            <TouchableOpacity
+              style={[styles.counterBtn, cooldownSecs > 0 && styles.counterBtnDisabled]}
+              onPress={() => setCounterModalOpen(true)}
+              disabled={cooldownSecs > 0}
+            >
+              <Text style={[styles.counterBtnText, cooldownSecs > 0 && styles.counterBtnTextDisabled]}>
+                {cooldownSecs > 0 ? `${t('Counter Cooldown')} (${cooldownSecs}s)` : t('Counter Offer')}
+              </Text>
+            </TouchableOpacity>
+          ) : null}
+
+          <TouchableOpacity
+            style={styles.declineBtn}
+            onPress={handleDeclineOffer}
+            disabled={submittingAction}
+          >
+            {submittingAction ? (
+              <ActivityIndicator color="#E53E3E" size="small" />
+            ) : (
+              <Text style={styles.declineBtnText}>{t('Decline')}</Text>
+            )}
           </TouchableOpacity>
 
           <TouchableOpacity
@@ -184,6 +272,8 @@ export default function NegotiationDetailsScreen({ route, navigation }) {
         submittingAction={submittingAction}
         theme={theme}
         t={t}
+        itemUnit={offer?.unit || item?.unit || 'Quintal'}
+        currentPriceDisplay={offer?.price ? String(offer.price) : ''}
       />
     </SafeScreen>
   );
@@ -197,6 +287,19 @@ const styles = StyleSheet.create({
   contentContainer: {
     padding: 16,
     paddingBottom: 100,
+  },
+  centeredContainer: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 20,
+    gap: 16,
+  },
+  errorText: {
+    fontSize: 14,
+    color: '#4A5568',
+    textAlign: 'center',
+    lineHeight: 20,
   },
   footerRow: {
     position: 'absolute',
@@ -219,10 +322,17 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  counterBtnDisabled: {
+    backgroundColor: '#EDF2F7',
+    borderColor: '#E2E8F0',
+  },
   counterBtnText: {
     fontSize: 14,
     fontWeight: '700',
     color: '#4A5568',
+  },
+  counterBtnTextDisabled: {
+    color: '#A0AEC0',
   },
   acceptBtn: {
     flex: 1,
@@ -235,5 +345,19 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '700',
     color: '#FFFFFF',
+  },
+  declineBtn: {
+    flex: 1,
+    height: 48,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#E53E3E',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  declineBtnText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#E53E3E',
   },
 });

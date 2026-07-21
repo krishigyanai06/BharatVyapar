@@ -3,6 +3,7 @@ import { useSelector } from 'react-redux';
 import { useFocusEffect } from '@react-navigation/native';
 import { selectUser, selectSelectedRole } from '../../../store/authSelectors';
 import { getOffers, getReceivedOffers, getSellCommodities } from '../../marketplace/marketplace.api';
+import { normalizeOfferList } from '../../marketplace/marketplace.normalizer';
 import { getMySubmittedQuotes } from '../procurement.api';
 import { getFriendlyErrorMessage } from '../../../shared/utils/errorUtils';
 import { showAlert } from '../../../shared/components/CustomAlertBox';
@@ -75,7 +76,7 @@ function tradesReducer(state, action) {
   }
 }
 
-export function useTradesScreen({ navigation, route }) {
+export function useTradesScreen({ navigation, route = {} }) {
   const user = useSelector(selectUser);
   const stateRole = useSelector(selectSelectedRole);
   const selectedRole = stateRole || user?.role || 'FPO';
@@ -132,7 +133,12 @@ export function useTradesScreen({ navigation, route }) {
         getSellCommodities({ sellerId: user?.id || user?._id }, { signal: controller.signal }),
       ]);
 
-      const combinedOffers = [...(offersListRaw || []), ...(submittedQuotesRaw || [])];
+      // getOffers (marketplace.api) already returns normalizeOfferList output (array of normalizeOffer objects).
+      // getMySubmittedQuotes now returns raw response.data — extract array then normalize with
+      // the same normalizer so both lists share an identical schema before merging.
+      const mappedSubmittedQuotes = normalizeOfferList(submittedQuotesRaw);
+
+      const combinedOffers = [...(offersListRaw || []), ...mappedSubmittedQuotes];
       const seen = new Set();
       const offersList = combinedOffers.filter(o => {
         const key = o?.id || o?._id;
@@ -215,7 +221,7 @@ export function useTradesScreen({ navigation, route }) {
     useCallback(() => {
       const cacheExpiry = 30_000;
       const timeSinceLastFetch = Date.now() - lastFetchTimeRef.current;
-      const shouldRefresh = route.params?.shouldRefresh;
+      const shouldRefresh = route?.params?.shouldRefresh;
 
       if (loadingRef.current || shouldRefresh || timeSinceLastFetch > cacheExpiry) {
         loadData();
@@ -236,7 +242,7 @@ export function useTradesScreen({ navigation, route }) {
         clearInterval(intervalId);
         abortControllerRef.current?.abort();
       };
-    }, [loadData, route.params?.shouldRefresh, navigation])
+    }, [loadData, route?.params?.shouldRefresh, navigation])
   );
 
   const uniqueOffers = useMemo(() => {

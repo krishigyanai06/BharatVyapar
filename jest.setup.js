@@ -107,13 +107,31 @@ jest.mock('@notifee/react-native', () => ({
 jest.mock('@react-native-firebase/app', () => ({
   initializeApp: jest.fn(),
 }));
-jest.mock('@react-native-firebase/messaging', () => () => ({
-  requestPermission: jest.fn(() => Promise.resolve(1)),
-  getToken: jest.fn(() => Promise.resolve('mock-fcm-token')),
-  onMessage: jest.fn(),
-  onNotificationOpenedApp: jest.fn(),
-  getInitialNotification: jest.fn(() => Promise.resolve(null)),
-}));
+jest.mock('@react-native-firebase/messaging', () => {
+  const mockMessagingInstance = {
+    requestPermission: jest.fn(() => Promise.resolve(1)),
+    getToken: jest.fn(() => Promise.resolve('mock-fcm-token')),
+    onMessage: jest.fn(() => () => {}),
+    onNotificationOpenedApp: jest.fn(),
+    getInitialNotification: jest.fn(() => Promise.resolve(null)),
+    onTokenRefresh: jest.fn(() => () => {}),
+  };
+  const mockMessaging = () => mockMessagingInstance;
+  mockMessaging.getMessaging = jest.fn(() => mockMessagingInstance);
+  mockMessaging.requestPermission = jest.fn(() => Promise.resolve(1));
+  mockMessaging.getToken = jest.fn(() => Promise.resolve('mock-fcm-token'));
+  mockMessaging.onTokenRefresh = jest.fn(() => () => {});
+  mockMessaging.onMessage = jest.fn(() => () => {});
+  return {
+    __esModule: true,
+    default: mockMessaging,
+    getMessaging: mockMessaging.getMessaging,
+    requestPermission: mockMessaging.requestPermission,
+    getToken: mockMessaging.getToken,
+    onTokenRefresh: mockMessaging.onTokenRefresh,
+    onMessage: mockMessaging.onMessage,
+  };
+});
 
 // Mock Animated timing and spring on react-native directly to bypass animation delays
 Animated.timing = (value, config) => ({

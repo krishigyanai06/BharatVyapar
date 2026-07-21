@@ -126,6 +126,7 @@ const sleep = (ms, signal) => {
 
 const isRetryable = (error, reqConfig) => {
   if (axios.isCancel(error)) return false;
+  if (reqConfig._noRetry) return false;
   // Already at max retries
   if ((reqConfig._retryCount || 0) >= RETRY_CONFIG.maxAttempts) return false;
   const method = reqConfig.method?.toLowerCase();

@@ -56,6 +56,15 @@ export const validatePriceMovement = (currentPrice, newPrice, role = 'BUYER') =>
     return { isValid: false, message: 'As a seller, your counter-offer must be higher than the current price.' };
   }
 
+  // Ensure price change is not greater than 5%
+  if (current > 0) {
+    const diff = Math.abs(next - current);
+    const pct = (diff / current) * 100;
+    if (pct > 5) {
+      return { isValid: false, message: 'Price must be within 5% of the last proposed price.' };
+    }
+  }
+
   return { isValid: true, message: '' };
 };
 
