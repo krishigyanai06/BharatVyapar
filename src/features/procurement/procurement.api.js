@@ -8,7 +8,7 @@
  */
 
 import apiClient from '../../api/client';
-import { mapOrder, mapOrdersList } from './orders.mapper';
+import { mapOrder, mapOrdersList } from './procurement.mapper';
 
 // Fallback dummy quotes
 const dummyQuotes = [

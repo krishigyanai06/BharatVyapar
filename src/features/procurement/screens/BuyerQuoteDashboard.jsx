@@ -14,7 +14,7 @@ import {
   getRequirementQuotes,
   acceptRequirementQuote,
   rejectRequirementQuote,
-} from '../orders.api';
+} from '../procurement.api';
 import { getSafeUserName } from '../../../shared/utils/formatters';
 import StatusPill from '../../../shared/components/StatusPill';
 import { ROLE_THEMES } from '../../../theme/roleThemes';

@@ -21,7 +21,7 @@ import ReceivedOffersModal from '../../marketplace/components/ReceivedOffersModa
 import StatusFilterTooltip from '../components/StatusFilterTooltip';
 import { w, h, f } from '../../../shared/utils/responsive';
 import { getOffers, getReceivedOffers, getSellCommodities } from '../../marketplace/marketplace.api';
-import { getMySubmittedQuotes } from '../orders.api';
+import { getMySubmittedQuotes } from '../procurement.api';
 import { showAlert } from '../../../shared/components/CustomAlertBox';
 
 import { getFriendlyErrorMessage } from '../../../shared/utils/errorUtils';

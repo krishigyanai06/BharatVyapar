@@ -9,7 +9,7 @@ import { useTranslation } from '../../shared/hooks/useTranslation';
 
 import HomeScreen from '../../features/home/screens/HomeScreen';
 import MarketplaceScreen from '../../features/marketplace/screens/MarketplaceScreen';
-import TradesScreen from '../../features/orders/screens/TradesScreen';
+import TradesScreen from '../../features/procurement/screens/TradesScreen';
 import SellCommodities from '../../features/marketplace/screens/SellCommodities';
 import ProfileScreen from '../../features/profile/screens/ProfileScreen';
 import COLORS from '../../theme/colors';

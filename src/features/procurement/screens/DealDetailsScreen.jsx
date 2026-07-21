@@ -22,7 +22,7 @@ import { useTranslation } from '../../../shared/hooks/useTranslation';
 import DynamicDocumentUploader from '../../../shared/components/DynamicDocumentUploader';
 import DebitNoteBottomSheet from '../components/DebitNoteBottomSheet';
 
-import { dealService } from '../orders.api';
+import { dealService } from '../procurement.api';
 import { ROLE_THEMES } from '../../../theme/roleThemes';
 
 // Escrow stages for stepper

@@ -18,7 +18,7 @@ import { showAlert } from '../../../shared/components/CustomAlertBox';
 import { useTranslation } from '../../../shared/hooks/useTranslation';
 import { useNegotiationDetail } from '../hooks/useNegotiationDetail';
 import { ROLE_THEMES } from '../../../theme/roleThemes';
-import { validatePriceMovement } from '../orders.rules';
+import { validatePriceMovement } from '../procurement.rules';
 import { submitCounterOffer, acceptOffer, rejectOffer } from '../../marketplace/marketplace.api';
 
 // Sub-components

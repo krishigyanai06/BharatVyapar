@@ -12,7 +12,7 @@ import {
   getOfferDetails,
   getSellCommodityById,
 } from '../../marketplace/marketplace.api';
-import { computeRemainingCooldown } from '../orders.rules';
+import { computeRemainingCooldown } from '../procurement.rules';
 
 /**
  * Manages offer data-fetching, item resolution, cooldown timer, and

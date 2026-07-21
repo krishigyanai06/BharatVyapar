@@ -5,12 +5,12 @@ import WarehouseScreen from '../../features/warehouse/screens/WarehouseScreen';
 
 // New static screens for Marketplace & Trades flow
 import CommodityDetailsScreen from '../../features/marketplace/screens/CommodityDetailsScreen';
-import NegotiationDetailsScreen from '../../features/orders/screens/NegotiationDetailsScreen';
-import DealDetailsScreen from '../../features/orders/screens/DealDetailsScreen';
-import BuyerQuoteDashboard from '../../features/orders/screens/BuyerQuoteDashboard';
-import SellerOrdersScreen from '../../features/orders/screens/SellerOrdersScreen';
-import BuyerOrdersScreen from '../../features/orders/screens/BuyerOrdersScreen';
-import MyRequirementsScreen from '../../features/orders/screens/MyRequirementsScreen';
+import NegotiationDetailsScreen from '../../features/procurement/screens/NegotiationDetailsScreen';
+import DealDetailsScreen from '../../features/procurement/screens/DealDetailsScreen';
+import BuyerQuoteDashboard from '../../features/procurement/screens/BuyerQuoteDashboard';
+import SellerOrdersScreen from '../../features/procurement/screens/SellerOrdersScreen';
+import BuyerOrdersScreen from '../../features/procurement/screens/BuyerOrdersScreen';
+import MyRequirementsScreen from '../../features/procurement/screens/MyRequirementsScreen';
 
 const Stack = createNativeStackNavigator();
 

@@ -20,8 +20,8 @@ import { w, h, f, mw } from '../../../shared/utils/responsive';
 import { syncUserToDisplayData } from '../../profile/profile.service';
 import { showAlert } from '../../../shared/components/CustomAlertBox';
 import { useTranslation } from '../../../shared/hooks/useTranslation';
-import AddYourRequirement from '../../orders/components/AddYourRequirement';
-import { requirementService } from '../../orders/orders.api';
+import AddYourRequirement from '../../procurement/components/AddYourRequirement';
+import { requirementService } from '../../procurement/procurement.api';
 import { storage } from '../../../shared/utils/storage';
 import { notificationService } from '../../pushNotification/notificationService';
 
