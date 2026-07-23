@@ -1,4 +1,5 @@
 import React, { useMemo } from 'react';
+import { Platform, View } from 'react-native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { useSelector } from 'react-redux';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
@@ -61,16 +62,22 @@ export default function AppTabs() {
   const roleColor = stateColor || ROLE_FALLBACK_COLORS[selectedRole] || COLORS.fpoPrimary;
 
   const tabBarStyle = useMemo(() => {
-    // If the system navigation/gesture bar is off (insets.bottom is 0),
-    // add a fallback padding at the bottom so the buttons aren't flush with the physical edge.
-    const paddingBottom = insets.bottom > 0 ? insets.bottom : 10;
-    const height = 54 + paddingBottom;
+    // PREVENT FLICKER: Lock safeBottom so frame 1 (insets.bottom === 0) and frame 2
+    // compute identical height on Android. Eliminates 64px -> 78px height jump!
+    const safeBottom = Platform.OS === 'android' ? Math.max(insets.bottom, 16) : (insets.bottom || 10);
+    const height = 54 + safeBottom;
     return {
-      backgroundColor: COLORS.white || '#FFFFFF',
+      backgroundColor: '#FFFFFF',
       borderTopWidth: 1,
       borderTopColor: '#E9ECEF',
       height: height,
-      paddingBottom: paddingBottom,
+      paddingBottom: safeBottom,
+      elevation: 12,
+      opacity: 1,
+      shadowColor: '#000000',
+      shadowOffset: { width: 0, height: -3 },
+      shadowOpacity: 0.1,
+      shadowRadius: 4,
     };
   }, [insets.bottom]);
 
@@ -91,6 +98,9 @@ export default function AppTabs() {
     headerShown:      false,
     tabBarStyle:      tabBarStyle,
     tabBarLabelStyle: TAB_LABEL_STYLE,
+    tabBarBackground: () => (
+      <View style={{ flex: 1, backgroundColor: '#FFFFFF', opacity: 1 }} />
+    ),
   }), [roleColor, tabBarStyle]);
 
   // ─── Tab labels: stable, only change when language switches ─────────────────
@@ -102,17 +112,17 @@ export default function AppTabs() {
     profile: t('Profile'),
   }), [t]);
 
-  // ─── Per-screen options: stable objects so Tab.Navigator never re-registers ─
+  // ─── Per-screen options with testID and accessibility labels ────────────────
   const tabOptions = useMemo(() => ({
-    home:    { tabBarLabel: labels.home    },
-    market:  { tabBarLabel: labels.market  },
-    trades:  { tabBarLabel: labels.trades  },
-    sell:    { tabBarLabel: labels.sell    },
-    profile: { tabBarLabel: labels.profile },
+    home:    { tabBarLabel: labels.home,    tabBarTestID: 'tab-home',    accessibilityLabel: 'Home Tab' },
+    market:  { tabBarLabel: labels.market,  tabBarTestID: 'tab-market',  accessibilityLabel: 'Market Tab' },
+    trades:  { tabBarLabel: labels.trades,  tabBarTestID: 'tab-trades',  accessibilityLabel: 'Trades Tab' },
+    sell:    { tabBarLabel: labels.sell,    tabBarTestID: 'tab-sell',    accessibilityLabel: 'Sell Tab' },
+    profile: { tabBarLabel: labels.profile, tabBarTestID: 'tab-profile', accessibilityLabel: 'Profile Tab' },
   }), [labels]);
 
   return (
-    <Tab.Navigator screenOptions={screenOptions}>
+    <Tab.Navigator screenOptions={screenOptions} sceneContainerStyle={{ backgroundColor: '#F8F9FA' }}>
       <Tab.Screen name="Home"    component={HomeScreen}        options={tabOptions.home}    />
       <Tab.Screen name="Market"  component={MarketplaceScreen} options={tabOptions.market}  />
       <Tab.Screen name="Trades"  component={TradesScreen}      options={tabOptions.trades}  />

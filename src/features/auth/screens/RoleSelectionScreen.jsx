@@ -119,7 +119,6 @@ export default function RoleSelectionScreen({ navigation }) {
                 key={role.id}
                 activeOpacity={0.8}
                 onPress={() => {
-                  console.log('Role selected:', role.id);
                   setSelectedRole(role.id);
                 }}
                 style={[

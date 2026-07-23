@@ -38,6 +38,7 @@ import {
 } from '../utils/negotiationValidators';
 import { useNegotiationDetail } from '../hooks/useNegotiationDetail';
 import { ROLE_THEMES } from '../../../theme/roleThemes';
+import { resolveName } from '../../../shared/utils/formatters';
 
 // ─── Animated Waiting Icon ───────────────────────────────────────────────────
 function WaitingPulseIcon({ color, size = 20 }) {
@@ -156,7 +157,16 @@ export default function NegotiationDetailsScreen({ route, navigation }) {
 
   // Route params — offerId or offer object, and item
   const routeOffer = route?.params?.offer;
-  const offerId = routeOffer?.id || routeOffer?._id || routeOffer?.offer?.id || routeOffer?.offer?._id || route?.params?.offerId;
+  const offerId =
+    routeOffer?.id ||
+    routeOffer?._id ||
+    routeOffer?.offerId ||
+    routeOffer?.offer?.id ||
+    routeOffer?.offer?._id ||
+    routeOffer?.offer?.offerId ||
+    route?.params?.offerId ||
+    route?.params?.id ||
+    route?.params?._id;
   const routeItem = route?.params?.item;
 
   // ─── State ────────────────────────────────────────────────────────────
@@ -241,6 +251,7 @@ export default function NegotiationDetailsScreen({ route, navigation }) {
   // Screen-level mount guard — protects navigation/showAlert calls inside async handlers
   const isMountedRef = useRef(true);
   const hasStatusChangedRef = useRef(false);
+  const acceptedDealIdRef = useRef(null);
   useEffect(() => {
     isMountedRef.current = true;
     return () => { isMountedRef.current = false; };
@@ -253,7 +264,10 @@ export default function NegotiationDetailsScreen({ route, navigation }) {
       }
       e.preventDefault();
       hasStatusChangedRef.current = false;
-      navigation.navigate('Trades', { shouldRefresh: true });
+      navigation.navigate('MainTabs', {
+        screen: 'Trades',
+        params: { shouldRefresh: true },
+      });
     });
     return unsubscribe;
   }, [navigation]);
@@ -319,6 +333,12 @@ export default function NegotiationDetailsScreen({ route, navigation }) {
   const myRole = (userId && sellerId && String(userId) === String(sellerId)) ? 'seller' :
     (userId && buyerId && String(userId) === String(buyerId)) ? 'buyer' :
     (routeRole || 'buyer');
+
+  const buyerObj = offer?.buyerId || offer?.buyer || routeOffer?.buyerId || routeOffer?.buyer || {};
+  const sellerObj = offer?.sellerId || offer?.seller || offer?.commodityId?.sellerId || offer?.commodity?.sellerId || routeOffer?.sellerId || routeOffer?.seller || {};
+
+  const buyerName = resolveName(buyerObj, routeOffer?.buyerName || offer?.buyerName, t('Buyer'));
+  const sellerName = resolveName(sellerObj, item?.sellerName || offer?.sellerName, t('Seller'));
 
   // Construct timeline rounds ensuring the initial offer round is present
   const displayRounds = React.useMemo(() => {
@@ -457,6 +477,7 @@ export default function NegotiationDetailsScreen({ route, navigation }) {
               if (!isMountedRef.current) return;
               hasStatusChangedRef.current = true;
               const resolvedDealId = res?.dealId || res?.data?.deal?._id || res?.deal?._id || res?.data?.deal?.id || res?.deal?.id || res?.data?.dealId;
+              acceptedDealIdRef.current = resolvedDealId;
               showAlert({
                 type: 'success',
                 title: t('Deal Confirmed!'),
@@ -466,9 +487,10 @@ export default function NegotiationDetailsScreen({ route, navigation }) {
                     text: t('View Deal'),
                     onPress: () => {
                       if (!isMountedRef.current) return;
-                      // Backend API not ready yet — navigate without dealId
-                      // DealDetails will show 'Order Accepted' pending screen
                       navigation.navigate('DealDetails', {
+                        deal: res?.data?.deal || res?.deal || offer,
+                        dealId: resolvedDealId || acceptedDealIdRef.current || null,
+                        offerId: offerId || offer?._id || offer?.id || null,
                         item,
                         role: myRole,
                       });
@@ -595,9 +617,22 @@ export default function NegotiationDetailsScreen({ route, navigation }) {
     if (lastRound) {
       const priceCheck = validatePriceMovement(newPrice, lastRound.price);
       if (!priceCheck.valid) {
-        setCounterPriceError(t('Price must be within 5%. Allowed: ₹{min} – ₹{max}').replace('{min}', priceCheck.min).replace('{max}', priceCheck.max));
+        setCounterPriceError(
+          t('Price must be within 5%. Allowed: ₹{min} – ₹{max}')
+            .replace('{min}', String(priceCheck.min || ''))
+            .replace('{max}', String(priceCheck.max || ''))
+        );
         return;
       }
+    }
+
+    if (!offerId || typeof offerId !== 'string' || !/^[0-9a-fA-F]{24}$/.test(offerId)) {
+      showAlert({
+        type: 'error',
+        title: t('Invalid Offer Reference'),
+        message: t('Unable to submit counter offer because the offer reference ID is missing or invalid. Please try refreshing.'),
+      });
+      return;
     }
 
     try {
@@ -694,9 +729,6 @@ export default function NegotiationDetailsScreen({ route, navigation }) {
       setSubmittingAction(false);
     }
   };
-
-  const buyerObj = offer?.buyerId || offer?.buyer || routeOffer?.buyerId || routeOffer?.buyer || {};
-  const sellerObj = offer?.sellerId || offer?.seller || offer?.commodityId?.sellerId || offer?.commodity?.sellerId || routeOffer?.sellerId || routeOffer?.seller || {};
 
   const renderedTimeline = React.useMemo(() => {
     if (displayRounds.length === 0) {
@@ -909,12 +941,12 @@ export default function NegotiationDetailsScreen({ route, navigation }) {
                 <Icon name="account-multiple-outline" size={14} color={COLORS.textMuted} style={{ marginTop: 2 }} />
                 <View style={styles.partiesColumn}>
                   {myRole !== 'buyer' && (
-                    <Text style={styles.partyText} numberOfLines={1}>
+                    <Text style={styles.partyText}>
                       <Text style={{ fontWeight: '700' }}>{t('Buyer:')}</Text> {buyerName}
                     </Text>
                   )}
                   {myRole !== 'seller' && (
-                    <Text style={styles.partyText} numberOfLines={1}>
+                    <Text style={styles.partyText}>
                       <Text style={{ fontWeight: '700' }}>{t('Seller:')}</Text> {sellerName}
                     </Text>
                   )}
@@ -1165,7 +1197,7 @@ export default function NegotiationDetailsScreen({ route, navigation }) {
           offer?.status === 'accepted' ? (
             <TouchableOpacity
               style={[styles.actionBtn, { backgroundColor: COLORS.success, flex: 1 }]}
-              onPress={() => navigation.navigate('DealDetails', { dealId: offer?.dealId || offer?.id || offer?._id, item, role: myRole })}
+              onPress={() => navigation.navigate('DealDetails', { deal: offer?.deal || offer, dealId: acceptedDealIdRef.current || offer?.dealId || offer?.deal?._id || null, item, role: myRole })}
             >
               <Icon name="handshake" size={18} color={COLORS.white} />
               <Text style={styles.acceptBtnText}>{t('View Escrow Deal')}</Text>

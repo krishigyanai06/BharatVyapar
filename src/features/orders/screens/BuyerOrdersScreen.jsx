@@ -54,7 +54,7 @@ export default function BuyerOrdersScreen({ navigation }) {
         <View style={styles.cardHeader}>
           <View>
             <Text style={styles.title}>{item.commodity}</Text>
-            <Text style={styles.subTitle}>{item.deliveryDetails?.location || '—'}</Text>
+            <Text style={styles.subTitle}>{item.deliveryDetails?.location && item.deliveryDetails?.location !== '—' ? item.deliveryDetails.location : t('Location Not Specified')}</Text>
           </View>
           <View style={styles.statusBadge}>
             <Icon name={status.icon} size={13} color={theme.primary} />
@@ -65,7 +65,7 @@ export default function BuyerOrdersScreen({ navigation }) {
         <View style={styles.metricRow}>
           <Info label={t('Approved Quantity')} value={`${item.approvedQuantity} ${item.deliveryDetails?.unit || 'Qt'}`} />
           <Info label={t('Final Price')} value={`₹${item.finalPrice}`} color={theme.primary} />
-          <Info label={t('Delivery Date')} value={item.deliveryDetails?.deliveryDate || '—'} />
+          <Info label={t('Delivery Date')} value={item.deliveryDetails?.deliveryDate && item.deliveryDetails?.deliveryDate !== '—' ? item.deliveryDetails.deliveryDate : t('As per deal terms')} />
         </View>
 
         <View style={styles.progressTrack}>

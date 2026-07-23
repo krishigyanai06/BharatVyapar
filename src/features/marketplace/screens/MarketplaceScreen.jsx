@@ -26,7 +26,7 @@ import { getSellCommodities, deleteSellCommodity, getReceivedOffers } from '../m
 import { getFriendlyErrorMessage } from '../../../shared/utils/errorUtils';
 import { normalizeCommodity } from '../marketplace.normalizer';
 import { requirementService, normalizeRequirement } from '../../orders/orders.requirements';
-import { submitQuoteAgainstRequirement } from '../../orders/orders.service';
+import { submitQuoteAgainstRequirement, getMySubmittedQuotes } from '../../orders/orders.service';
 import FulfillRequirementBottomSheet from '../../orders/components/FulfillBuyerRequirement';
 
 
@@ -534,6 +534,8 @@ const demandCardPropsAreEqual = (prev, next) => {
   const pd = prev.demand;
   const nd = next.demand;
   if (!pd || !nd) return pd === nd;
+  const pq = prev.myQuote;
+  const nq = next.myQuote;
   return (
     pd.id === nd.id &&
     pd.commodity === nd.commodity &&
@@ -542,11 +544,13 @@ const demandCardPropsAreEqual = (prev, next) => {
     pd.unit === nd.unit &&
     (pd.expectedPrice || pd.targetPrice) === (nd.expectedPrice || nd.targetPrice) &&
     pd.status === nd.status &&
-    prev.theme?.primary === next.theme?.primary
+    prev.theme?.primary === next.theme?.primary &&
+    pq?.price === nq?.price &&
+    pq?.status === nq?.status
   );
 };
 
-const DemandCard = React.memo(({ demand, theme, t, onFulfillPress }) => {
+const DemandCard = React.memo(({ demand, theme, t, onFulfillPress, myQuote }) => {
   if (!demand) return null;
   
   const buyerObj = demand.buyerId;
@@ -559,13 +563,16 @@ const DemandCard = React.memo(({ demand, theme, t, onFulfillPress }) => {
   const avatarChar = displayName.substring(0, 1).toUpperCase();
   const postedTime = formatDemandPostedTime(demand.createdAt, t);
 
+  const isAlreadyQuoted = Boolean(myQuote);
+  const quotedPrice = myQuote?.price || myQuote?.quotePrice;
+
   return (
     <View
       style={[
         styles.offerCard,
         {
           backgroundColor: theme.light,
-          borderColor: theme.primary + '20',
+          borderColor: isAlreadyQuoted ? '#81C784' : theme.primary + '20',
           borderWidth: 1,
         },
       ]}
@@ -603,14 +610,14 @@ const DemandCard = React.memo(({ demand, theme, t, onFulfillPress }) => {
           style={[
             styles.roleBadge,
             {
-              backgroundColor: theme.primary,
+              backgroundColor: isAlreadyQuoted ? '#2E7D32' : theme.primary,
               borderWidth: 1,
-              borderColor: theme.primary,
+              borderColor: isAlreadyQuoted ? '#1B5E20' : theme.primary,
             },
           ]}
         >
           <Text style={[styles.roleBadgeText, { color: COLORS.white, fontSize: f(9.5), fontWeight: '800' }]}>
-            {t('Demand')}
+            {isAlreadyQuoted ? `✓ ${t('Quoted')}` : t('Demand')}
           </Text>
         </View>
       </View>
@@ -682,31 +689,62 @@ const DemandCard = React.memo(({ demand, theme, t, onFulfillPress }) => {
 
       {/* CTA Button */}
       <View style={styles.actionButtonsRow}>
-        <TouchableOpacity
-          style={[
-            styles.actionBtn,
-            styles.viewBtn,
-            {
-              backgroundColor: theme.primary,
-              flex: 1,
-              height: h(40),
-              borderRadius: mw(10),
-              marginTop: h(4),
-              elevation: 3,
-              shadowColor: theme.primary,
-              shadowOffset: { width: 0, height: 2 },
-              shadowOpacity: 0.2,
-              shadowRadius: 4,
-            },
-          ]}
-          onPress={() => onFulfillPress && onFulfillPress(demand)}
-          activeOpacity={0.8}
-        >
-          <Icon name="handshake-outline" size={18} color={COLORS.white} />
-          <Text style={[styles.viewBtnText, { fontSize: f(12.5), fontWeight: '800' }]}>
-            {t('Quote / Fulfill')}
-          </Text>
-        </TouchableOpacity>
+        {isAlreadyQuoted ? (
+          <TouchableOpacity
+            style={[
+              styles.actionBtn,
+              styles.viewBtn,
+              {
+                backgroundColor: '#E8F5E9',
+                borderColor: '#81C784',
+                borderWidth: 1,
+                flex: 1,
+                height: h(40),
+                borderRadius: mw(10),
+                marginTop: h(4),
+              },
+            ]}
+            onPress={() => {
+              showAlert({
+                type: 'info',
+                title: t('Quote Already Submitted'),
+                message: t('You have already submitted a quote of ₹{price}/Qt for this requirement.\n\nYou can track the quotation status in your Trades screen.').replace('{price}', String(quotedPrice || 'N/A')),
+              });
+            }}
+            activeOpacity={0.8}
+          >
+            <Icon name="check-circle" size={18} color="#2E7D32" />
+            <Text style={[styles.viewBtnText, { fontSize: f(12.5), fontWeight: '800', color: '#2E7D32' }]}>
+              {quotedPrice ? `✓ ${t('Quote Placed')} (₹${quotedPrice})` : `✓ ${t('Quote Already Placed')}`}
+            </Text>
+          </TouchableOpacity>
+        ) : (
+          <TouchableOpacity
+            style={[
+              styles.actionBtn,
+              styles.viewBtn,
+              {
+                backgroundColor: theme.primary,
+                flex: 1,
+                height: h(40),
+                borderRadius: mw(10),
+                marginTop: h(4),
+                elevation: 3,
+                shadowColor: theme.primary,
+                shadowOffset: { width: 0, height: 2 },
+                shadowOpacity: 0.2,
+                shadowRadius: 4,
+              },
+            ]}
+            onPress={() => onFulfillPress && onFulfillPress(demand)}
+            activeOpacity={0.8}
+          >
+            <Icon name="handshake-outline" size={18} color={COLORS.white} />
+            <Text style={[styles.viewBtnText, { fontSize: f(12.5), fontWeight: '800' }]}>
+              {t('Quote / Fulfill')}
+            </Text>
+          </TouchableOpacity>
+        )}
       </View>
     </View>
   );
@@ -767,6 +805,35 @@ function MarketplaceScreenInner({ route, navigation }) {
   const lastFetchTimeRef  = useRef(0);
   const searchTimeoutRef  = useRef(null);
   const [selectedDemandForQuote, setSelectedDemandForQuote] = React.useState(null);
+  const [quotedMap, setQuotedMap] = React.useState({});
+
+  const syncSentQuotes = useCallback(async () => {
+    try {
+      const sentQuotes = await getMySubmittedQuotes();
+      if (Array.isArray(sentQuotes)) {
+        const map = {};
+        sentQuotes.forEach((q) => {
+          const reqId = q.requirementId?._id || q.requirementId?.id || q.requirementId;
+          if (reqId) {
+            map[String(reqId)] = {
+              price: q.quotePrice || q.price,
+              quantity: q.offeredQuantity || q.quantity,
+              status: q.status || 'Pending',
+            };
+          }
+        });
+        setQuotedMap(map);
+      }
+    } catch (err) {
+      // silent fallback
+    }
+  }, []);
+
+  useEffect(() => {
+    if (activeTab === 'DEMANDS') {
+      syncSentQuotes();
+    }
+  }, [activeTab, syncSentQuotes]);
 
   // Single mount/unmount effect — initialize and cleanup isMountedRef + abort any in-flight request
   useEffect(() => {
@@ -1159,11 +1226,15 @@ function MarketplaceScreenInner({ route, navigation }) {
     if (!item?.id && !item?._id) return null;
     
     if (activeTab === 'DEMANDS') {
+      const reqId = String(item.id || item._id || '');
+      const myQuote = quotedMap[reqId];
+
       return (
         <DemandCard
           demand={item}
           theme={theme}
           t={t}
+          myQuote={myQuote}
           onFulfillPress={(demand) => {
             if (userRef.current?.kycStatus !== 'VERIFIED') {
               showAlert({
@@ -1191,7 +1262,7 @@ function MarketplaceScreenInner({ route, navigation }) {
         isOwner={isOwner}
       />
     );
-  }, [theme, currentUserId, handleCardPress, handleEditPress, handleDeletePress, activeTab, t]);
+  }, [theme, currentUserId, handleCardPress, handleEditPress, handleDeletePress, activeTab, t, quotedMap]);
 
   // Dynamic layout calculations & styles memoized before return to avoid inline recreations
   const flatListContentStyle = useMemo(() => [
@@ -1441,7 +1512,7 @@ function MarketplaceScreenInner({ route, navigation }) {
         theme={theme}
         onSubmit={async (payload) => {
           try {
-            const reqId = selectedDemandForQuote?.id || selectedDemandForQuote?._id;
+            const reqId = String(selectedDemandForQuote?.id || selectedDemandForQuote?._id || '');
             await submitQuoteAgainstRequirement(reqId, {
               offeredQuantity: payload.offeredQuantity,
               quotePrice: payload.quotePrice,
@@ -1451,6 +1522,17 @@ function MarketplaceScreenInner({ route, navigation }) {
               priceUnit: selectedDemandForQuote?.unit || selectedDemandForQuote?.priceUnit || 'Quintal',
               tradeType: selectedDemandForQuote?.tradeType || 'FOR',
             });
+
+            if (reqId) {
+              setQuotedMap((prev) => ({
+                ...prev,
+                [reqId]: {
+                  price: payload.quotePrice,
+                  quantity: payload.offeredQuantity,
+                  status: 'Pending',
+                },
+              }));
+            }
 
             showAlert({
               type: 'success',

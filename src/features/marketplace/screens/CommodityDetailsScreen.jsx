@@ -22,7 +22,7 @@ import AppHeader from '../../../shared/components/AppHeader';
 import COLORS from '../../../theme/colors';
 import { w, h, f, mw } from '../../../shared/utils/responsive';
 import { showAlert } from '../../../shared/components/CustomAlertBox';
-import { getOffers, submitOffer, getReceivedOffers } from '../marketplace.api';
+import { getOffers, submitOffer, getReceivedOffers, getSellCommodityById } from '../marketplace.api';
 import KycBanner from '../../../shared/components/KycBanner';
 import PlaceBuyOfferModal from '../components/PlaceBuyOfferModal';
 import ReceivedOffersModal from '../components/ReceivedOffersModal';
@@ -32,6 +32,44 @@ import { ROLE_THEMES } from '../../../theme/roleThemes';
 
 
 const { width: screenWidth } = Dimensions.get('window');
+
+const DEFAULT_DUMMY_ITEM = {
+  id: 'COM-9872',
+  commodityName: 'Wheat',
+  type: 'Lokwan Premium',
+  quantity: '50',
+  unit: 'Ton',
+  sellingPrice: 2450,
+  sellingPriceUnit: 'Qt',
+  weightType: 'Net Weight',
+  listingEndDate: null,
+  weightTolerance: null,
+  billingAddress: null,
+  exWarehouseAddress: null,
+  paymentTimeline: null,
+  remarks: 'Bags packing of 50kg. High gluten content, clean grains.',
+  deliveryType: null,
+  isNegotiable: true,
+  minimumAcceptablePrice: 2350,
+  maxNegotiationRounds: 5,
+  offerExpiryHours: 24,
+  commodityLocation: 'Indore, MP',
+  escrowEnabled: true,
+  buyerTransportAllowed: true,
+  grade: 'A+',
+  moisture: '10.5%',
+  qualityParameters: [
+    { name: 'Moisture', val: '10.5%' },
+    { name: 'Foreign Matter', val: '0.8%' },
+    { name: 'Gluten Content', val: '11.5%' },
+    { name: 'Weevilled Grains', val: '0.2%' },
+  ],
+  sellerName: 'Malwa Farmer Producer Org (FPO)',
+  sellerRating: 4.8,
+  sellerCompletedTrades: 124,
+  isSellerVerified: true,
+  shopName: 'FPO Shop',
+};
 
 export default function CommodityDetailsScreen({ route, navigation }) {
   const { t } = useTranslation();
@@ -43,44 +81,43 @@ export default function CommodityDetailsScreen({ route, navigation }) {
   const theme = ROLE_THEMES[selectedRole] || ROLE_THEMES.FPO;
   const insets = useSafeAreaInsets();
 
-  // Listing details (passed via route)
-  const item = route?.params?.item || {
-    id: 'COM-9872',
-    commodityName: 'Wheat',
-    type: 'Lokwan Premium',
-    quantity: '50',
-    unit: 'Ton',
-    sellingPrice: 2450,
-    sellingPriceUnit: 'Qt',
-    weightType: 'Net Weight',
-    listingEndDate: null,
-    weightTolerance: null,
-    billingAddress: null,
-    exWarehouseAddress: null,
-    paymentTimeline: null,
-    remarks: 'Bags packing of 50kg. High gluten content, clean grains.',
-    deliveryType: null,
-    isNegotiable: true,
-    minimumAcceptablePrice: 2350,
-    maxNegotiationRounds: 5,
-    offerExpiryHours: 24,
-    commodityLocation: 'Indore, MP',
-    escrowEnabled: true,
-    buyerTransportAllowed: true,
-    grade: 'A+',
-    moisture: '10.5%',
-    qualityParameters: [
-      { name: 'Moisture', val: '10.5%' },
-      { name: 'Foreign Matter', val: '0.8%' },
-      { name: 'Gluten Content', val: '11.5%' },
-      { name: 'Weevilled Grains', val: '0.2%' },
-    ],
-    sellerName: 'Malwa Farmer Producer Org (FPO)',
-    sellerRating: 4.8,
-    sellerCompletedTrades: 124,
-    isSellerVerified: true,
-    shopName: 'FPO Shop',
-  };
+  const routeItem = route?.params?.item;
+  const [fetchedItem, setFetchedItem] = useState(null);
+  const [loadingCommodityData, setLoadingCommodityData] = useState(
+    !!routeItem && !routeItem.commodityName && !!(routeItem.id || routeItem._id || routeItem.commodityId)
+  );
+
+  // DEFENSIVE HYDRATION GUARD:
+  // If entrypoint passes only an ID payload (e.g. from Push Notifications or Deep Links),
+  // fetch full listing details asynchronously from backend.
+  useEffect(() => {
+    const commodityIdToFetch = routeItem?.id || routeItem?._id || routeItem?.commodityId;
+    if (routeItem && !routeItem.commodityName && commodityIdToFetch) {
+      let isMounted = true;
+      setLoadingCommodityData(true);
+      getSellCommodityById(commodityIdToFetch)
+        .then((fullData) => {
+          if (isMounted && fullData) {
+            console.log('[CommodityDetails] Successfully hydrated listing details by ID:', fullData._id || fullData.id);
+            setFetchedItem(fullData);
+          }
+        })
+        .catch((err) => {
+          console.warn('[CommodityDetails] Failed to hydrate commodity by ID:', err);
+        })
+        .finally(() => {
+          if (isMounted) setLoadingCommodityData(false);
+        });
+
+      return () => {
+        isMounted = false;
+      };
+    }
+  }, [routeItem]);
+
+  // Combined item object resolution:
+  // Prioritize API hydrated item, then routeItem (even if lightweight ID object), then DEFAULT_DUMMY_ITEM
+  const item = fetchedItem || routeItem || DEFAULT_DUMMY_ITEM;
 
   // Active negotiation check state
   const [checkingOffer, setCheckingOffer] = useState(true);
@@ -93,7 +130,9 @@ export default function CommodityDetailsScreen({ route, navigation }) {
   const [offerPrice, setOfferPrice] = useState(String(item.sellingPrice));
   const [offerQty, setOfferQty] = useState(String(item.quantity));
   const [deliveryType, setDeliveryType] = useState(item.deliveryType || 'FOR');
-  const [paymentTimeline, setPaymentTimeline] = useState(item.paymentTimeline);
+  const [paymentTimeline, setPaymentTimeline] = useState(
+    (item.paymentTimeline && item.paymentTimeline !== '—') ? item.paymentTimeline : 'Immediate'
+  );
   const [remarks, setRemarks] = useState('');
 
   // Seller specific state
@@ -103,11 +142,21 @@ export default function CommodityDetailsScreen({ route, navigation }) {
   const [reportModalVisible, setReportModalVisible] = useState(false);
 
   const checkActiveOffer = useCallback(async () => {
+    // Use _id first (MongoDB style), fallback to id
+    const commodityId = item._id || item.id || item.commodityId;
+
+    // OBJECT ID VALIDATION GUARD:
+    // Only query backend if commodityId is a valid 24-character MongoDB hex ObjectId.
+    // Skips mock IDs (e.g. 'COM-9872') to prevent backend Mongoose CastToObjectId 500 errors.
+    if (!commodityId || typeof commodityId !== 'string' || !/^[0-9a-fA-F]{24}$/.test(commodityId)) {
+      console.log('[CommodityDetails] Skipping active offer check for non-ObjectId listing:', commodityId);
+      setCheckingOffer(false);
+      return;
+    }
+
     try {
       setCheckingOffer(true);
       setApiError(null);
-      // Use _id first (MongoDB style), fallback to id
-      const commodityId = item._id || item.id;
       const res = await getOffers({ commodityId });
       const offersList = Array.isArray(res) ? res : res?.data?.offers || res?.offers || [];
       
@@ -129,7 +178,7 @@ export default function CommodityDetailsScreen({ route, navigation }) {
     } finally {
       setCheckingOffer(false);
     }
-  }, [item.id, item._id, t]);
+  }, [item.id, item._id, item.commodityId, t]);
 
   const handleCloseOfferModal   = useCallback(() => setOfferModalVisible(false), []);
   const handleCloseReportModal  = useCallback(() => setReportModalVisible(false), []);
@@ -224,14 +273,14 @@ export default function CommodityDetailsScreen({ route, navigation }) {
     try {
       setSubmittingOffer(true);
       const requestData = {
-        commodityId: item.id,
+        commodityId: item._id || item.id,
         price: Number(finalPrice),
         priceUnit: item.sellingPriceUnit || 'Qt',
         quantity: Number(offerQty),
         unit: item.unit || 'Ton',
-        tradeType: deliveryType,
-        paymentTimeline: paymentTimeline,
-        remarks: remarks
+        tradeType: deliveryType || item.deliveryType || 'FOR',
+        paymentTimeline: (paymentTimeline && paymentTimeline !== '—') ? paymentTimeline : (item.paymentTimeline && item.paymentTimeline !== '—' ? item.paymentTimeline : 'Immediate'),
+        remarks: remarks || ''
       };
 
       const res = await submitOffer(requestData);
@@ -273,19 +322,21 @@ export default function CommodityDetailsScreen({ route, navigation }) {
     }
   };
 
-  if (checkingOffer) {
+  if (checkingOffer || loadingCommodityData) {
     return (
       <SafeScreen style={{ backgroundColor: theme.light }} top={false} bottom={false}>
         <AppHeader
           backgroundColor={theme.primary}
           title={t('Commodity Listing')}
-          subtitle={`${item.commodityName} (${item.type})`}
+          subtitle={item?.commodityName ? `${item.commodityName} (${item.type || ''})` : t('Loading details...')}
           showBackButton={true}
           onBackPress={handleGoBack}
         />
         <View style={styles.centerContainer}>
           <ActivityIndicator size="large" color={theme.primary} />
-          <Text style={styles.loadingText}>{t('Checking listing status...')}</Text>
+          <Text style={styles.loadingText}>
+            {loadingCommodityData ? t('Fetching commodity details...') : t('Checking listing status...')}
+          </Text>
         </View>
       </SafeScreen>
     );
@@ -325,7 +376,7 @@ export default function CommodityDetailsScreen({ route, navigation }) {
       <AppHeader
         backgroundColor={theme.primary}
         title={t('Commodity Listing')}
-        subtitle={`${item.commodityName} (${item.type})`}
+        subtitle={item?.commodityName ? (item?.type && item.type !== 'null' && item.type !== '—' ? `${item.commodityName} (${item.type})` : item.commodityName) : t('Commodity Details')}
         showBackButton={true}
         onBackPress={handleGoBack}
       />
@@ -376,18 +427,29 @@ export default function CommodityDetailsScreen({ route, navigation }) {
         <View style={styles.infoCard}>
           <View style={styles.titleRow}>
             <View>
-              <Text style={styles.itemName}>{item.commodityName}</Text>
-              <Text style={styles.itemVariety}>{t('Variety: {type}').replace('{type}', item.type)}</Text>
+              <Text style={styles.itemName}>{item.commodityName || t('Commodity')}</Text>
+              <Text style={styles.itemVariety}>
+                {item.type && item.type !== 'null' && item.type !== '—'
+                  ? t('Variety: {type}').replace('{type}', item.type)
+                  : t('Variety: Standard')}
+              </Text>
             </View>
             <View style={styles.priceContainer}>
-              <Text style={[styles.itemPrice, { color: theme.primary }]}>₹{item.sellingPrice}</Text>
-              <Text style={styles.itemPriceUnit}>{t('per {unit}').replace('{unit}', item.sellingPriceUnit)}</Text>
+              <Text style={[styles.itemPrice, { color: theme.primary }]}>₹{item.sellingPrice || '--'}</Text>
+              <Text style={styles.itemPriceUnit}>{t('per {unit}').replace('{unit}', item.sellingPriceUnit || item.unit || 'Qt')}</Text>
             </View>
           </View>
 
           <View style={styles.locationRow}>
             <Icon name="map-marker" size={16} color={COLORS.textLight} />
-            <Text style={styles.locationText}>{t('Location: {location}').replace('{location}', item.commodityLocation)}</Text>
+            <Text style={styles.locationText}>
+              {t('Location: {location}').replace(
+                '{location}',
+                item.commodityLocation && item.commodityLocation !== 'null' && item.commodityLocation !== '—'
+                  ? item.commodityLocation
+                  : t('Location Not Specified')
+              )}
+            </Text>
           </View>
 
           <View style={styles.divider} />
@@ -395,15 +457,21 @@ export default function CommodityDetailsScreen({ route, navigation }) {
           <View style={styles.statsGrid}>
             <View style={styles.statBox}>
               <Text style={styles.statLabel}>{t('Available Qty')}</Text>
-              <Text style={styles.statValue}>{item.quantity} {item.unit}</Text>
+              <Text style={styles.statValue}>{item.quantity || '--'} {item.unit || 'Qt'}</Text>
             </View>
             <View style={styles.statBox}>
               <Text style={styles.statLabel}>{t('Moisture')}</Text>
-              <Text style={styles.statValue}>{item.moisture}</Text>
+              <Text style={styles.statValue}>
+                {item.moisture && item.moisture !== 'null' && item.moisture !== '—' ? item.moisture : t('Standard')}
+              </Text>
             </View>
             <View style={styles.statBox}>
               <Text style={styles.statLabel}>{t('End Date')}</Text>
-              <Text style={styles.statValue}>{item.listingEndDate}</Text>
+              <Text style={styles.statValue}>
+                {item.listingEndDate && item.listingEndDate !== 'null' && item.listingEndDate !== '—'
+                  ? String(item.listingEndDate).split('T')[0]
+                  : t('Open Listing')}
+              </Text>
             </View>
           </View>
         </View>
@@ -472,48 +540,54 @@ export default function CommodityDetailsScreen({ route, navigation }) {
             <View style={styles.termContent}>
               <Text style={styles.termTitle}>{t('Weight Basis & Tolerance')}</Text>
               <Text style={styles.termDesc}>
-                {item.weightType || 'Net Weight'}
-                {item.weightTolerance && item.weightTolerance !== '—' ? t(' with tolerance {tolerance}').replace('{tolerance}', item.weightTolerance) : ''}
+                {item.weightType && item.weightType !== '—' && item.weightType !== '-' ? item.weightType : 'Net Weight'}
+                {item.weightTolerance && item.weightTolerance !== '—' && item.weightTolerance !== '-' && item.weightTolerance !== 'null'
+                  ? t(' with tolerance {tolerance}').replace('{tolerance}', item.weightTolerance)
+                  : ''}
               </Text>
             </View>
           </View>
 
-          {item.paymentTimeline && item.paymentTimeline !== '—' ? (
-            <View style={styles.termRow}>
-              <Icon name="cash-fast" size={20} color={theme.primary} />
-              <View style={styles.termContent}>
-                <Text style={styles.termTitle}>{t('Payment Timeline')}</Text>
-                <Text style={styles.termDesc}>{item.paymentTimeline}</Text>
-              </View>
+          <View style={styles.termRow}>
+            <Icon name="cash-fast" size={20} color={theme.primary} />
+            <View style={styles.termContent}>
+              <Text style={styles.termTitle}>{t('Payment Timeline')}</Text>
+              <Text style={styles.termDesc}>
+                {item.paymentTimeline && item.paymentTimeline !== '—' && item.paymentTimeline !== '-' && item.paymentTimeline !== 'null'
+                  ? item.paymentTimeline
+                  : t('Immediate / Cash on Delivery')}
+              </Text>
             </View>
-          ) : null}
+          </View>
 
           <View style={styles.termRow}>
             <Icon name="shield-check" size={20} color={theme.primary} />
             <View style={styles.termContent}>
               <Text style={styles.termTitle}>{t('Payment Security')}</Text>
               <Text style={styles.termDesc}>
-                {item.escrowEnabled ? t('🔐 Secured via BharatVyapar partner Escrow. Payment released only post delivery verification.') : t('Direct payment between parties')}
+                {item.escrowEnabled !== false ? t('🔐 Secured via BharatVyapar partner Escrow. Payment released only post delivery verification.') : t('Direct payment between parties')}
               </Text>
             </View>
           </View>
 
-          {item.billingAddress && item.billingAddress !== '—' ? (
-            <View style={styles.termRow}>
-              <Icon name="map-legend" size={20} color={theme.primary} />
-              <View style={styles.termContent}>
-                <Text style={styles.termTitle}>{t('Billing Address')}</Text>
-                <Text style={styles.termDesc}>{item.billingAddress}</Text>
-              </View>
+          <View style={styles.termRow}>
+            <Icon name="map-legend" size={20} color={theme.primary} />
+            <View style={styles.termContent}>
+              <Text style={styles.termTitle}>{t('Billing Address')}</Text>
+              <Text style={styles.termDesc}>
+                {item.billingAddress && item.billingAddress !== '—' && item.billingAddress !== '-' && item.billingAddress !== 'null'
+                  ? item.billingAddress
+                  : t('Registered Trade Address')}
+              </Text>
             </View>
-          ) : null}
+          </View>
 
-          {item.remarks && (
+          {item.remarks && item.remarks !== '—' && item.remarks !== '-' && item.remarks !== 'null' && item.remarks.trim() !== '' ? (
             <View style={styles.remarksBox}>
               <Text style={styles.remarksTitle}>{t('Remarks / Notes:')}</Text>
               <Text style={styles.remarksText}>{item.remarks}</Text>
             </View>
-          )}
+          ) : null}
         </View>
 
         {/* Seller Info Card */}

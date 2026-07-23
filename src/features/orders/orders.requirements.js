@@ -87,7 +87,6 @@ export const requirementService = {
         },
       });
       const items = extractItems(response.data ?? response);
-      console.log('[RequirementService] getMyRequirements → raw items count:', items.length);
       const normalized = items.map(normalizeRequirement).filter(Boolean);
       myRequirementsCache = normalized;
       cacheTime = now;
@@ -108,7 +107,6 @@ export const requirementService = {
         },
       });
       const items = extractItems(response.data ?? response);
-      console.log('[RequirementService] getMarketplaceRequirements → raw items count:', items.length);
       let mapped = items.map(normalizeRequirement).filter(Boolean);
       if (options.excludeBuyerId) {
         mapped = mapped.filter(item => {
