@@ -453,7 +453,7 @@ export default function DealDetailsScreen({ route, navigation }) {
   };
 
   // Loading state
-  if (loading && !deal && !routeDeal) {
+  if (loading && !refreshing) {
     return (
       <SafeScreen style={{ backgroundColor: theme.light }} top={false} bottom={false}>
         <AppHeader
