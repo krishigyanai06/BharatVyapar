@@ -122,6 +122,8 @@ RKStorage
 .env.*.local
 src/config/index.js
 src/service/api.js
+src/api/client.js
+
 
 # API keys & secrets
 src/config/secrets.js
