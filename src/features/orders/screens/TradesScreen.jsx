@@ -283,7 +283,7 @@ export default function TradesScreen({ navigation, route }) {
               const acceptedOffer = offers.find(o => o.status === 'accepted');
               return {
                 ...listing,
-                _dealId: acceptedOffer?.dealId || acceptedOffer?.id || null,
+                _dealId: acceptedOffer?.dealId || acceptedOffer?.deal?._id || null,
                 _acceptedOffer: acceptedOffer || null,
               };
             } catch {
@@ -388,7 +388,7 @@ export default function TradesScreen({ navigation, route }) {
       const st = (listing.status || 'active').toLowerCase();
       if (activeTab === 'Active') return st === 'active';
       if (activeTab === 'In Negotiation') return st === 'active' && listing.isNegotiable !== false;
-      if (activeTab === 'Accepted') return st === 'sold';
+      if (activeTab === 'Accepted' || activeTab === 'Sold') return st === 'sold';
       if (activeTab === 'Closed') return ['expired', 'cancelled'].includes(st);
       return true; // 'All'
     });
@@ -492,7 +492,8 @@ export default function TradesScreen({ navigation, route }) {
   }, [filteredOffers, filteredSellListings, expandedSections, tradeMode, theme.primary]);
 
   const handleOfferPress = useCallback((offer) => {
-    const resolvedDealId = offer.dealId || offer.id || offer._id || offer.deal?.id || offer.deal?._id;
+    const dealId = offer.dealId || null;
+    const offerId = offer.id || offer._id || null;
     const resolvedCommodity = offer.commodity || 
                              (typeof offer.commodityId === 'object' ? offer.commodityId : null) || 
                              (typeof offer.requirementId === 'object' ? offer.requirementId : null) ||
@@ -500,9 +501,11 @@ export default function TradesScreen({ navigation, route }) {
     const isSeller = user && offer.sellerId && String(offer.sellerId) === String(user._id || user.id);
     const resolvedRole = isSeller ? 'seller' : 'buyer';
 
-    if (offer.status === 'accepted' && resolvedDealId) {
+    if (offer.status === 'accepted') {
       navigation.navigate('DealDetails', {
-        dealId: resolvedDealId,
+        deal: offer.deal || offer,
+        dealId,
+        offerId,
         item: resolvedCommodity,
         role: resolvedRole,
       });
@@ -686,17 +689,21 @@ export default function TradesScreen({ navigation, route }) {
         bg: isSold ? theme.primary + '15' : baseStatusCfg.bg,
       };
 
-      const crop = listing.commodityName || '—';
+      const crop = listing.commodityName && listing.commodityName !== '—' ? listing.commodityName : t('Commodity');
       const variety = listing.type || null;
       const quantity = `${listing.quantity ?? '?'} ${listing.unit || ''}`.trim();
       const price = listing.sellingPrice != null ? String(listing.sellingPrice) : 'N/A';
       const priceUnit = listing.sellingPriceUnit || 'Qt';
-      const location = listing.commodityLocation || '—';
+      const location = listing.commodityLocation && listing.commodityLocation !== '—' ? listing.commodityLocation : t('Location Not Specified');
       
       const handlePress = () => {
         if (isSold) {
+          const dealId = listing._dealId || listing.dealId || null;
+          const offerId = listing._acceptedOffer?.id || listing._acceptedOffer?._id || null;
           navigation.navigate('DealDetails', {
-            dealId: listing._dealId || listing.dealId || listing.deal?._id || listing.deal?.id,
+            deal: listing._acceptedOffer || listing,
+            dealId,
+            offerId,
             item: { id, commodityName: crop, type: variety, ...listing },
             role: 'seller',
           });

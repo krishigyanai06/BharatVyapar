@@ -93,14 +93,20 @@ export default function BuyerQuoteDashboard({ navigation, route }) {
 
   const renderQuote = ({ item }) => {
     const sellerObj = item.sellerId || item.userId || item.seller || {};
-    let sellerName = typeof sellerObj === 'object'
-      ? (item.sellerName || sellerObj.shopName || sellerObj.shopname || [sellerObj.firstName, sellerObj.lastName].filter(Boolean).join(' ') || t('Seller'))
-      : (item.sellerName || String(sellerObj) || t('Seller'));
+    let sellerName = item.sellerName;
+    
+    if (!sellerName || /^[a-fA-F0-9]{24}$/.test(sellerName)) {
+      const fallbackObj = typeof sellerObj === 'object' ? sellerObj : {};
+      const shopName = fallbackObj.shopName || fallbackObj.shopname || '';
+      const fullName = [fallbackObj.firstName, fallbackObj.lastName].filter(Boolean).join(' ');
+      const resolved = shopName || fullName || item.sellerName || '';
       
-    // Fallback to tokenized role if the backend returns an ID instead of a name
-    if (/^[a-fA-F0-9]{24}$/.test(sellerName)) {
-      const sellerIdForFallback = typeof sellerObj === 'string' ? sellerObj : (sellerObj._id || sellerObj.id || item.sellerId || '');
-      sellerName = getSafeUserName(sellerIdForFallback, t('Seller'));
+      if (resolved && !/^[a-fA-F0-9]{24}$/.test(resolved)) {
+        sellerName = resolved;
+      } else {
+        const sellerIdForFallback = typeof sellerObj === 'string' ? sellerObj : (fallbackObj._id || fallbackObj.id || item.sellerId || '');
+        sellerName = getSafeUserName(sellerIdForFallback, t('Seller'));
+      }
     }
     
     const isPending = String(item.status || '').toLowerCase() === 'pending';

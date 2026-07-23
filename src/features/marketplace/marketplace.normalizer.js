@@ -121,13 +121,13 @@ export function normalizeCommodity(raw) {
   const card = {
     id:             String(id),
     sellerId:       sellerId ? String(sellerId) : null,
-    name:           String(raw.commodityName || '').trim() || '—',
+    name:           String(raw.commodityName || '').trim() || 'Commodity',
     variety:        String(raw.type           || '').trim() || null,
     quantityLabel:  `${raw.quantity ?? '?'} ${raw.unit || ''}`.trim(),
     price:          raw.sellingPrice != null ? Number(raw.sellingPrice) : null,
     priceUnit:      String(raw.sellingPriceUnit || 'Qt'),
-    location:       String(raw.commodityLocation || '').trim() || '—',
-    moisture:       moisture ? String(moisture) : '—',
+    location:       String(raw.commodityLocation || '').trim() || null,
+    moisture:       moisture ? String(moisture) : null,
     deliveryType,
     isNegotiable:   raw.isNegotiable !== false,
     status:         String(raw.status || 'active'),
@@ -139,20 +139,20 @@ export function normalizeCommodity(raw) {
     createdAt:      raw.createdAt || null,
 
     // Legacy support keys
-    commodityName:          String(raw.commodityName || '').trim() || '—',
+    commodityName:          String(raw.commodityName || '').trim() || 'Commodity',
     type:                   String(raw.type || '').trim() || null,
     sellingPrice:           raw.sellingPrice != null ? Number(raw.sellingPrice) : null,
     sellingPriceUnit:       String(raw.sellingPriceUnit || 'Qt'),
-    commodityLocation:      String(raw.commodityLocation || '').trim() || '—',
+    commodityLocation:      String(raw.commodityLocation || '').trim() || null,
     commodityImages:        Array.isArray(raw.commodityImages) ? raw.commodityImages : [],
     quantity:               String(raw.quantity ?? ''),
     unit:                   String(raw.unit || ''),
     weightType:             String(raw.weightType || 'Net Weight'),
-    weightTolerance:        String(raw.weightTolerance || '—'),
-    billingAddress:         String(raw.billingAddress || '—'),
+    weightTolerance:        raw.weightTolerance && String(raw.weightTolerance).trim() !== '—' && String(raw.weightTolerance).trim() !== '-' ? String(raw.weightTolerance) : null,
+    billingAddress:         raw.billingAddress && String(raw.billingAddress).trim() !== '—' && String(raw.billingAddress).trim() !== '-' ? String(raw.billingAddress) : null,
     exWarehouseAddress:     raw.exWarehouseAddress || null,
-    paymentTimeline:        String(raw.paymentTimeline || '—'),
-    remarks:                String(raw.remarks || ''),
+    paymentTimeline:        raw.paymentTimeline && String(raw.paymentTimeline).trim() !== '—' && String(raw.paymentTimeline).trim() !== '-' ? String(raw.paymentTimeline) : null,
+    remarks:                raw.remarks && String(raw.remarks).trim() !== '—' && String(raw.remarks).trim() !== '-' ? String(raw.remarks) : '',
     minimumAcceptablePrice: raw.minimumAcceptablePrice ?? null,
     maxNegotiationRounds:   raw.maxNegotiationRounds ?? 5,
     offerExpiryHours:       raw.offerExpiryHours ?? 24,
@@ -167,29 +167,29 @@ export function normalizeCommodity(raw) {
 
     detail: {
       id:                    String(id),
-      commodityName:         String(raw.commodityName   || '—'),
-      type:                  String(raw.type            || '—'),
+      commodityName:         String(raw.commodityName   || 'Commodity'),
+      type:                  String(raw.type            || '').trim() || null,
       quantity:              String(raw.quantity        ?? ''),
       unit:                  String(raw.unit            || ''),
       sellingPrice:          Number(raw.sellingPrice)   || 0,
       sellingPriceUnit:      String(raw.sellingPriceUnit || 'Qt'),
       weightType:            String(raw.weightType      || 'Net Weight'),
-      listingEndDate:        safeDate(raw.listingEndDate) || '—',
-      weightTolerance:       String(raw.weightTolerance  || '—'),
-      billingAddress:        String(raw.billingAddress   || '—'),
+      listingEndDate:        safeDate(raw.listingEndDate),
+      weightTolerance:       raw.weightTolerance && String(raw.weightTolerance).trim() !== '—' && String(raw.weightTolerance).trim() !== '-' ? String(raw.weightTolerance) : null,
+      billingAddress:        raw.billingAddress && String(raw.billingAddress).trim() !== '—' && String(raw.billingAddress).trim() !== '-' ? String(raw.billingAddress) : null,
       exWarehouseAddress:    raw.exWarehouseAddress      || null,
-      paymentTimeline:       String(raw.paymentTimeline  || '—'),
-      remarks:               String(raw.remarks          || ''),
+      paymentTimeline:       raw.paymentTimeline && String(raw.paymentTimeline).trim() !== '—' && String(raw.paymentTimeline).trim() !== '-' ? String(raw.paymentTimeline) : null,
+      remarks:               raw.remarks && String(raw.remarks).trim() !== '—' && String(raw.remarks).trim() !== '-' ? String(raw.remarks) : '',
       deliveryType,
       isNegotiable:          raw.isNegotiable !== false,
       minimumAcceptablePrice: raw.minimumAcceptablePrice ?? null,
       maxNegotiationRounds:  raw.maxNegotiationRounds   ?? 5,
       offerExpiryHours:      raw.offerExpiryHours       ?? 24,
-      commodityLocation:     String(raw.commodityLocation || '—'),
+      commodityLocation:     String(raw.commodityLocation || '').trim() || null,
       escrowEnabled:         raw.escrowEnabled           ?? false,
       buyerTransportAllowed: raw.buyerTransportAllowed   ?? false,
       grade:                 raw.grade                   || null,
-      moisture:              moisture ? String(moisture) : '—',
+      moisture:              moisture ? String(moisture) : null,
       qualityParameters:     qualityParams,
       sellerId:              sellerId ? String(sellerId) : null,
       sellerName,
@@ -242,6 +242,12 @@ export function normalizeOffer(raw) {
   const sellerIdStr = sellerObj ? extractId(sellerObj) : extractId(raw.sellerId || raw.seller);
   const sellerId  = sellerObj ? { ...sellerObj, _id: sellerIdStr, id: sellerIdStr } : sellerIdStr;
 
+  const sellerFullName = buildUserName(sellerObj);
+  const sellerShopName = sellerObj?.shopName || sellerObj?.shopname || '';
+  const sellerName     = sellerShopName && sellerFullName
+    ? `${sellerShopName} (${sellerFullName})`
+    : sellerFullName || sellerShopName || null;
+
   const commObj      = (raw.commodityId && typeof raw.commodityId === 'object') ? raw.commodityId :
                        (raw.commodity   && typeof raw.commodity   === 'object') ? raw.commodity   :
                        (raw.requirementId && typeof raw.requirementId === 'object') ? raw.requirementId :
@@ -290,14 +296,22 @@ export function normalizeOffer(raw) {
     buyerRole:     buyerObj?.role    || null,
 
     sellerId,
+    sellerName,
+    sellerRating:  typeof sellerObj?.rating === 'number' ? sellerObj.rating : null,
+    sellerPhone:   sellerObj?.phone  || '',
+    sellerRole:    sellerObj?.role   || null,
+    unit:          raw.unit          || '',
+    priceUnit:     raw.priceUnit     || '',
+    dispatchTime:  raw.dispatchTime  || null,
+
     commodityId,
     requirementId: raw.requirementId || raw.requirement || null,
 
     commodity: commObj ? {
       ...commObj,
       id:                    extractId(commObj),
-      name:                  String(commObj.commodityName || commObj.name || commObj.commodity || '').trim() || '—',
-      commodityName:         String(commObj.commodityName || commObj.name || commObj.commodity || '').trim() || '—',
+      name:                  String(commObj.commodityName || commObj.name || commObj.commodity || '').trim() || 'Commodity',
+      commodityName:         String(commObj.commodityName || commObj.name || commObj.commodity || '').trim() || 'Commodity',
       type:                  String(commObj.type          || commObj.variety || '').trim() || null,
       variety:               String(commObj.type          || commObj.variety || '').trim() || null,
       grade:                 commObj.grade || null,
@@ -313,9 +327,11 @@ export function normalizeOffer(raw) {
 
 export function normalizeOfferList(rawResponse) {
   const list =
-    rawResponse?.data?.offers  ||
-    rawResponse?.offers        ||
-    rawResponse?.data?.data    ||
+    rawResponse?.data?.offers      ||
+    rawResponse?.offers            ||
+    rawResponse?.data?.quotations  ||
+    rawResponse?.quotations        ||
+    rawResponse?.data?.data        ||
     (Array.isArray(rawResponse?.data) ? rawResponse.data : null) ||
     (Array.isArray(rawResponse)       ? rawResponse      : []);
 

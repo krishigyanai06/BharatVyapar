@@ -30,6 +30,7 @@ import {
   pickFileForUpload,
   buildDocumentFormData,
   validateProfileField,
+  findDocumentUrl,
 } from '../profile.service';
 
 
@@ -167,7 +168,9 @@ function profileReducer(state, action) {
       };
     case 'CANCEL_UPLOAD': {
       const nextPreviews = { ...state.documentPreviews };
-      delete nextPreviews[state.uploadingDoc];
+      if (state.uploadingDoc) {
+        delete nextPreviews[state.uploadingDoc];
+      }
       return {
         ...state,
         documentPreviews: nextPreviews,
@@ -231,7 +234,6 @@ export default function ProfileScreen() {
 
   // Sync user details function with fail check and retry
   const fetchUserDetails = useCallback(async () => {
-    console.log('[ProfileScreen] fetchUserDetails: Syncing user profile details...');
     const result = await dispatch(getUserDetails());
     if (getUserDetails.rejected.match(result)) {
       console.error('[ProfileScreen] getUserDetails failed:', result.payload);
@@ -256,6 +258,14 @@ export default function ProfileScreen() {
       fetchUserDetails();
     }
   }, [fetchUserDetails]);
+
+  // Safety Guard: Clean up orphaned uploading state if no active network task exists
+  useEffect(() => {
+    if (uploadingDoc && !uploadAbortRef.current) {
+      console.log('🧹 [ProfileScreen] Auto-clearing orphaned uploadingDoc state');
+      dispatchAction({ type: 'CANCEL_UPLOAD' });
+    }
+  }, [uploadingDoc]);
 
   // Derived state (memoized only for data sync conversion)
   const displayData = useMemo(() => syncUserToDisplayData(user), [user]);
@@ -406,7 +416,6 @@ export default function ProfileScreen() {
       buttons: [
         { text: t('Cancel'), style: 'cancel' },
         { text: t('Logout'), style: 'destructive', onPress: () => {
-          console.log('[ProfileScreen] handleLogout: user triggered logout session termination.');
           dispatch(logoutUser());
         }},
       ],
@@ -414,12 +423,48 @@ export default function ProfileScreen() {
   }, [dispatch, t]);
 
   const handleViewDoc = useCallback(async (type) => {
-    const previewUri = documentPreviews[type]?.uri;
+    const docConfig = DOCUMENTS_CONFIG.find(d => d.type === type);
+    const docLabel = docConfig ? docConfig.label : type;
+    const previewFile = documentPreviews[type];
+    const previewUri = previewFile?.uri;
+    const remoteUrl = displayData[docConfig?.dataKey];
+    const targetUrl = previewUri || findDocumentUrl(remoteUrl);
+
     dispatchAction({ type: 'SET_VIEWING_DOC', payload: type });
-    console.log(`[ProfileScreen] handleViewDoc: opening file preview for type=${type}`);
-    await viewDocumentByType(type, previewUri);
+
+    if (targetUrl) {
+      const isImage = typeof targetUrl === 'string' && (
+        targetUrl.startsWith('data:image') ||
+        targetUrl.match(/\.(jpg|jpeg|png|webp|heic)$/i) ||
+        previewFile?.type?.includes('image')
+      );
+
+      showAlert({
+        type: 'info',
+        title: t(docLabel),
+        message: t('Document preview loaded. Tap below to view full document file.'),
+        imageUrl: isImage ? targetUrl : null,
+        buttons: [
+          { text: t('Close'), style: 'cancel' },
+          {
+            text: t('Open File'),
+            onPress: () => {
+              viewDocumentByType(type, targetUrl);
+            },
+          },
+        ],
+      });
+    } else {
+      showAlert({
+        type: 'warning',
+        title: t('Not Uploaded'),
+        message: t('{document} has not been uploaded yet. Please upload a clear document image or PDF.').replace('{document}', t(docLabel)),
+        buttons: [{ text: t('OK') }],
+      });
+    }
+
     dispatchAction({ type: 'SET_VIEWING_DOC', payload: null });
-  }, [documentPreviews]);
+  }, [documentPreviews, displayData, t]);
 
   const handleCancelUpload = useCallback(() => {
     const uploadTask = uploadAbortRef.current;
@@ -526,7 +571,6 @@ export default function ProfileScreen() {
   const handleUploadDoc = useCallback(async (type) => {
     const uploadTask = { type, cancelled: false, promise: null };
     uploadAbortRef.current = uploadTask;
-    dispatchAction({ type: 'SET_UPLOADING_DOC', payload: type });
     try {
       const file = await pickFileForUpload();
       if (!file || uploadTask.cancelled) {
@@ -534,6 +578,7 @@ export default function ProfileScreen() {
         return;
       }
 
+      dispatchAction({ type: 'SET_UPLOADING_DOC', payload: type });
       dispatchAction({ type: 'SET_DOC_PREVIEW', payload: { type, file } });
       console.log('🚀 [UPLOAD DOC] Dispatching updateProfile for type:', type);
       const formData = buildDocumentFormData(type, file);
@@ -790,6 +835,9 @@ export default function ProfileScreen() {
           <Text style={styles.sectionTitleDarkMargin}>{t('Documents & KYC')}</Text>
           {documents.map(doc => (
             <View style={styles.docRow} key={doc.type}>
+              <View style={[styles.docIconCircle, { backgroundColor: theme.primary + '12' }]}>
+                <Icon name={doc.icon || 'file-document-outline'} size={20} color={theme.primary} />
+              </View>
               <View style={styles.flex1} accessible={true} accessibilityLabel={`${t(doc.label)}: ${t(doc.statusText)}`}>
                 <Text style={styles.docLabel}>{t(doc.label)}</Text>
                 <Text style={styles.docStatus}>{t(doc.statusText)}</Text>
@@ -809,27 +857,41 @@ export default function ProfileScreen() {
                     <Text style={styles.docBtnTextGray}>{doc.isViewing ? '...' : t('View')}</Text>
                   </TouchableOpacity>
                 )}
-                <TouchableOpacity 
-                  onPress={() => handleUploadDoc(doc.type)} 
-                  disabled={!!uploadingDoc} 
-                  style={[styles.docBtn, doc.uploadBg]}
-                  accessible={true}
-                  accessibilityRole="button"
-                  accessibilityLabel={t('{action} {document}').replace('{action}', doc.uploadLabel).replace('{document}', t(doc.label))}
-                  accessibilityHint={t('Upload or replace file for {document}').replace('{document}', t(doc.label))}
-                >
-                  <Icon name={doc.uploadIcon} size={15} color={theme.primary} />
-                  <Text style={[styles.docBtnText, { color: theme.primary }]}>{doc.uploadLabel}</Text>
-                </TouchableOpacity>
-                {doc.isUploading && (
+                {doc.isUploading ? (
+                  <>
+                    <TouchableOpacity 
+                      onPress={handleCancelUpload} 
+                      style={[styles.docBtn, doc.uploadBg]}
+                      accessible={true}
+                      accessibilityRole="button"
+                      accessibilityLabel={t('Uploading {document}. Tap to cancel.').replace('{document}', t(doc.label))}
+                    >
+                      <ActivityIndicator size="small" color={theme.primary} style={{ marginRight: w(4) }} />
+                      <Text style={[styles.docBtnText, { color: theme.primary }]}>{t('Uploading...')}</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity 
+                      onPress={handleCancelUpload} 
+                      style={[styles.docBtn, styles.cancelBtn]}
+                      hitSlop={{ top: 14, bottom: 14, left: 14, right: 14 }}
+                      accessible={true}
+                      accessibilityRole="button"
+                      accessibilityLabel={t('Cancel uploading {document}').replace('{document}', t(doc.label))}
+                    >
+                      <Icon name="close" size={15} color="#E53E3E" />
+                    </TouchableOpacity>
+                  </>
+                ) : (
                   <TouchableOpacity 
-                    onPress={handleCancelUpload} 
-                    style={[styles.docBtn, styles.cancelBtn]}
+                    onPress={() => handleUploadDoc(doc.type)} 
+                    disabled={!!uploadingDoc} 
+                    style={[styles.docBtn, doc.uploadBg]}
                     accessible={true}
                     accessibilityRole="button"
-                    accessibilityLabel={t('Cancel uploading {document}').replace('{document}', t(doc.label))}
+                    accessibilityLabel={t('{action} {document}').replace('{action}', doc.uploadLabel).replace('{document}', t(doc.label))}
+                    accessibilityHint={t('Upload or replace file for {document}').replace('{document}', t(doc.label))}
                   >
-                    <Icon name="close" size={15} color="#E53E3E" />
+                    <Icon name={doc.uploadIcon} size={14} color={theme.primary} />
+                    <Text style={[styles.docBtnText, { color: theme.primary }]}>{doc.uploadLabel}</Text>
                   </TouchableOpacity>
                 )}
               </View>
@@ -1351,14 +1413,15 @@ const styles = StyleSheet.create({
   
   fieldsCard: {
     backgroundColor: COLORS.white, 
-    borderRadius: mw(24), 
-    padding: w(20),
-    marginBottom: h(20), 
-    elevation: 6,
+    borderRadius: mw(20), 
+    paddingHorizontal: w(12),
+    paddingVertical: h(16),
+    marginBottom: h(16), 
+    elevation: 4,
     shadowColor: '#1A202C', 
-    shadowOffset: { width: 0, height: 6 }, 
+    shadowOffset: { width: 0, height: 4 }, 
     shadowOpacity: 0.05, 
-    shadowRadius: 12,
+    shadowRadius: 10,
   },
   sectionTitleRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: h(16) },
   sectionTitle:    { fontSize: f(17), fontWeight: '800', letterSpacing: 0.2 },
@@ -1370,12 +1433,12 @@ const styles = StyleSheet.create({
   fieldLabel:      { fontSize: f(11), fontWeight: '800', color: '#A0AEC0', marginBottom: h(4), textTransform: 'uppercase', letterSpacing: 0.5 },
   fieldVal:        { fontSize: f(15), color: '#2D3748', fontWeight: '700' },
   
-  docRow:          { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: w(14), backgroundColor: '#F7FAFC', borderRadius: mw(16), marginBottom: h(12), borderWidth: 1, borderColor: '#EDF2F7' },
-  docLabel:        { fontSize: f(14), fontWeight: '800', color: '#2D3748' },
-  docStatus:       { fontSize: f(11), color: '#718096', marginTop: h(4), fontWeight: '600' },
-  docActions:      { flexDirection: 'row', gap: w(8) },
-  docBtn:          { flexDirection: 'row', alignItems: 'center', borderRadius: mw(10), paddingHorizontal: w(12), paddingVertical: h(8), gap: w(4) },
-  docBtnText:      { fontSize: f(12), fontWeight: '800' },
+  docRow:          { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: w(8), paddingVertical: h(8), backgroundColor: '#F7FAFC', borderRadius: mw(12), marginBottom: h(10), borderWidth: 1, borderColor: '#EDF2F7' },
+  docLabel:        { fontSize: f(12.5), fontWeight: '800', color: '#2D3748' },
+  docStatus:       { fontSize: f(10), color: '#718096', marginTop: h(2), fontWeight: '600' },
+  docActions:      { flexDirection: 'row', gap: w(3), flexShrink: 0 },
+  docBtn:          { flexDirection: 'row', alignItems: 'center', borderRadius: mw(6), paddingHorizontal: w(6), paddingVertical: h(5), gap: w(2) },
+  docBtnText:      { fontSize: f(10.5), fontWeight: '800' },
   cancelBtn:       { backgroundColor: '#FFF5F5', borderWidth: 1, borderColor: '#FC8181', paddingHorizontal: w(10) },
   logoutBtn:       { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', borderRadius: mw(16), paddingVertical: h(16), backgroundColor: '#FFF5F5', gap: w(8), marginTop: h(8), borderWidth: 1, borderColor: '#FEB2B2', elevation: 4, shadowColor: '#E53E3E', shadowOffset: {width: 0, height: 4}, shadowOpacity: 0.1, shadowRadius: 8 },
   logoutText:      { fontSize: f(17), fontWeight: '800', color: '#E53E3E', letterSpacing: 0.3 },
@@ -1667,14 +1730,14 @@ const styles = StyleSheet.create({
   docBtnGray: {
     flexDirection: 'row',
     alignItems: 'center',
-    borderRadius: mw(10),
-    paddingHorizontal: w(12),
-    paddingVertical: h(8),
-    gap: w(4),
+    borderRadius: mw(6),
+    paddingHorizontal: w(6),
+    paddingVertical: h(5),
+    gap: w(2),
     backgroundColor: '#EDF2F7',
   },
   docBtnTextGray: {
-    fontSize: f(12),
+    fontSize: f(10.5),
     fontWeight: '800',
     color: '#4A5568',
   },
@@ -1852,6 +1915,14 @@ const styles = StyleSheet.create({
     fontSize: f(15),
     fontWeight: '700',
     color: '#4A5568',
+  },
+  docIconCircle: {
+    width: w(32),
+    height: w(32),
+    borderRadius: mw(16),
+    alignItems: 'center',
+    justify: 'center',
+    marginRight: w(6),
   },
   footerBranding: {
     alignItems: 'center',

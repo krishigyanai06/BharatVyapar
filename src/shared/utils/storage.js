@@ -19,7 +19,6 @@ export const initStorage = async () => {
       }
     });
     isInitialized = true;
-    console.log('[Storage] AsyncStorage preloaded into memory cache successfully. Keys count:', keys.length);
   } catch (e) {
     console.error('[Storage] Failed to preload AsyncStorage:', e);
   }

@@ -15,9 +15,9 @@ export { ROLE_THEMES } from '../../theme/roleThemes';
 export const GENDER_OPTIONS = ['Male', 'Female', 'Other'];
 
 export const DOCUMENTS_CONFIG = [
-  { label: 'Shop License',    type: 'shopLicense',    dataKey: 'shopLicense' },
-  { label: 'GST Certificate', type: 'GSTCertificate', dataKey: 'gstCertificate' },
-  { label: 'PAN Card',        type: 'PANCard',        dataKey: 'panCard' },
+  { label: 'Shop License',    type: 'shopLicense',    dataKey: 'shopLicense',    icon: 'store-outline' },
+  { label: 'GST Certificate', type: 'GSTCertificate', dataKey: 'gstCertificate', icon: 'file-certificate-outline' },
+  { label: 'PAN Card',        type: 'PANCard',        dataKey: 'panCard',        icon: 'card-account-details-outline' },
 ];
 
 const normalizeGender = raw =>
@@ -77,7 +77,7 @@ export const validateAndExtractErrors = modalForm => {
   return { isValid, errors };
 };
 
-function findDocumentUrl(value) {
+export function findDocumentUrl(value) {
   if (!value) return null;
   if (typeof value === 'string') return value;
   if (Array.isArray(value)) {
@@ -102,30 +102,42 @@ function findDocumentUrl(value) {
 
 export const viewDocumentByType = async (type, localUrl) => {
   try {
-    if (localUrl) {
+    console.log(`🔍 [viewDocumentByType] Called — type: ${type} | localUrl: ${JSON.stringify(localUrl)}`);
+
+    // Only use localUrl directly if it's a LOCAL device file (camera/gallery pick)
+    // Remote S3/HTTP URLs must go through getPrivateFile API for a fresh signed URL
+    const isLocalFile = localUrl &&
+      (localUrl.startsWith('content://') || localUrl.startsWith('file://'));
+
+    if (isLocalFile) {
+      console.log(`🔍 [viewDocumentByType] Using LOCAL file URI directly:`, localUrl);
       await viewDocument(localUrl);
       return { success: true };
     }
 
-    console.log(`[viewDocumentByType] Fetching private file for type: ${type}`);
+    console.log(`🌐 [viewDocumentByType] Fetching signed URL from API: /user/files/private?type=${type}`);
     const res = await userApi.getPrivateFile({ type });
-    console.log(`[viewDocumentByType] API Response:`, JSON.stringify(res, null, 2));
-    
+    console.log(`🌐 [viewDocumentByType] RAW API response:`, JSON.stringify(res, null, 2));
+
     const url = findDocumentUrl(res);
-    console.log(`[viewDocumentByType] Extracted URL:`, url);
+    console.log(`🌐 [viewDocumentByType] Extracted signed URL:`, url);
 
     if (url) {
+      console.log(`✅ [viewDocumentByType] Opening signed URL:`, url);
       await viewDocument(url);
       return { success: true };
     }
+
+    console.warn(`⚠️ [viewDocumentByType] No URL in response. Full res:`, JSON.stringify(res, null, 2));
     showAlert({ type: 'error', title: 'Not Available', message: 'Document not uploaded yet.', buttons: [{ text: 'OK' }] });
     return { success: false };
   } catch (err) {
-    console.error('[viewDocumentByType]', err);
+    console.error('❌ [viewDocumentByType] Error:', err?.message || err, '| Full:', JSON.stringify(err, null, 2));
     showAlert({ type: 'error', title: 'Error', message: 'Failed to fetch document.', buttons: [{ text: 'OK' }] });
     return { success: false, error: err };
   }
 };
+
 
 export const pickFileForUpload = async () => {
   console.log('📂 [PICK FILE] Opening picker...');

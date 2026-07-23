@@ -188,6 +188,9 @@ api.interceptors.request.use(async reqConfig => {
   if (!reqConfig._requestId) {
     reqConfig._requestId = generateRequestId();
   }
+  if (!reqConfig._startTime) {
+    reqConfig._startTime = Date.now();
+  }
   const attempt = reqConfig._retryCount ? `;attempt=${reqConfig._retryCount + 1}` : '';
   reqConfig.headers['X-Request-ID'] = `${reqConfig._requestId}${attempt}`;
 
@@ -229,20 +232,6 @@ api.interceptors.request.use(async reqConfig => {
         console.log(`🚫 [OfflineBlocker] Non-syncable write blocked (offline): ${reqConfig.url}`);
       }
     }
-  }
-
-  // 7f. Dev logging
-  if (__DEV__) {
-    let bodyLog = reqConfig.data;
-    if (reqConfig.data instanceof FormData) {
-      bodyLog = reqConfig.data._parts
-        ? Object.fromEntries(reqConfig.data._parts)
-        : '[FormData]';
-    }
-    console.log(
-      `📤 [${reqConfig._requestId}] ${reqConfig.method?.toUpperCase()} ${reqConfig.url}`,
-      bodyLog !== undefined ? { payload: bodyLog } : '',
-    );
   }
 
   return reqConfig;
@@ -298,10 +287,22 @@ api.interceptors.response.use(
     }
 
     if (__DEV__) {
-      console.log(
-        `📥 [${res.config?._requestId}] ${res.config?.method?.toUpperCase()} ${res.config?.url}`,
-        { status: res.status, data: res.data },
-      );
+      const duration = Date.now() - (res.config?._startTime || Date.now());
+      const method = res.config?.method?.toUpperCase() || 'GET';
+      const url = res.config?.url || '';
+
+      let summary = '';
+      if (Array.isArray(res.data)) {
+        summary = ` • ${res.data.length} items`;
+      } else if (res.data && Array.isArray(res.data.data)) {
+        summary = ` • ${res.data.data.length} items`;
+      } else if (res.data && typeof res.data === 'object' && res.data.message) {
+        summary = ` • ${res.data.message}`;
+      } else if (res.data && typeof res.data === 'object' && res.data.status) {
+        summary = ` • ${res.data.status}`;
+      }
+
+      console.log(`🌐 [API ${res.status}] ${method} ${url}${summary} (${duration}ms)`);
     }
     return res;
   },

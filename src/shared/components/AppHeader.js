@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Modal } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Modal, StatusBar } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
@@ -72,6 +72,7 @@ const AppHeader = ({
 
   return (
     <View style={[styles.header, { backgroundColor, paddingTop: insets.top }]}>
+      <StatusBar barStyle="light-content" backgroundColor="transparent" translucent={true} animated={true} />
       <View style={styles.headerTopRow}>
 
         {/* ── Left: Back Button or spacer ─────────────────────────── */}

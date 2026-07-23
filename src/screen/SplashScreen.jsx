@@ -50,8 +50,8 @@ const SplashScreen = ({ navigation, progress = 0 }) => {
   }, [navigation]);
 
   return (
-    <View style={styles.container}>
-      <StatusBar hidden />
+    <View style={styles.container} testID="splash-screen-container" accessibilityLabel="Splash Screen Container">
+      <StatusBar hidden translucent backgroundColor="transparent" barStyle="light-content" />
       <ImageBackground source={Images.splashScreen} style={styles.image} resizeMode="cover">
         
         {/* LOGO TEXT OVERLAY MASK */}
@@ -72,8 +72,8 @@ const SplashScreen = ({ navigation, progress = 0 }) => {
         {/* BOTTOM LOADER OVERLAY MASK */}
         <View style={styles.bottomMaskContainer}>
           <Text style={styles.loadingText}>Loading...</Text>
-          <View style={styles.progressBarContainer}>
-            <View style={[styles.progressBarFill, { width: `${progress * 100}%` }]} />
+          <View style={styles.progressBarContainer} testID="splash-progress-bar-container">
+            <View style={[styles.progressBarFill, { width: `${progress * 100}%` }]} testID="splash-progress-bar-fill" />
           </View>
           <Text style={styles.footerText}>Saath Milkar, Aage Badhenge</Text>
         </View>

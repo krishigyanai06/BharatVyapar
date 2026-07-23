@@ -185,8 +185,28 @@ function HomeScreen({ navigation }) {
   }, []);
 
 
-  const [requirements, setRequirements] = React.useState([]);
-  const [loadingRequirements, setLoadingRequirements] = React.useState(false);
+  // Hydrate requirements state immediately from MMKV local storage for 0ms instant boot
+  const [requirements, setRequirements] = React.useState(() => {
+    try {
+      const cached = storage.getString('cached_user_requirements');
+      return cached ? JSON.parse(cached) : [];
+    } catch {
+      return [];
+    }
+  });
+  const hasFetchedOnceRef = React.useRef(false);
+
+  // If local storage has cached requirements, we don't show shimmer at all on initial mount
+  const [loadingRequirements, setLoadingRequirements] = React.useState(() => {
+    try {
+      const cached = storage.getString('cached_user_requirements');
+      const parsed = cached ? JSON.parse(cached) : [];
+      return parsed.length === 0;
+    } catch {
+      return true;
+    }
+  });
+
   const [showRequirementModal, setShowRequirementModal] = React.useState(false);
   const [expandedReqId, setExpandedReqId] = React.useState(null);
   const [isMainAccordionExpanded, setIsMainAccordionExpanded] = React.useState(false);
@@ -194,7 +214,7 @@ function HomeScreen({ navigation }) {
   const tooltipOpacity = React.useRef(new Animated.Value(0)).current;
 
   // Ref to track requirements and avoid stale state in useCallback without re-registering effect listener
-  const requirementsRef = React.useRef([]);
+  const requirementsRef = React.useRef(requirements);
   React.useEffect(() => {
     requirementsRef.current = requirements;
   }, [requirements]);
@@ -242,16 +262,29 @@ function HomeScreen({ navigation }) {
   }, [showTooltip, tooltipOpacity]);
 
   const fetchRequirements = useCallback(async (forceShimmer = false) => {
+    const hasData = requirementsRef.current && requirementsRef.current.length > 0;
+    // Only show shimmer if explicitly forced OR if we have never fetched before and have zero cached data
+    if (forceShimmer || (!hasFetchedOnceRef.current && !hasData)) {
+      setLoadingRequirements(true);
+    }
+
+    // Safety timeout: Never keep shimmer visible for longer than 2.5 seconds on slow release network
+    const shimmerTimeout = setTimeout(() => {
+      setLoadingRequirements(false);
+    }, 2500);
+
     try {
-      const hasNoData = !requirementsRef.current || requirementsRef.current.length === 0;
-      if (forceShimmer || hasNoData) {
-        setLoadingRequirements(true);
-      }
       const data = await requirementService.getMyRequirements();
-      setRequirements(data || []);
+      const freshList = data || [];
+      setRequirements(freshList);
+      hasFetchedOnceRef.current = true;
+      try {
+        storage.set('cached_user_requirements', JSON.stringify(freshList));
+      } catch {}
     } catch (error) {
       console.error('[HomeScreen] Fetch requirements failed:', error);
     } finally {
+      clearTimeout(shimmerTimeout);
       setLoadingRequirements(false);
     }
   }, []);
@@ -664,7 +697,7 @@ function HomeScreen({ navigation }) {
                       </Text>
                       {!isMainAccordionExpanded && (
                         <Text style={styles.mainAccordionSubtitleText} numberOfLines={1}>
-                          {requirements.slice(0, 3).map(r => r.commodity || '—').join(', ')}
+                          {requirements.slice(0, 3).map(r => r.commodity && r.commodity !== '—' ? r.commodity : t('Commodity')).join(', ')}
                         </Text>
                       )}
                     </View>
@@ -708,7 +741,7 @@ function HomeScreen({ navigation }) {
                               style={styles.reqAccordionHeader}
                             >
                               <View style={styles.reqHeaderLeft}>
-                                <Text style={styles.reqCommodity}>{req.commodity || '—'}</Text>
+                                <Text style={styles.reqCommodity}>{req.commodity && req.commodity !== '—' ? req.commodity : t('Commodity')}</Text>
                                 <View style={[styles.reqBadge, { backgroundColor: sColor.bg }]}>
                                   <Text style={[styles.reqBadgeText, { color: sColor.text }]}>
                                     {t(currentStatus)}
@@ -730,7 +763,7 @@ function HomeScreen({ navigation }) {
                                 {t('Expected:')} <Text style={{ fontWeight: '700' }}>₹{req.expectedPrice || req.targetPrice}</Text>
                               </Text>
                               <Text style={styles.reqDetailText}>
-                                {t('Loc:')} <Text style={{ fontWeight: '700' }}>{req.location || '—'}</Text>
+                                {t('Loc:')} <Text style={{ fontWeight: '700' }}>{req.location && req.location !== '—' ? req.location : t('Location N/A')}</Text>
                               </Text>
                             </View>
 

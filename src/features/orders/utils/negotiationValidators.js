@@ -1,4 +1,4 @@
-﻿// src/features/orders/utils/negotiationValidators.js
+// src/features/orders/utils/negotiationValidators.js
 // Pure functions — no React, no side effects, fully unit-testable.
 
 /**
@@ -11,13 +11,15 @@
  * @returns {{ valid: boolean, min?: number, max?: number }}
  */
 export function validatePriceMovement(newPrice, lastRoundPrice, maxPct = 0.05) {
-  if (!lastRoundPrice || lastRoundPrice <= 0) return { valid: true };
-  const delta = Math.abs(newPrice - lastRoundPrice) / lastRoundPrice;
+  const p1 = Number(newPrice);
+  const p2 = Number(lastRoundPrice);
+  if (!p2 || p2 <= 0 || isNaN(p1) || isNaN(p2)) return { valid: true };
+  const delta = Math.abs(p1 - p2) / p2;
   if (delta >= maxPct) {
     return {
       valid: false,
-      min: +(lastRoundPrice * (1 - maxPct + 0.001)).toFixed(0),
-      max: +(lastRoundPrice * (1 + maxPct - 0.001)).toFixed(0),
+      min: +(p2 * (1 - maxPct + 0.001)).toFixed(0),
+      max: +(p2 * (1 + maxPct - 0.001)).toFixed(0),
     };
   }
   return { valid: true };
