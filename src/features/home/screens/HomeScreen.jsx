@@ -7,6 +7,7 @@ import {
   ScrollView,
   Image,
   Animated,
+  Linking,
 } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useSelector, useDispatch } from 'react-redux';
@@ -877,7 +878,7 @@ function HomeScreen({ navigation }) {
               </Text>
               <Text style={styles.supportDesc}>
                 {t(
-                  'Have questions about trades or transactions? We are here 24/7.',
+                  'Write to us at contact@krishigyanai.com for 24/7 trade & transaction support.',
                 )}
               </Text>
             </View>
@@ -892,9 +893,18 @@ function HomeScreen({ navigation }) {
                   type: 'info',
                   title: t('Support Helpdesk'),
                   message: t(
-                    'Our helpline is active. Connecting you to a support agent shortly.',
+                    'Reach out to our support team at contact@krishigyanai.com for any trade or transaction queries.',
                   ),
-                  buttons: [{ text: t('OK') }],
+                  buttons: [
+                    {
+                      text: t('Send Email'),
+                      onPress: () =>
+                        Linking.openURL('mailto:contact@krishigyanai.com').catch((err) =>
+                          console.warn('[HomeScreen] Could not open mail client:', err),
+                        ),
+                    },
+                    { text: t('Cancel'), style: 'cancel' },
+                  ],
                 })
               }
             >

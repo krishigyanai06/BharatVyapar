@@ -10,6 +10,8 @@ import {
   Modal,
   TextInput,
   Linking,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
 import { pick } from '@react-native-documents/picker';
 import { showAlert } from '../../../shared/components/CustomAlertBox';
@@ -672,21 +674,84 @@ export default function DealDetailsScreen({ route, navigation }) {
     );
   }
 
-  // Pure API Data Extraction
-  const commodityObj     = activeDeal?.commodityId;
-  const commodityName    = commodityObj?.commodityName || '—';
-  const finalPrice       = activeDeal?.finalPrice ?? 0;
-  const priceUnit        = commodityObj?.sellingPriceUnit || '—';
-  const finalQty         = activeDeal?.finalQuantity ?? 0;
-  const qtyUnit          = commodityObj?.unit || '—';
-  const totalValue       = activeDeal?.totalValue ?? (finalPrice * finalQty);
-  const tradeType        = commodityObj?.tradeType || '—';
-  const paymentTimeline  = commodityObj?.paymentTimeline || '—';
-  const dealStatus       = activeDeal?.status || 'accepted';
+  const routeItem = route?.params?.item || null;
 
-  const buyerName        = formatParty(activeDeal?.buyerId) || '—';
-  const sellerName       = formatParty(activeDeal?.sellerId) || '—';
-  const location         = commodityObj?.commodityLocation || '—';
+  // Pure API Data Extraction (Dual-Flow Defensive DTO Normalizer for BOTH Requirement & Commodity Deals)
+  const itemObj = 
+    (typeof activeDeal?.requirementId === 'object' && activeDeal?.requirementId) ||
+    (typeof activeDeal?.commodityId === 'object' && activeDeal?.commodityId) ||
+    (typeof activeDeal?.commodity === 'object' && activeDeal?.commodity) ||
+    (typeof activeDeal?.requirement === 'object' && activeDeal?.requirement) ||
+    (typeof routeItem === 'object' && routeItem) ||
+    null;
+
+  // Backward-compatibility alias for downstream document hooks and components
+  const commodityObj = itemObj;
+
+  const commodityName = 
+    (typeof activeDeal?.commodityName === 'string' && activeDeal.commodityName) ||
+    (typeof itemObj?.commodityName === 'string' && itemObj.commodityName) ||
+    (typeof itemObj?.name === 'string' && itemObj.name) ||
+    (typeof itemObj?.commodity === 'string' ? itemObj.commodity : (itemObj?.commodity?.commodityName || itemObj?.commodity?.name)) ||
+    (typeof routeItem?.commodityName === 'string' && routeItem.commodityName) ||
+    (typeof routeItem?.name === 'string' && routeItem.name) ||
+    'Agri Commodity';
+
+  const finalPrice = 
+    activeDeal?.price ?? 
+    activeDeal?.finalPrice ?? 
+    activeDeal?.agreedPrice ?? 
+    activeDeal?.counterPrice ?? 
+    itemObj?.targetPrice ?? 
+    itemObj?.sellingPrice ?? 
+    0;
+
+  const finalQty = 
+    activeDeal?.quantity ?? 
+    activeDeal?.finalQuantity ?? 
+    activeDeal?.agreedQuantity ?? 
+    itemObj?.quantity ?? 
+    0;
+
+  const priceUnit = 
+    activeDeal?.priceUnit || 
+    itemObj?.priceUnit || 
+    itemObj?.sellingPriceUnit || 
+    itemObj?.unit || 
+    activeDeal?.unit || 
+    'Quintal';
+
+  const qtyUnit = 
+    activeDeal?.unit || 
+    activeDeal?.qtyUnit || 
+    itemObj?.unit || 
+    'Quintal';
+
+  const totalValue = activeDeal?.totalValue ?? (finalPrice * finalQty);
+
+  const tradeType = 
+    activeDeal?.tradeType || 
+    itemObj?.tradeType || 
+    'FOR';
+
+  const paymentTimeline = 
+    activeDeal?.paymentTimeline || 
+    itemObj?.paymentTimeline || 
+    'Net 30 Days';
+
+  const dealStatus = activeDeal?.displayStatus || activeDeal?.status || 'accepted';
+
+  const buyerName = formatParty(activeDeal?.buyerId) || 'Verified Buyer';
+  const sellerName = formatParty(activeDeal?.sellerId) || 'Verified Seller';
+
+  const location = 
+    itemObj?.deliveryLocation || 
+    itemObj?.commodityLocation || 
+    itemObj?.location || 
+    activeDeal?.deliveryLocation || 
+    activeDeal?.commodityLocation || 
+    activeDeal?.location || 
+    'Location Not Specified';
 
   const getPartyDetails = (partyObj) => {
     if (!partyObj || typeof partyObj !== 'object') return { name: '—', shop: '' };
@@ -1480,84 +1545,96 @@ export default function DealDetailsScreen({ route, navigation }) {
         animationType="slide"
         onRequestClose={() => setPoModalVisible(false)}
       >
-        <View style={styles.modalScrim}>
-          <TouchableOpacity style={styles.modalBackdropPressable} onPress={() => setPoModalVisible(false)} />
-          <View style={[styles.bottomSheetCard, { paddingBottom: Math.max(insets.bottom + h(16), h(24)) }]}>
-            <View style={styles.handleBar} />
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          style={{ flex: 1 }}
+        >
+          <View style={styles.modalScrim}>
+            <TouchableOpacity style={styles.modalBackdropPressable} onPress={() => setPoModalVisible(false)} />
+            <View style={[styles.bottomSheetCard, { paddingBottom: Math.max(insets.bottom + h(16), h(24)) }]}>
+              <View style={styles.handleBar} />
 
-            <Text style={styles.modalHeadline}>{t('Create Purchase Order')}</Text>
-            <Text style={styles.modalSubHeadline}>
-              {t('Please fill out the required details to generate and send the official Purchase Order to {seller}.').replace('{seller}', sellerName)}
-            </Text>
-
-            <View style={styles.inputGroup}>
-              <Text style={styles.inputLabel}>{t('Required Delivery Date')}</Text>
-              <TextInput
-                style={styles.textInput}
-                placeholder="YYYY-MM-DD"
-                placeholderTextColor={COLORS.textMuted}
-                value={deliveryDate}
-                onChangeText={setDeliveryDate}
-              />
-              <View style={styles.dateShortcutRow}>
-                <TouchableOpacity style={styles.shortcutChip} onPress={() => setDeliveryDate(getFutureDate(3))}>
-                  <Text style={styles.shortcutChipText}>⚡ In 3 Days</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.shortcutChip} onPress={() => setDeliveryDate(getFutureDate(7))}>
-                  <Text style={styles.shortcutChipText}>📅 In 7 Days</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.shortcutChip} onPress={() => setDeliveryDate(getFutureDate(15))}>
-                  <Text style={styles.shortcutChipText}>🗓️ In 15 Days</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-
-            <View style={styles.inputGroup}>
-              <Text style={styles.inputLabel}>{t('Payment Terms')}</Text>
-              <View style={styles.chipRow}>
-                {['Net 30 Days', 'Net 60 Days', 'Due Upon Receipt'].map((term) => (
-                  <TouchableOpacity
-                    key={term}
-                    style={[styles.termChip, paymentTerms === term && { backgroundColor: theme.primary, borderColor: theme.primary }]}
-                    onPress={() => setPaymentTerms(term)}
-                  >
-                    <Text style={[styles.termChipText, paymentTerms === term && { color: COLORS.white }]}>{term}</Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
-            </View>
-
-            <View style={styles.inputGroup}>
-              <Text style={styles.inputLabel}>{t('Special Shipping Instructions')}</Text>
-              <TextInput
-                style={[styles.textInput, styles.textArea]}
-                placeholder={t('e.g. Deliver to Warehouse B via north gate...')}
-                placeholderTextColor={COLORS.textMuted}
-                multiline={true}
-                numberOfLines={3}
-                value={instructions}
-                onChangeText={setInstructions}
-              />
-            </View>
-
-            <View style={styles.modalBtnRow}>
-              <TouchableOpacity style={styles.cancelBtn} onPress={() => setPoModalVisible(false)}>
-                <Text style={styles.cancelBtnText}>{t('Cancel')}</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.submitPoBtn, { backgroundColor: theme.primary }]}
-                onPress={handleCreatePO}
-                disabled={submittingPo}
+              <ScrollView
+                style={{ maxHeight: h(460) }}
+                contentContainerStyle={{ paddingBottom: h(12) }}
+                keyboardShouldPersistTaps="handled"
+                showsVerticalScrollIndicator={false}
               >
-                {submittingPo ? (
-                  <ActivityIndicator size="small" color={COLORS.white} />
-                ) : (
-                  <Text style={styles.submitPoBtnText}>{t('Send PO')}</Text>
-                )}
-              </TouchableOpacity>
+                <Text style={styles.modalHeadline}>{t('Create Purchase Order')}</Text>
+                <Text style={styles.modalSubHeadline}>
+                  {t('Please fill out the required details to generate and send the official Purchase Order to {seller}.').replace('{seller}', sellerName)}
+                </Text>
+
+                <View style={styles.inputGroup}>
+                  <Text style={styles.inputLabel}>{t('Required Delivery Date')}</Text>
+                  <TextInput
+                    style={styles.textInput}
+                    placeholder="YYYY-MM-DD"
+                    placeholderTextColor={COLORS.textMuted}
+                    value={deliveryDate}
+                    onChangeText={setDeliveryDate}
+                  />
+                  <View style={styles.dateShortcutRow}>
+                    <TouchableOpacity style={styles.shortcutChip} onPress={() => setDeliveryDate(getFutureDate(3))}>
+                      <Text style={styles.shortcutChipText}>⚡ In 3 Days</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity style={styles.shortcutChip} onPress={() => setDeliveryDate(getFutureDate(7))}>
+                      <Text style={styles.shortcutChipText}>📅 In 7 Days</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity style={styles.shortcutChip} onPress={() => setDeliveryDate(getFutureDate(15))}>
+                      <Text style={styles.shortcutChipText}>🗓️ In 15 Days</Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+
+                <View style={styles.inputGroup}>
+                  <Text style={styles.inputLabel}>{t('Payment Terms')}</Text>
+                  <View style={styles.chipRow}>
+                    {['Net 30 Days', 'Net 60 Days', 'Due Upon Receipt'].map((term) => (
+                      <TouchableOpacity
+                        key={term}
+                        style={[styles.termChip, paymentTerms === term && { backgroundColor: theme.primary, borderColor: theme.primary }]}
+                        onPress={() => setPaymentTerms(term)}
+                      >
+                        <Text style={[styles.termChipText, paymentTerms === term && { color: COLORS.white }]}>{term}</Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                </View>
+
+                <View style={styles.inputGroup}>
+                  <Text style={styles.inputLabel}>{t('Special Shipping Instructions')}</Text>
+                  <TextInput
+                    style={[styles.textInput, styles.textArea]}
+                    placeholder={t('e.g. Deliver to Warehouse B via north gate...')}
+                    placeholderTextColor={COLORS.textMuted}
+                    multiline={true}
+                    numberOfLines={3}
+                    value={instructions}
+                    onChangeText={setInstructions}
+                  />
+                </View>
+
+                <View style={[styles.modalBtnRow, { marginTop: h(12) }]}>
+                  <TouchableOpacity style={styles.cancelBtn} onPress={() => setPoModalVisible(false)}>
+                    <Text style={styles.cancelBtnText}>{t('Cancel')}</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.submitPoBtn, { backgroundColor: theme.primary }]}
+                    onPress={handleCreatePO}
+                    disabled={submittingPo}
+                  >
+                    {submittingPo ? (
+                      <ActivityIndicator size="small" color={COLORS.white} />
+                    ) : (
+                      <Text style={styles.submitPoBtnText}>{t('Send PO')}</Text>
+                    )}
+                  </TouchableOpacity>
+                </View>
+              </ScrollView>
             </View>
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
 
       {/* Upload Document Modal */}
@@ -1567,75 +1644,87 @@ export default function DealDetailsScreen({ route, navigation }) {
         animationType="slide"
         onRequestClose={() => setUploadModalVisible(false)}
       >
-        <View style={styles.modalScrim}>
-          <TouchableOpacity style={styles.modalBackdropPressable} onPress={() => setUploadModalVisible(false)} />
-          <View style={[styles.bottomSheetCard, { paddingBottom: Math.max(insets.bottom + h(16), h(24)) }]}>
-            <View style={styles.handleBar} />
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          style={{ flex: 1 }}
+        >
+          <View style={styles.modalScrim}>
+            <TouchableOpacity style={styles.modalBackdropPressable} onPress={() => setUploadModalVisible(false)} />
+            <View style={[styles.bottomSheetCard, { paddingBottom: Math.max(insets.bottom + h(16), h(24)) }]}>
+              <View style={styles.handleBar} />
 
-            <Text style={styles.modalHeadline}>{t('Upload Document')}</Text>
-            <Text style={styles.modalSubHeadline}>
-              {t('Enter the document details and pick a file from your device.')}
-            </Text>
-
-            <View style={styles.inputGroup}>
-              <Text style={styles.inputLabel}>{t('Document Type / Title')}</Text>
-              <TextInput
-                style={styles.textInput}
-                placeholder={t('e.g. Tax Invoice, Lorry Receipt, Gate Pass...')}
-                placeholderTextColor={COLORS.textMuted}
-                value={docTitle}
-                onChangeText={setDocTitle}
-              />
-            </View>
-
-            <View style={styles.inputGroup}>
-              <Text style={styles.inputLabel}>{t('Document File')}</Text>
-              <TouchableOpacity
-                style={[styles.cancelBtn, { flexDirection: 'row', gap: w(8), backgroundColor: '#F1F5F9', borderStyle: 'dashed' }]}
-                onPress={async () => {
-                  const pickedFile = await pickDocumentOrImage();
-                  if (pickedFile) {
-                    if (pickedFile.size && pickedFile.size > 10 * 1024 * 1024) {
-                      showAlert({
-                        type: 'warning',
-                        title: t('File Too Large'),
-                        message: t('Document size cannot exceed 10 MB. Selected file: {size} MB.').replace('{size}', (pickedFile.size / 1024 / 1024).toFixed(2)),
-                      });
-                      return;
-                    }
-                    setSelectedFile(pickedFile);
-                  }
-                }}
+              <ScrollView
+                style={{ maxHeight: h(400) }}
+                contentContainerStyle={{ paddingBottom: h(12) }}
+                keyboardShouldPersistTaps="handled"
+                showsVerticalScrollIndicator={false}
               >
-                <Icon name="file-upload-outline" size={18} color={COLORS.text} />
-                <Text style={styles.cancelBtnText}>
-                  {selectedFile ? selectedFile.name : t('Select Document / Image')}
+                <Text style={styles.modalHeadline}>{t('Upload Document')}</Text>
+                <Text style={styles.modalSubHeadline}>
+                  {t('Enter the document details and pick a file from your device.')}
                 </Text>
-              </TouchableOpacity>
-              {selectedFile?.size && (
-                <Text style={{ fontSize: f(11), color: COLORS.textMuted, marginTop: h(4) }}>
-                  {t('File Size')}: {(selectedFile.size / 1024 / 1024).toFixed(2)} MB
-                </Text>
-              )}
-            </View>
 
-            <View style={styles.modalBtnRow}>
-              <TouchableOpacity style={styles.cancelBtn} onPress={() => {
-                setUploadModalVisible(false);
-                setDocTitle('');
-                setSelectedFile(null);
-              }}>
-                <Text style={styles.cancelBtnText}>{t('Cancel')}</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.submitPoBtn, { backgroundColor: theme.primary }]}
-                onPress={handleSaveCustomDocument}
-              >
-                <Text style={styles.submitPoBtnText}>{t('Upload')}</Text>
-              </TouchableOpacity>
+                <View style={styles.inputGroup}>
+                  <Text style={styles.inputLabel}>{t('Document Type / Title')}</Text>
+                  <TextInput
+                    style={styles.textInput}
+                    placeholder={t('e.g. Tax Invoice, Lorry Receipt, Gate Pass...')}
+                    placeholderTextColor={COLORS.textMuted}
+                    value={docTitle}
+                    onChangeText={setDocTitle}
+                  />
+                </View>
+
+                <View style={styles.inputGroup}>
+                  <Text style={styles.inputLabel}>{t('Document File')}</Text>
+                  <TouchableOpacity
+                    style={[styles.cancelBtn, { flexDirection: 'row', gap: w(8), backgroundColor: '#F1F5F9', borderStyle: 'dashed' }]}
+                    onPress={async () => {
+                      const pickedFile = await pickDocumentOrImage();
+                      if (pickedFile) {
+                        if (pickedFile.size && pickedFile.size > 10 * 1024 * 1024) {
+                          showAlert({
+                            type: 'warning',
+                            title: t('File Too Large'),
+                            message: t('Document size cannot exceed 10 MB. Selected file: {size} MB.').replace('{size}', (pickedFile.size / 1024 / 1024).toFixed(2)),
+                          });
+                          return;
+                        }
+                        setSelectedFile(pickedFile);
+                      }
+                    }}
+                  >
+                    <Icon name="file-upload-outline" size={18} color={COLORS.text} />
+                    <Text style={styles.cancelBtnText}>
+                      {selectedFile ? selectedFile.name : t('Select Document / Image')}
+                    </Text>
+                  </TouchableOpacity>
+                  {selectedFile?.size && (
+                    <Text style={{ fontSize: f(11), color: COLORS.textMuted, marginTop: h(4) }}>
+                      {t('File Size')}: {(selectedFile.size / 1024 / 1024).toFixed(2)} MB
+                    </Text>
+                  )}
+                </View>
+
+                <View style={[styles.modalBtnRow, { marginTop: h(12) }]}>
+                  <TouchableOpacity style={styles.cancelBtn} onPress={() => {
+                    setUploadModalVisible(false);
+                    setDocTitle('');
+                    setSelectedFile(null);
+                  }}>
+                    <Text style={styles.cancelBtnText}>{t('Cancel')}</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.submitPoBtn, { backgroundColor: theme.primary }]}
+                    onPress={handleSaveCustomDocument}
+                  >
+                    <Text style={styles.submitPoBtnText}>{t('Upload')}</Text>
+                  </TouchableOpacity>
+                </View>
+              </ScrollView>
             </View>
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
 
       {/* Dispatch Logistics Form Modal */}
@@ -1645,169 +1734,179 @@ export default function DealDetailsScreen({ route, navigation }) {
         animationType="slide"
         onRequestClose={() => setDispatchModalVisible(false)}
       >
-        <View style={styles.modalScrim}>
-          <TouchableOpacity style={styles.modalBackdropPressable} onPress={() => setDispatchModalVisible(false)} />
-          <View style={[styles.bottomSheetCard, { paddingBottom: Math.max(insets.bottom + h(16), h(24)) }]}>
-            <View style={styles.handleBar} />
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          style={{ flex: 1 }}
+        >
+          <View style={styles.modalScrim}>
+            <TouchableOpacity style={styles.modalBackdropPressable} onPress={() => setDispatchModalVisible(false)} />
+            <View style={[styles.bottomSheetCard, { paddingBottom: Math.max(insets.bottom + h(16), h(24)) }]}>
+              <View style={styles.handleBar} />
 
-            <Text style={styles.modalHeadline}>{t('Dispatch Logistics Details')}</Text>
-            <Text style={styles.modalSubHeadline}>
-              {t('Enter vehicle details, transporter information and upload tax invoice to confirm shipment.')}
-            </Text>
-
-            <ScrollView style={{ maxHeight: h(450) }} showsVerticalScrollIndicator={false}>
-              <View style={styles.inputGroup}>
-                <Text style={styles.inputLabel}>{t('Transporter Name *')}</Text>
-                <TextInput
-                  style={styles.textInput}
-                  placeholder={t('e.g. AgriLogistics Pvt Ltd')}
-                  placeholderTextColor={COLORS.textMuted}
-                  value={transporterName}
-                  onChangeText={setTransporterName}
-                />
-              </View>
-
-              <View style={styles.inputGroup}>
-                <Text style={styles.inputLabel}>{t('Vehicle Number *')}</Text>
-                <TextInput
-                  style={styles.textInput}
-                  placeholder={t('e.g. UP80ET1234')}
-                  placeholderTextColor={COLORS.textMuted}
-                  value={vehicleNumber}
-                  onChangeText={setVehicleNumber}
-                  autoCapitalize="characters"
-                />
-              </View>
-
-              <View style={styles.inputGroup}>
-                <Text style={styles.inputLabel}>{t('Lorry Receipt (LR) Number *')}</Text>
-                <TextInput
-                  style={styles.textInput}
-                  placeholder={t('e.g. LR-987213')}
-                  placeholderTextColor={COLORS.textMuted}
-                  value={lrNumber}
-                  onChangeText={setLrNumber}
-                />
-              </View>
-
-              <View style={styles.inputGroup}>
-                <Text style={styles.inputLabel}>{t('Tax Invoice Number')}</Text>
-                <TextInput
-                  style={styles.textInput}
-                  placeholder={t('e.g. INV/2026/089')}
-                  placeholderTextColor={COLORS.textMuted}
-                  value={taxInvoiceNumber}
-                  onChangeText={setTaxInvoiceNumber}
-                />
-              </View>
-
-              <View style={styles.inputGroup}>
-                <Text style={styles.inputLabel}>{t('Upload Tax Invoice Document')}</Text>
-                <TouchableOpacity
-                  style={[styles.cancelBtn, { flexDirection: 'row', gap: w(8), backgroundColor: '#F1F5F9', borderStyle: 'dashed', borderWidth: 1, borderColor: '#CBD5E1' }]}
-                  onPress={async () => {
-                    const pickedFile = await pickDocumentOrImage();
-                    if (pickedFile) {
-                      if (pickedFile.size && pickedFile.size > 10 * 1024 * 1024) {
-                        showAlert({
-                          type: 'warning',
-                          title: t('File Too Large'),
-                          message: t('Document size cannot exceed 10 MB. Selected file: {size} MB.').replace('{size}', (pickedFile.size / 1024 / 1024).toFixed(2)),
-                        });
-                        return;
-                      }
-                      setTaxInvoiceDoc(pickedFile);
-                    }
-                  }}
-                >
-                  <Icon name="file-upload-outline" size={18} color={COLORS.text} />
-                  <Text style={styles.cancelBtnText}>
-                    {taxInvoiceDoc ? taxInvoiceDoc.name : t('Select Invoice File (PDF / Image)')}
-                  </Text>
-                </TouchableOpacity>
-                {taxInvoiceDoc?.size && (
-                  <Text style={{ fontSize: f(11), color: COLORS.textMuted, marginTop: h(4) }}>
-                    {t('File Size')}: {(taxInvoiceDoc.size / 1024 / 1024).toFixed(2)} MB
-                  </Text>
-                )}
-              </View>
-
-              <View style={styles.inputGroup}>
-                <Text style={styles.checklistTitle}>{t('Physical Documents Handed Over')}</Text>
-                
-                <TouchableOpacity 
-                  style={styles.checkboxRow} 
-                  onPress={() => setEwayBillPhysicalSent(!ewayBillPhysicalSent)}
-                >
-                  <View style={[styles.checkboxBox, ewayBillPhysicalSent && { backgroundColor: theme.primary, borderColor: theme.primary }]}>
-                    {ewayBillPhysicalSent && <Icon name="check" size={14} color={COLORS.white} />}
-                  </View>
-                  <Text style={styles.checkboxLabel}>{t('E-Way Bill Physical Copy')}</Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity 
-                  style={styles.checkboxRow} 
-                  onPress={() => setTaxInvoicePhysicalSent(!taxInvoicePhysicalSent)}
-                >
-                  <View style={[styles.checkboxBox, taxInvoicePhysicalSent && { backgroundColor: theme.primary, borderColor: theme.primary }]}>
-                    {taxInvoicePhysicalSent && <Icon name="check" size={14} color={COLORS.white} />}
-                  </View>
-                  <Text style={styles.checkboxLabel}>{t('Tax Invoice Physical Copy')}</Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity 
-                  style={styles.checkboxRow} 
-                  onPress={() => setWeighBillPhysicalSent(!weighBillPhysicalSent)}
-                >
-                  <View style={[styles.checkboxBox, weighBillPhysicalSent && { backgroundColor: theme.primary, borderColor: theme.primary }]}>
-                    {weighBillPhysicalSent && <Icon name="check" size={14} color={COLORS.white} />}
-                  </View>
-                  <Text style={styles.checkboxLabel}>{t('Weigh Bridge Slip Physical Copy')}</Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity 
-                  style={styles.checkboxRow} 
-                  onPress={() => setOtherDocsPhysicalSent(!otherDocsPhysicalSent)}
-                >
-                  <View style={[styles.checkboxBox, otherDocsPhysicalSent && { backgroundColor: theme.primary, borderColor: theme.primary }]}>
-                    {otherDocsPhysicalSent && <Icon name="check" size={14} color={COLORS.white} />}
-                  </View>
-                  <Text style={styles.checkboxLabel}>{t('Other Transport Documents')}</Text>
-                </TouchableOpacity>
-              </View>
-
-              <View style={styles.inputGroup}>
-                <Text style={styles.inputLabel}>{t('Remarks')}</Text>
-                <TextInput
-                  style={[styles.textInput, styles.textArea]}
-                  placeholder={t('Add logistics remarks or transporter contact info...')}
-                  placeholderTextColor={COLORS.textMuted}
-                  multiline={true}
-                  numberOfLines={2}
-                  value={dispatchRemarks}
-                  onChangeText={setDispatchRemarks}
-                />
-              </View>
-            </ScrollView>
-
-            <View style={styles.modalBtnRow}>
-              <TouchableOpacity style={styles.cancelBtn} onPress={() => setDispatchModalVisible(false)}>
-                <Text style={styles.cancelBtnText}>{t('Cancel')}</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.submitPoBtn, { backgroundColor: theme.primary }]}
-                onPress={submitDispatch}
-                disabled={dispatching}
+              <ScrollView
+                style={{ maxHeight: h(460) }}
+                contentContainerStyle={{ paddingBottom: h(12) }}
+                keyboardShouldPersistTaps="handled"
+                showsVerticalScrollIndicator={false}
               >
-                {dispatching ? (
-                  <ActivityIndicator size="small" color={COLORS.white} />
-                ) : (
-                  <Text style={styles.submitPoBtnText}>{t('Submit Dispatch')}</Text>
-                )}
-              </TouchableOpacity>
+                <Text style={styles.modalHeadline}>{t('Dispatch Logistics Details')}</Text>
+                <Text style={styles.modalSubHeadline}>
+                  {t('Enter vehicle details, transporter information and upload tax invoice to confirm shipment.')}
+                </Text>
+
+                <View style={styles.inputGroup}>
+                  <Text style={styles.inputLabel}>{t('Transporter Name *')}</Text>
+                  <TextInput
+                    style={styles.textInput}
+                    placeholder={t('e.g. AgriLogistics Pvt Ltd')}
+                    placeholderTextColor={COLORS.textMuted}
+                    value={transporterName}
+                    onChangeText={setTransporterName}
+                  />
+                </View>
+
+                <View style={styles.inputGroup}>
+                  <Text style={styles.inputLabel}>{t('Vehicle Number *')}</Text>
+                  <TextInput
+                    style={styles.textInput}
+                    placeholder={t('e.g. UP80ET1234')}
+                    placeholderTextColor={COLORS.textMuted}
+                    value={vehicleNumber}
+                    onChangeText={setVehicleNumber}
+                    autoCapitalize="characters"
+                  />
+                </View>
+
+                <View style={styles.inputGroup}>
+                  <Text style={styles.inputLabel}>{t('Lorry Receipt (LR) Number *')}</Text>
+                  <TextInput
+                    style={styles.textInput}
+                    placeholder={t('e.g. LR-987213')}
+                    placeholderTextColor={COLORS.textMuted}
+                    value={lrNumber}
+                    onChangeText={setLrNumber}
+                  />
+                </View>
+
+                <View style={styles.inputGroup}>
+                  <Text style={styles.inputLabel}>{t('Tax Invoice Number')}</Text>
+                  <TextInput
+                    style={styles.textInput}
+                    placeholder={t('e.g. INV/2026/089')}
+                    placeholderTextColor={COLORS.textMuted}
+                    value={taxInvoiceNumber}
+                    onChangeText={setTaxInvoiceNumber}
+                  />
+                </View>
+
+                <View style={styles.inputGroup}>
+                  <Text style={styles.inputLabel}>{t('Upload Tax Invoice Document')}</Text>
+                  <TouchableOpacity
+                    style={[styles.cancelBtn, { flexDirection: 'row', gap: w(8), backgroundColor: '#F1F5F9', borderStyle: 'dashed', borderWidth: 1, borderColor: '#CBD5E1' }]}
+                    onPress={async () => {
+                      const pickedFile = await pickDocumentOrImage();
+                      if (pickedFile) {
+                        if (pickedFile.size && pickedFile.size > 10 * 1024 * 1024) {
+                          showAlert({
+                            type: 'warning',
+                            title: t('File Too Large'),
+                            message: t('Document size cannot exceed 10 MB. Selected file: {size} MB.').replace('{size}', (pickedFile.size / 1024 / 1024).toFixed(2)),
+                          });
+                          return;
+                        }
+                        setTaxInvoiceDoc(pickedFile);
+                      }
+                    }}
+                  >
+                    <Icon name="file-upload-outline" size={18} color={COLORS.text} />
+                    <Text style={styles.cancelBtnText}>
+                      {taxInvoiceDoc ? taxInvoiceDoc.name : t('Select Invoice File (PDF / Image)')}
+                    </Text>
+                  </TouchableOpacity>
+                  {taxInvoiceDoc?.size && (
+                    <Text style={{ fontSize: f(11), color: COLORS.textMuted, marginTop: h(4) }}>
+                      {t('File Size')}: {(taxInvoiceDoc.size / 1024 / 1024).toFixed(2)} MB
+                    </Text>
+                  )}
+                </View>
+
+                <View style={styles.inputGroup}>
+                  <Text style={styles.checklistTitle}>{t('Physical Documents Handed Over')}</Text>
+                  
+                  <TouchableOpacity 
+                    style={styles.checkboxRow} 
+                    onPress={() => setEwayBillPhysicalSent(!ewayBillPhysicalSent)}
+                  >
+                    <View style={[styles.checkboxBox, ewayBillPhysicalSent && { backgroundColor: theme.primary, borderColor: theme.primary }]}>
+                      {ewayBillPhysicalSent && <Icon name="check" size={14} color={COLORS.white} />}
+                    </View>
+                    <Text style={styles.checkboxLabel}>{t('E-Way Bill Physical Copy')}</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity 
+                    style={styles.checkboxRow} 
+                    onPress={() => setTaxInvoicePhysicalSent(!taxInvoicePhysicalSent)}
+                  >
+                    <View style={[styles.checkboxBox, taxInvoicePhysicalSent && { backgroundColor: theme.primary, borderColor: theme.primary }]}>
+                      {taxInvoicePhysicalSent && <Icon name="check" size={14} color={COLORS.white} />}
+                    </View>
+                    <Text style={styles.checkboxLabel}>{t('Tax Invoice Physical Copy')}</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity 
+                    style={styles.checkboxRow} 
+                    onPress={() => setWeighBillPhysicalSent(!weighBillPhysicalSent)}
+                  >
+                    <View style={[styles.checkboxBox, weighBillPhysicalSent && { backgroundColor: theme.primary, borderColor: theme.primary }]}>
+                      {weighBillPhysicalSent && <Icon name="check" size={14} color={COLORS.white} />}
+                    </View>
+                    <Text style={styles.checkboxLabel}>{t('Weigh Bridge Slip Physical Copy')}</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity 
+                    style={styles.checkboxRow} 
+                    onPress={() => setOtherDocsPhysicalSent(!otherDocsPhysicalSent)}
+                  >
+                    <View style={[styles.checkboxBox, otherDocsPhysicalSent && { backgroundColor: theme.primary, borderColor: theme.primary }]}>
+                      {otherDocsPhysicalSent && <Icon name="check" size={14} color={COLORS.white} />}
+                    </View>
+                    <Text style={styles.checkboxLabel}>{t('Other Transport Documents')}</Text>
+                  </TouchableOpacity>
+                </View>
+
+                <View style={styles.inputGroup}>
+                  <Text style={styles.inputLabel}>{t('Remarks')}</Text>
+                  <TextInput
+                    style={[styles.textInput, styles.textArea]}
+                    placeholder={t('Add logistics remarks or transporter contact info...')}
+                    placeholderTextColor={COLORS.textMuted}
+                    multiline={true}
+                    numberOfLines={2}
+                    value={dispatchRemarks}
+                    onChangeText={setDispatchRemarks}
+                  />
+                </View>
+
+                <View style={[styles.modalBtnRow, { marginTop: h(12) }]}>
+                  <TouchableOpacity style={styles.cancelBtn} onPress={() => setDispatchModalVisible(false)}>
+                    <Text style={styles.cancelBtnText}>{t('Cancel')}</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.submitPoBtn, { backgroundColor: theme.primary }]}
+                    onPress={submitDispatch}
+                    disabled={dispatching}
+                  >
+                    {dispatching ? (
+                      <ActivityIndicator size="small" color={COLORS.white} />
+                    ) : (
+                      <Text style={styles.submitPoBtnText}>{t('Submit Dispatch')}</Text>
+                    )}
+                  </TouchableOpacity>
+                </View>
+              </ScrollView>
             </View>
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
 
       {/* Goods Receipt (Confirm Delivery) Modal */}
@@ -1817,95 +1916,105 @@ export default function DealDetailsScreen({ route, navigation }) {
         animationType="slide"
         onRequestClose={() => setGoodsReceiptModalVisible(false)}
       >
-        <View style={styles.modalScrim}>
-          <TouchableOpacity style={styles.modalBackdropPressable} onPress={() => setGoodsReceiptModalVisible(false)} />
-          <View style={[styles.bottomSheetCard, { paddingBottom: Math.max(insets.bottom + h(16), h(24)) }]}>
-            <View style={styles.handleBar} />
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          style={{ flex: 1 }}
+        >
+          <View style={styles.modalScrim}>
+            <TouchableOpacity style={styles.modalBackdropPressable} onPress={() => setGoodsReceiptModalVisible(false)} />
+            <View style={[styles.bottomSheetCard, { paddingBottom: Math.max(insets.bottom + h(16), h(24)) }]}>
+              <View style={styles.handleBar} />
 
-            <Text style={styles.modalHeadline}>{t('Goods Receipt (GRN)')}</Text>
-            <Text style={styles.modalSubHeadline}>
-              {t('Confirm the physical received weight/quantity and document checkmarks at mandi/warehouse.')}
-            </Text>
-
-            <ScrollView style={{ maxHeight: h(400) }} showsVerticalScrollIndicator={false}>
-              <View style={styles.inputGroup}>
-                <Text style={styles.inputLabel}>{t('Received Quantity ({unit}) *').replace('{unit}', qtyUnit)}</Text>
-                <TextInput
-                  style={styles.textInput}
-                  keyboardType="numeric"
-                  placeholder={t('e.g. {qty}').replace('{qty}', finalQty)}
-                  placeholderTextColor={COLORS.textMuted}
-                  value={receivedQuantity}
-                  onChangeText={setReceivedQuantity}
-                />
-              </View>
-
-              <View style={styles.inputGroup}>
-                <Text style={styles.checklistTitle}>{t('Documents Collected Checklist')}</Text>
-                
-                <TouchableOpacity 
-                  style={styles.checkboxRow} 
-                  onPress={() => setWeighBridgeSlipCollected(!weighBridgeSlipCollected)}
-                >
-                  <View style={[styles.checkboxBox, weighBridgeSlipCollected && { backgroundColor: theme.primary, borderColor: theme.primary }]}>
-                    {weighBridgeSlipCollected && <Icon name="check" size={14} color={COLORS.white} />}
-                  </View>
-                  <Text style={styles.checkboxLabel}>{t('Weigh Bridge Slip Collected')}</Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity 
-                  style={styles.checkboxRow} 
-                  onPress={() => setTaxInvoiceCollected(!taxInvoiceCollected)}
-                >
-                  <View style={[styles.checkboxBox, taxInvoiceCollected && { backgroundColor: theme.primary, borderColor: theme.primary }]}>
-                    {taxInvoiceCollected && <Icon name="check" size={14} color={COLORS.white} />}
-                  </View>
-                  <Text style={styles.checkboxLabel}>{t('Tax Invoice Copy Collected')}</Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity 
-                  style={styles.checkboxRow} 
-                  onPress={() => setLorryReceiptCollected(!lorryReceiptCollected)}
-                >
-                  <View style={[styles.checkboxBox, lorryReceiptCollected && { backgroundColor: theme.primary, borderColor: theme.primary }]}>
-                    {lorryReceiptCollected && <Icon name="check" size={14} color={COLORS.white} />}
-                  </View>
-                  <Text style={styles.checkboxLabel}>{t('Lorry Receipt Copy Collected')}</Text>
-                </TouchableOpacity>
-              </View>
-
-              <View style={styles.inputGroup}>
-                <Text style={styles.inputLabel}>{t('Buyer Remarks / Variance Notes')}</Text>
-                <TextInput
-                  style={[styles.textInput, styles.textArea]}
-                  placeholder={t('e.g. Received exactly as dispatched / Note 50kg transit moisture variance...')}
-                  placeholderTextColor={COLORS.textMuted}
-                  multiline={true}
-                  numberOfLines={2}
-                  value={buyerRemarks}
-                  onChangeText={setBuyerRemarks}
-                />
-              </View>
-            </ScrollView>
-
-            <View style={styles.modalBtnRow}>
-              <TouchableOpacity style={styles.cancelBtn} onPress={() => setGoodsReceiptModalVisible(false)}>
-                <Text style={styles.cancelBtnText}>{t('Cancel')}</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.submitPoBtn, { backgroundColor: theme.primary }]}
-                onPress={submitGoodsReceipt}
-                disabled={dispatching}
+              <ScrollView
+                style={{ maxHeight: h(420) }}
+                contentContainerStyle={{ paddingBottom: h(12) }}
+                keyboardShouldPersistTaps="handled"
+                showsVerticalScrollIndicator={false}
               >
-                {dispatching ? (
-                  <ActivityIndicator size="small" color={COLORS.white} />
-                ) : (
-                  <Text style={styles.submitPoBtnText}>{t('Confirm Delivery')}</Text>
-                )}
-              </TouchableOpacity>
+                <Text style={styles.modalHeadline}>{t('Goods Receipt (GRN)')}</Text>
+                <Text style={styles.modalSubHeadline}>
+                  {t('Confirm the physical received weight/quantity and document checkmarks at mandi/warehouse.')}
+                </Text>
+
+                <View style={styles.inputGroup}>
+                  <Text style={styles.inputLabel}>{t('Received Quantity ({unit}) *').replace('{unit}', qtyUnit)}</Text>
+                  <TextInput
+                    style={styles.textInput}
+                    keyboardType="numeric"
+                    placeholder={t('e.g. {qty}').replace('{qty}', finalQty)}
+                    placeholderTextColor={COLORS.textMuted}
+                    value={receivedQuantity}
+                    onChangeText={setReceivedQuantity}
+                  />
+                </View>
+
+                <View style={styles.inputGroup}>
+                  <Text style={styles.checklistTitle}>{t('Documents Collected Checklist')}</Text>
+                  
+                  <TouchableOpacity 
+                    style={styles.checkboxRow} 
+                    onPress={() => setWeighBridgeSlipCollected(!weighBridgeSlipCollected)}
+                  >
+                    <View style={[styles.checkboxBox, weighBridgeSlipCollected && { backgroundColor: theme.primary, borderColor: theme.primary }]}>
+                      {weighBridgeSlipCollected && <Icon name="check" size={14} color={COLORS.white} />}
+                    </View>
+                    <Text style={styles.checkboxLabel}>{t('Weigh Bridge Slip Collected')}</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity 
+                    style={styles.checkboxRow} 
+                    onPress={() => setTaxInvoiceCollected(!taxInvoiceCollected)}
+                  >
+                    <View style={[styles.checkboxBox, taxInvoiceCollected && { backgroundColor: theme.primary, borderColor: theme.primary }]}>
+                      {taxInvoiceCollected && <Icon name="check" size={14} color={COLORS.white} />}
+                    </View>
+                    <Text style={styles.checkboxLabel}>{t('Tax Invoice Copy Collected')}</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity 
+                    style={styles.checkboxRow} 
+                    onPress={() => setLorryReceiptCollected(!lorryReceiptCollected)}
+                  >
+                    <View style={[styles.checkboxBox, lorryReceiptCollected && { backgroundColor: theme.primary, borderColor: theme.primary }]}>
+                      {lorryReceiptCollected && <Icon name="check" size={14} color={COLORS.white} />}
+                    </View>
+                    <Text style={styles.checkboxLabel}>{t('Lorry Receipt Copy Collected')}</Text>
+                  </TouchableOpacity>
+                </View>
+
+                <View style={styles.inputGroup}>
+                  <Text style={styles.inputLabel}>{t('Buyer Remarks / Variance Notes')}</Text>
+                  <TextInput
+                    style={[styles.textInput, styles.textArea]}
+                    placeholder={t('e.g. Received exactly as dispatched / Note 50kg transit moisture variance...')}
+                    placeholderTextColor={COLORS.textMuted}
+                    multiline={true}
+                    numberOfLines={2}
+                    value={buyerRemarks}
+                    onChangeText={setBuyerRemarks}
+                  />
+                </View>
+
+                <View style={[styles.modalBtnRow, { marginTop: h(12) }]}>
+                  <TouchableOpacity style={styles.cancelBtn} onPress={() => setGoodsReceiptModalVisible(false)}>
+                    <Text style={styles.cancelBtnText}>{t('Cancel')}</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.submitPoBtn, { backgroundColor: theme.primary }]}
+                    onPress={submitGoodsReceipt}
+                    disabled={dispatching}
+                  >
+                    {dispatching ? (
+                      <ActivityIndicator size="small" color={COLORS.white} />
+                    ) : (
+                      <Text style={styles.submitPoBtnText}>{t('Confirm Delivery')}</Text>
+                    )}
+                  </TouchableOpacity>
+                </View>
+              </ScrollView>
             </View>
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
     </SafeScreen>
   );

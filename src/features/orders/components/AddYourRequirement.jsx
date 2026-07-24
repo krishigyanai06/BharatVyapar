@@ -14,62 +14,124 @@ import {
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import DatePicker from 'react-native-date-picker';
 
-const UNITS = ['Ton', 'Quintal', 'Kg'];
+const UNITS = ['Quintal', 'MT', 'Kg', 'Ton'];
+const PRICE_UNITS = ['per Quintal', 'per MT', 'per Kg', 'per Ton'];
+const TRADE_TYPES = ['FOR', 'EX-Warehouse'];
+const PAYMENT_TIMELINES = ['Immediate', '7 Days', '15 Days', 'Advance'];
 
 const DEFAULT_THEME = {
   primary: '#2E7D32',
   secondary: '#4CAF50',
   light: '#E8F5E9',
   text: '#1B5E20',
+  accent: '#E91E63',
 };
 
 export default function AddYourRequirement({ visible, onClose, onSubmit, theme }) {
   const activeTheme = theme || DEFAULT_THEME;
 
-  const [commodity, setCommodity] = useState('');
+  // Form State matching POST /api/buyer-requirement DTO
+  const [commodityName, setCommodityName] = useState('');
+  const [type, setType] = useState('');
   const [quantity, setQuantity] = useState('');
   const [unit, setUnit] = useState('Quintal');
-  const [expectedPrice, setExpectedPrice] = useState('');
-  const [location, setLocation] = useState('');
+  const [targetPrice, setTargetPrice] = useState('');
+  const [priceUnit, setPriceUnit] = useState('per Quintal');
+  const [tradeType, setTradeType] = useState('FOR');
+  const [deliveryLocation, setDeliveryLocation] = useState('');
+  const [paymentTimeline, setPaymentTimeline] = useState('Immediate');
+  const [remarks, setRemarks] = useState('');
+
+  // Optional Quality/Date Specs
   const [grade, setGrade] = useState('');
   const [moisture, setMoisture] = useState('');
   const [harvestYear, setHarvestYear] = useState('');
   const [deliveryDate, setDeliveryDate] = useState('');
-  const [remarks, setRemarks] = useState('');
+
+  // UI & Validation State
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [focusedField, setFocusedField] = useState(null);
+  const [errors, setErrors] = useState({});
   const [isHarvestPickerOpen, setIsHarvestPickerOpen] = useState(false);
   const [isDeliveryPickerOpen, setIsDeliveryPickerOpen] = useState(false);
 
+  const clearError = (field) => {
+    if (errors[field]) {
+      setErrors((prev) => {
+        const updated = { ...prev };
+        delete updated[field];
+        return updated;
+      });
+    }
+  };
+
+  const validateForm = () => {
+    const newErrors = {};
+
+    if (!commodityName || !commodityName.trim()) {
+      newErrors.commodityName = 'Commodity name is required';
+    }
+
+    if (!quantity || isNaN(Number(quantity)) || Number(quantity) <= 0) {
+      newErrors.quantity = 'Valid quantity is required';
+    }
+
+    if (!unit) {
+      newErrors.unit = 'Unit is required';
+    }
+
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  };
+
   const resetForm = () => {
-    setCommodity('');
+    setCommodityName('');
+    setType('');
     setQuantity('');
     setUnit('Quintal');
-    setExpectedPrice('');
-    setLocation('');
+    setTargetPrice('');
+    setPriceUnit('per Quintal');
+    setTradeType('FOR');
+    setDeliveryLocation('');
+    setPaymentTimeline('Immediate');
+    setRemarks('');
     setGrade('');
     setMoisture('');
     setHarvestYear('');
     setDeliveryDate('');
-    setRemarks('');
+    setErrors({});
   };
 
   const handleSubmit = async () => {
-    if (!commodity.trim() || !quantity || !expectedPrice || !location.trim()) return;
+    const isValid = validateForm();
+    if (!isValid) return;
+
     setIsSubmitting(true);
     try {
-      await onSubmit({
-        commodity,
+      const payload = {
+        // Primary DTO keys for POST /api/buyer-requirement
+        commodityName: commodityName.trim(),
+        type: type.trim() || undefined,
         quantity: Number(quantity),
         unit,
-        expectedPrice: Number(expectedPrice),
-        location,
-        grade,
-        moisture,
-        harvestYear,
-        deliveryDate,
-        remarks,
-      });
+        targetPrice: targetPrice ? Number(targetPrice) : undefined,
+        priceUnit,
+        tradeType,
+        deliveryLocation: deliveryLocation.trim() || undefined,
+        paymentTimeline,
+        remarks: remarks.trim() || undefined,
+
+        // Backward compatibility keys for existing caller screens
+        commodity: commodityName.trim(),
+        expectedPrice: targetPrice ? Number(targetPrice) : 0,
+        location: deliveryLocation.trim(),
+        grade: grade.trim() || undefined,
+        moisture: moisture.trim() || undefined,
+        harvestYear: harvestYear || undefined,
+        deliveryDate: deliveryDate || undefined,
+      };
+
+      await onSubmit(payload);
       resetForm();
       onClose();
     } catch (e) {
@@ -80,14 +142,19 @@ export default function AddYourRequirement({ visible, onClose, onSubmit, theme }
   };
 
   const handleClose = () => {
-    if (!isSubmitting) onClose();
+    if (!isSubmitting) {
+      resetForm();
+      onClose();
+    }
   };
-
-  const isFormValid = !!(commodity.trim() && quantity && expectedPrice && location.trim());
 
   const getInputStyle = (field) => [
     styles.input,
-    focusedField === field && { borderColor: activeTheme.primary, backgroundColor: '#FAFFFE' },
+    errors[field] && styles.inputError,
+    focusedField === field && {
+      borderColor: errors[field] ? '#EF4444' : activeTheme.primary,
+      backgroundColor: errors[field] ? '#FEF2F2' : '#FAFFFE',
+    },
   ];
 
   return (
@@ -99,16 +166,22 @@ export default function AddYourRequirement({ visible, onClose, onSubmit, theme }
         <View style={styles.sheet}>
           <View style={styles.dragHandle} />
 
-          <View style={[styles.header, { borderBottomColor: activeTheme.primary + '20' }]}>
-            <View style={[styles.headerIcon, { backgroundColor: activeTheme.primary + '15' }]}>
-              <Icon name="clipboard-text-outline" size={20} color={activeTheme.primary} />
+          {/* Header */}
+          <View style={[styles.header, { borderBottomColor: activeTheme.primary + '18' }]}>
+            <View style={[styles.headerIcon, { backgroundColor: activeTheme.primary + '12' }]}>
+              <Icon name="tag-heart-outline" size={20} color={activeTheme.primary} />
             </View>
             <View style={styles.headerTextBlock}>
-              <Text style={styles.title}>Post Requirement</Text>
-              <Text style={styles.subtitle}>Tell sellers what you are looking for</Text>
+              <View style={styles.headerTitleRow}>
+                <Text style={styles.title}>Add Buyer Requirement</Text>
+                <View style={[styles.badgePill, { backgroundColor: activeTheme.primary + '15' }]}>
+                  <Text style={[styles.badgeText, { color: activeTheme.primary }]}>BUYER</Text>
+                </View>
+              </View>
+              <Text style={styles.subtitle}>Post requirement to connect with verified sellers</Text>
             </View>
             <TouchableOpacity onPress={handleClose} disabled={isSubmitting} style={styles.closeBtn}>
-              <Icon name="close" size={20} color="#64748B" />
+              <Icon name="close" size={18} color="#64748B" />
             </TouchableOpacity>
           </View>
 
@@ -117,199 +190,408 @@ export default function AddYourRequirement({ visible, onClose, onSubmit, theme }
             keyboardShouldPersistTaps="handled"
             contentContainerStyle={styles.body}
           >
-            <Text style={[styles.sectionLabel, { color: activeTheme.primary }]}>
-              Commodity Details
-            </Text>
+            {/* SECTION 1: COMMODITY DETAILS */}
+            <View style={styles.cardSection}>
+              <View style={styles.sectionHeaderRow}>
+                <Icon name="grain" size={16} color={activeTheme.primary} />
+                <Text style={[styles.sectionLabel, { color: activeTheme.primary }]}>
+                  Commodity Details <Text style={styles.requiredStar}>*</Text>
+                </Text>
+              </View>
 
-            <View style={styles.fieldWrapper}>
-              <Icon name="grain" size={16} color="#94A3B8" style={styles.fieldIcon} />
-              <TextInput
-                style={getInputStyle('commodity')}
-                placeholder="Commodity (Wheat, Rice, Soybean...)"
-                value={commodity}
-                onChangeText={setCommodity}
-                placeholderTextColor="#94A3B8"
-                onFocus={() => setFocusedField('commodity')}
-                onBlur={() => setFocusedField(null)}
-              />
+              {/* Commodity Name */}
+              <View style={styles.fieldBlock}>
+                <Text style={styles.fieldLabel}>
+                  Commodity Name <Text style={styles.requiredStar}>*</Text>
+                </Text>
+                <View style={styles.fieldWrapper}>
+                  <Icon
+                    name="store-outline"
+                    size={16}
+                    color={errors.commodityName ? '#EF4444' : '#64748B'}
+                    style={styles.fieldIcon}
+                  />
+                  <TextInput
+                    style={getInputStyle('commodityName')}
+                    placeholder="e.g. Wheat, Soybean"
+                    value={commodityName}
+                    onChangeText={(val) => {
+                      setCommodityName(val);
+                      clearError('commodityName');
+                    }}
+                    placeholderTextColor="#94A3B8"
+                    onFocus={() => setFocusedField('commodityName')}
+                    onBlur={() => setFocusedField(null)}
+                    includeFontPadding={false}
+                    textAlignVertical="center"
+                  />
+                </View>
+                {errors.commodityName && (
+                  <Text style={styles.errorText}>{errors.commodityName}</Text>
+                )}
+              </View>
+
+              {/* Variety / Type */}
+              <View style={styles.fieldBlock}>
+                <Text style={styles.fieldLabel}>Variety / Type (Optional)</Text>
+                <View style={styles.fieldWrapper}>
+                  <Icon name="format-list-bulleted-type" size={16} color="#64748B" style={styles.fieldIcon} />
+                  <TextInput
+                    style={getInputStyle('type')}
+                    placeholder="e.g. Sharbati, Lok-1"
+                    value={type}
+                    onChangeText={setType}
+                    placeholderTextColor="#94A3B8"
+                    onFocus={() => setFocusedField('type')}
+                    onBlur={() => setFocusedField(null)}
+                    includeFontPadding={false}
+                    textAlignVertical="center"
+                  />
+                </View>
+              </View>
+
+              {/* Quantity & Unit Row */}
+              <View style={styles.fieldBlock}>
+                <Text style={styles.fieldLabel}>
+                  Quantity & Unit <Text style={styles.requiredStar}>*</Text>
+                </Text>
+                <View style={styles.fieldWrapper}>
+                  <TextInput
+                    style={[getInputStyle('quantity'), styles.noIconInput]}
+                    placeholder="e.g. 100"
+                    keyboardType="numeric"
+                    value={quantity}
+                    onChangeText={(val) => {
+                      setQuantity(val);
+                      clearError('quantity');
+                    }}
+                    placeholderTextColor="#94A3B8"
+                    onFocus={() => setFocusedField('quantity')}
+                    onBlur={() => setFocusedField(null)}
+                    includeFontPadding={false}
+                    textAlignVertical="center"
+                  />
+                </View>
+                {errors.quantity && <Text style={styles.errorText}>{errors.quantity}</Text>}
+              </View>
+
+              {/* Unit Selector Pills */}
+              <View style={styles.unitBlock}>
+                <Text style={styles.subFieldLabel}>Select Unit</Text>
+                <View style={styles.unitRow}>
+                  {UNITS.map((u) => {
+                    const selected = unit === u;
+                    return (
+                      <TouchableOpacity
+                        key={u}
+                        onPress={() => {
+                          setUnit(u);
+                          clearError('unit');
+                          setPriceUnit(`per ${u}`);
+                        }}
+                        activeOpacity={0.75}
+                        style={[
+                          styles.unitChip,
+                          selected
+                            ? { backgroundColor: activeTheme.primary, borderColor: activeTheme.primary }
+                            : { backgroundColor: '#F8FAFC', borderColor: '#E2E8F0' },
+                        ]}
+                      >
+                        <Text
+                          style={[
+                            styles.unitChipText,
+                            { color: selected ? '#FFFFFF' : '#475569' },
+                          ]}
+                        >
+                          {u}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+                {errors.unit && <Text style={styles.errorText}>{errors.unit}</Text>}
+              </View>
             </View>
 
-            <View style={styles.fieldWrapper}>
-              <Icon name="scale" size={16} color="#94A3B8" style={styles.fieldIcon} />
-              <TextInput
-                style={getInputStyle('quantity')}
-                placeholder="Quantity"
-                keyboardType="numeric"
-                value={quantity}
-                onChangeText={setQuantity}
-                placeholderTextColor="#94A3B8"
-                onFocus={() => setFocusedField('quantity')}
-                onBlur={() => setFocusedField(null)}
-              />
+            {/* SECTION 2: COMMERCIALS & TRADE TERMS */}
+            <View style={styles.cardSection}>
+              <View style={styles.sectionHeaderRow}>
+                <Icon name="currency-inr" size={16} color={activeTheme.primary} />
+                <Text style={[styles.sectionLabel, { color: activeTheme.primary }]}>
+                  Pricing & Trade Terms
+                </Text>
+              </View>
+
+              <View style={styles.twoCol}>
+                {/* Target Price */}
+                <View style={[styles.fieldBlock, { flex: 1.2, marginRight: 8 }]}>
+                  <Text style={styles.fieldLabel}>Target Price (₹)</Text>
+                  <View style={styles.fieldWrapper}>
+                    <Icon name="cash-multiple" size={16} color="#64748B" style={styles.fieldIcon} />
+                    <TextInput
+                      style={getInputStyle('targetPrice')}
+                      placeholder="e.g. 2400"
+                      keyboardType="numeric"
+                      value={targetPrice}
+                      onChangeText={setTargetPrice}
+                      placeholderTextColor="#94A3B8"
+                      onFocus={() => setFocusedField('targetPrice')}
+                      onBlur={() => setFocusedField(null)}
+                      includeFontPadding={false}
+                      textAlignVertical="center"
+                    />
+                  </View>
+                </View>
+
+                {/* Price Basis */}
+                <View style={[styles.fieldBlock, { flex: 1 }]}>
+                  <Text style={styles.fieldLabel}>Price Basis</Text>
+                  <TouchableOpacity
+                    style={[styles.input, styles.dropdownSelectBtn]}
+                    onPress={() => {
+                      const idx = PRICE_UNITS.indexOf(priceUnit);
+                      const nextIdx = (idx + 1) % PRICE_UNITS.length;
+                      setPriceUnit(PRICE_UNITS[nextIdx]);
+                    }}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={styles.dropdownSelectText}>{priceUnit}</Text>
+                    <Icon name="chevron-down" size={14} color="#64748B" />
+                  </TouchableOpacity>
+                </View>
+              </View>
+
+              {/* Trade Type Pills (FOR vs EX-Warehouse) */}
+              <View style={styles.unitBlock}>
+                <Text style={styles.subFieldLabel}>Trade Type</Text>
+                <View style={styles.unitRow}>
+                  {TRADE_TYPES.map((typeOption) => {
+                    const sel = tradeType === typeOption;
+                    return (
+                      <TouchableOpacity
+                        key={typeOption}
+                        onPress={() => setTradeType(typeOption)}
+                        activeOpacity={0.75}
+                        style={[
+                          styles.unitChip,
+                          sel
+                            ? { backgroundColor: '#1E293B', borderColor: '#1E293B' }
+                            : { backgroundColor: '#F8FAFC', borderColor: '#CBD5E1' },
+                        ]}
+                      >
+                        <Icon
+                          name={typeOption === 'FOR' ? 'truck-fast-outline' : 'warehouse'}
+                          size={13}
+                          color={sel ? '#FFFFFF' : '#64748B'}
+                          style={{ marginRight: 4 }}
+                        />
+                        <Text style={[styles.unitChipText, { color: sel ? '#FFFFFF' : '#475569' }]}>
+                          {typeOption}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              </View>
             </View>
 
-            <View style={styles.unitBlock}>
-              <Text style={styles.unitLabel}>Unit</Text>
-              <View style={styles.unitRow}>
-                {UNITS.map((u) => {
-                  const sel = unit === u;
-                  return (
-                    <TouchableOpacity
-                      key={u}
-                      onPress={() => setUnit(u)}
-                      activeOpacity={0.75}
+            {/* SECTION 3: LOGISTICS & PAYMENT */}
+            <View style={styles.cardSection}>
+              <View style={styles.sectionHeaderRow}>
+                <Icon name="truck-delivery-outline" size={16} color={activeTheme.primary} />
+                <Text style={[styles.sectionLabel, { color: activeTheme.primary }]}>
+                  Logistics & Payment
+                </Text>
+              </View>
+
+              {/* Delivery Location */}
+              <View style={styles.fieldBlock}>
+                <Text style={styles.fieldLabel}>Delivery Location / Mandi</Text>
+                <View style={styles.fieldWrapper}>
+                  <Icon name="map-marker-outline" size={16} color="#64748B" style={styles.fieldIcon} />
+                  <TextInput
+                    style={getInputStyle('deliveryLocation')}
+                    placeholder="e.g. Indore Mandi, MP"
+                    value={deliveryLocation}
+                    onChangeText={setDeliveryLocation}
+                    placeholderTextColor="#94A3B8"
+                    onFocus={() => setFocusedField('deliveryLocation')}
+                    onBlur={() => setFocusedField(null)}
+                    includeFontPadding={false}
+                    textAlignVertical="center"
+                  />
+                </View>
+              </View>
+
+              {/* Payment Timeline Pills */}
+              <View style={styles.unitBlock}>
+                <Text style={styles.subFieldLabel}>Payment Timeline</Text>
+                <View style={styles.timelineRow}>
+                  {PAYMENT_TIMELINES.map((tl) => {
+                    const sel = paymentTimeline === tl;
+                    return (
+                      <TouchableOpacity
+                        key={tl}
+                        onPress={() => setPaymentTimeline(tl)}
+                        activeOpacity={0.75}
+                        style={[
+                          styles.timelineChip,
+                          sel
+                            ? { backgroundColor: activeTheme.primary + '18', borderColor: activeTheme.primary }
+                            : { backgroundColor: '#F8FAFC', borderColor: '#E2E8F0' },
+                        ]}
+                      >
+                        <Text
+                          style={[
+                            styles.timelineChipText,
+                            { color: sel ? activeTheme.primary : '#64748B' },
+                          ]}
+                        >
+                          {tl}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              </View>
+            </View>
+
+            {/* SECTION 4: QUALITY SPECS & DATES (OPTIONAL) */}
+            <View style={styles.cardSection}>
+              <View style={styles.sectionHeaderRow}>
+                <Icon name="certificate-outline" size={16} color={activeTheme.primary} />
+                <Text style={[styles.sectionLabel, { color: activeTheme.primary }]}>
+                  Quality & Schedule (Optional)
+                </Text>
+              </View>
+
+              <View style={styles.twoCol}>
+                {/* Grade */}
+                <View style={[styles.fieldBlock, { flex: 1, marginRight: 8 }]}>
+                  <Text style={styles.fieldLabel}>Grade</Text>
+                  <View style={styles.fieldWrapper}>
+                    <Icon name="star-outline" size={16} color="#64748B" style={styles.fieldIcon} />
+                    <TextInput
+                      style={getInputStyle('grade')}
+                      placeholder="e.g. Grade A"
+                      value={grade}
+                      onChangeText={setGrade}
+                      placeholderTextColor="#94A3B8"
+                      onFocus={() => setFocusedField('grade')}
+                      onBlur={() => setFocusedField(null)}
+                      includeFontPadding={false}
+                      textAlignVertical="center"
+                    />
+                  </View>
+                </View>
+
+                {/* Moisture % */}
+                <View style={[styles.fieldBlock, { flex: 1 }]}>
+                  <Text style={styles.fieldLabel}>Moisture %</Text>
+                  <View style={styles.fieldWrapper}>
+                    <Icon name="water-percent" size={16} color="#64748B" style={styles.fieldIcon} />
+                    <TextInput
+                      style={getInputStyle('moisture')}
+                      placeholder="e.g. 12%"
+                      keyboardType="numeric"
+                      value={moisture}
+                      onChangeText={setMoisture}
+                      placeholderTextColor="#94A3B8"
+                      onFocus={() => setFocusedField('moisture')}
+                      onBlur={() => setFocusedField(null)}
+                      includeFontPadding={false}
+                      textAlignVertical="center"
+                    />
+                  </View>
+                </View>
+              </View>
+
+              <View style={styles.twoCol}>
+                {/* Harvest Year Picker */}
+                <View style={[styles.fieldBlock, { flex: 1, marginRight: 8 }]}>
+                  <Text style={styles.fieldLabel}>Harvest Year</Text>
+                  <TouchableOpacity
+                    style={[getInputStyle('harvestYear'), styles.datePickerBtn]}
+                    onPress={() => setIsHarvestPickerOpen(true)}
+                    activeOpacity={0.75}
+                  >
+                    <Icon name="calendar-blank-outline" size={15} color="#64748B" style={{ marginRight: 4 }} />
+                    <Text
                       style={[
-                        styles.unitChip,
-                        sel
-                          ? { backgroundColor: activeTheme.primary, borderColor: activeTheme.primary }
-                          : { backgroundColor: '#F8FAFC', borderColor: '#CBD5E1' },
+                        styles.datePickerText,
+                        harvestYear ? { color: '#0F172A' } : { color: '#94A3B8' },
                       ]}
                     >
-                      <Text style={[styles.unitChipText, { color: sel ? '#FFFFFF' : '#64748B' }]}>
-                        {u}
-                      </Text>
-                    </TouchableOpacity>
-                  );
-                })}
+                      {harvestYear || 'Year'}
+                    </Text>
+                    <Icon name="chevron-down" size={14} color="#64748B" />
+                  </TouchableOpacity>
+                </View>
+
+                {/* Delivery Date Picker */}
+                <View style={[styles.fieldBlock, { flex: 1 }]}>
+                  <Text style={styles.fieldLabel}>Expected Date</Text>
+                  <TouchableOpacity
+                    style={[getInputStyle('deliveryDate'), styles.datePickerBtn]}
+                    onPress={() => setIsDeliveryPickerOpen(true)}
+                    activeOpacity={0.75}
+                  >
+                    <Icon name="calendar-clock" size={15} color="#64748B" style={{ marginRight: 4 }} />
+                    <Text
+                      style={[
+                        styles.datePickerText,
+                        deliveryDate ? { color: '#0F172A' } : { color: '#94A3B8' },
+                      ]}
+                    >
+                      {deliveryDate || 'Date'}
+                    </Text>
+                    <Icon name="chevron-down" size={14} color="#64748B" />
+                  </TouchableOpacity>
+                </View>
               </View>
             </View>
 
-            <View style={styles.fieldWrapper}>
-              <Icon name="currency-inr" size={16} color="#94A3B8" style={styles.fieldIcon} />
-              <TextInput
-                style={getInputStyle('price')}
-                placeholder="Expected Price (per unit)"
-                keyboardType="numeric"
-                value={expectedPrice}
-                onChangeText={setExpectedPrice}
-                placeholderTextColor="#94A3B8"
-                onFocus={() => setFocusedField('price')}
-                onBlur={() => setFocusedField(null)}
-              />
-            </View>
-
-            <View style={styles.fieldWrapper}>
-              <Icon name="map-marker-outline" size={16} color="#94A3B8" style={styles.fieldIcon} />
-              <TextInput
-                style={getInputStyle('location')}
-                placeholder="Delivery Location"
-                value={location}
-                onChangeText={setLocation}
-                placeholderTextColor="#94A3B8"
-                onFocus={() => setFocusedField('location')}
-                onBlur={() => setFocusedField(null)}
-              />
-            </View>
-
-            <Text style={[styles.sectionLabel, { color: activeTheme.primary, marginTop: 6 }]}>
-              Quality and Timing (Optional)
-            </Text>
-
-            <View style={styles.twoCol}>
-              <View style={[styles.fieldWrapper, { flex: 1, marginRight: 8 }]}>
-                <Icon name="star-outline" size={16} color="#94A3B8" style={styles.fieldIcon} />
-                <TextInput
-                  style={getInputStyle('grade')}
-                  placeholder="Grade"
-                  value={grade}
-                  onChangeText={setGrade}
-                  placeholderTextColor="#94A3B8"
-                  onFocus={() => setFocusedField('grade')}
-                  onBlur={() => setFocusedField(null)}
-                />
+            {/* SECTION 5: REMARKS */}
+            <View style={styles.cardSection}>
+              <View style={styles.sectionHeaderRow}>
+                <Icon name="comment-text-outline" size={16} color={activeTheme.primary} />
+                <Text style={[styles.sectionLabel, { color: activeTheme.primary }]}>
+                  Additional Remarks
+                </Text>
               </View>
-              <View style={[styles.fieldWrapper, { flex: 1 }]}>
-                <Icon name="water-percent" size={16} color="#94A3B8" style={styles.fieldIcon} />
+              <View style={styles.fieldWrapper}>
                 <TextInput
-                  style={getInputStyle('moisture')}
-                  placeholder="Moisture %"
-                  keyboardType="numeric"
-                  value={moisture}
-                  onChangeText={setMoisture}
+                  style={[getInputStyle('remarks'), styles.textArea]}
+                  placeholder="Packaging details, moisture limits, or special terms..."
+                  value={remarks}
+                  onChangeText={setRemarks}
                   placeholderTextColor="#94A3B8"
-                  onFocus={() => setFocusedField('moisture')}
+                  multiline
+                  numberOfLines={3}
+                  textAlignVertical="top"
+                  onFocus={() => setFocusedField('remarks')}
                   onBlur={() => setFocusedField(null)}
+                  includeFontPadding={false}
                 />
               </View>
             </View>
 
-            <View style={styles.twoCol}>
-              <View style={[styles.fieldWrapper, { flex: 1, marginRight: 8 }]}>
-                <Icon name="calendar-blank-outline" size={16} color="#94A3B8" style={styles.fieldIcon} />
-                <TouchableOpacity
-                  style={[getInputStyle('harvestYear'), styles.datePickerBtn]}
-                  onPress={() => setIsHarvestPickerOpen(true)}
-                  activeOpacity={0.75}
-                >
-                  <Text
-                    style={[
-                      styles.datePickerText,
-                      harvestYear ? { color: '#0F172A' } : { color: '#94A3B8' },
-                    ]}
-                  >
-                    {harvestYear || 'Harvest Year'}
-                  </Text>
-                  <Icon name="chevron-down" size={16} color="#94A3B8" />
-                </TouchableOpacity>
-              </View>
-              <View style={[styles.fieldWrapper, { flex: 1 }]}>
-                <Icon name="truck-delivery-outline" size={16} color="#94A3B8" style={styles.fieldIcon} />
-                <TouchableOpacity
-                  style={[getInputStyle('deliveryDate'), styles.datePickerBtn]}
-                  onPress={() => setIsDeliveryPickerOpen(true)}
-                  activeOpacity={0.75}
-                >
-                  <Text
-                    style={[
-                      styles.datePickerText,
-                      deliveryDate ? { color: '#0F172A' } : { color: '#94A3B8' },
-                    ]}
-                  >
-                    {deliveryDate || 'Delivery Date'}
-                  </Text>
-                  <Icon name="chevron-down" size={16} color="#94A3B8" />
-                </TouchableOpacity>
-              </View>
-            </View>
-
-            <View style={styles.fieldWrapper}>
-              <Icon
-                name="comment-text-outline"
-                size={16}
-                color="#94A3B8"
-                style={[styles.fieldIcon, { alignSelf: 'flex-start', marginTop: 14 }]}
-              />
-              <TextInput
-                style={[getInputStyle('remarks'), styles.textArea]}
-                placeholder="Additional Remarks..."
-                value={remarks}
-                onChangeText={setRemarks}
-                placeholderTextColor="#94A3B8"
-                multiline
-                numberOfLines={3}
-                textAlignVertical="top"
-                onFocus={() => setFocusedField('remarks')}
-                onBlur={() => setFocusedField(null)}
-              />
-            </View>
-
+            {/* SUBMIT BUTTON */}
             <TouchableOpacity
               style={[
                 styles.submitButton,
-                {
-                  backgroundColor:
-                    isFormValid && !isSubmitting ? activeTheme.primary : '#CBD5E1',
-                },
+                { backgroundColor: activeTheme.primary },
+                isSubmitting && { opacity: 0.7 },
               ]}
               onPress={handleSubmit}
-              disabled={isSubmitting || !isFormValid}
+              disabled={isSubmitting}
               activeOpacity={0.85}
             >
               {isSubmitting ? (
                 <ActivityIndicator color="#fff" size="small" />
               ) : (
                 <>
-                  <Icon name="send-outline" size={18} color="#fff" style={{ marginRight: 8 }} />
+                  <Icon name="plus-circle-outline" size={18} color="#fff" style={{ marginRight: 6 }} />
                   <Text style={styles.submitText}>Post Requirement</Text>
                 </>
               )}
@@ -318,16 +600,15 @@ export default function AddYourRequirement({ visible, onClose, onSubmit, theme }
         </View>
       </KeyboardAvoidingView>
 
-      {/* Harvest Year Picker — date mode, extract year only */}
+      {/* Date Pickers */}
       <DatePicker
         modal
         open={isHarvestPickerOpen}
-        date={(() => {
-          if (harvestYear && /^\d{4}$/.test(harvestYear)) {
-            return new Date(Number(harvestYear), 0, 1);
-          }
-          return new Date();
-        })()}
+        date={
+          harvestYear && /^\d{4}$/.test(harvestYear)
+            ? new Date(Number(harvestYear), 0, 1)
+            : new Date()
+        }
         mode="date"
         theme="light"
         title="Select Harvest Year"
@@ -340,15 +621,14 @@ export default function AddYourRequirement({ visible, onClose, onSubmit, theme }
         onCancel={() => setIsHarvestPickerOpen(false)}
       />
 
-      {/* Delivery Date Picker — full date */}
       <DatePicker
         modal
         open={isDeliveryPickerOpen}
-        date={(() => {
-          if (!deliveryDate) return new Date();
-          const parsed = new Date(deliveryDate);
-          return isNaN(parsed.getTime()) ? new Date() : parsed;
-        })()}
+        date={
+          deliveryDate && !isNaN(new Date(deliveryDate).getTime())
+            ? new Date(deliveryDate)
+            : new Date()
+        }
         minimumDate={new Date()}
         mode="date"
         theme="light"
@@ -371,20 +651,20 @@ export default function AddYourRequirement({ visible, onClose, onSubmit, theme }
 const styles = StyleSheet.create({
   overlay: {
     flex: 1,
-    backgroundColor: 'rgba(15,23,42,0.55)',
+    backgroundColor: 'rgba(15,23,42,0.6)',
     justifyContent: 'flex-end',
   },
   sheet: {
-    backgroundColor: '#FFFFFF',
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    minHeight: '70%',
+    backgroundColor: '#F8FAFC',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    minHeight: '75%',
     maxHeight: '92%',
-    paddingBottom: 24,
+    paddingBottom: 16,
     elevation: 20,
     shadowColor: '#0F172A',
-    shadowOffset: { width: 0, height: -4 },
-    shadowOpacity: 0.12,
+    shadowOffset: { width: 0, height: -6 },
+    shadowOpacity: 0.14,
     shadowRadius: 16,
   },
   dragHandle: {
@@ -393,127 +673,229 @@ const styles = StyleSheet.create({
     borderRadius: 2,
     backgroundColor: '#CBD5E1',
     alignSelf: 'center',
-    marginTop: 12,
+    marginTop: 8,
     marginBottom: 4,
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingVertical: 14,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
     borderBottomWidth: 1,
-    gap: 12,
+    backgroundColor: '#FFFFFF',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    gap: 10,
   },
   headerIcon: {
-    width: 40,
-    height: 40,
+    width: 38,
+    height: 38,
     borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
   },
   headerTextBlock: { flex: 1 },
+  headerTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
   title: {
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: '800',
     color: '#0F172A',
-    letterSpacing: 0.1,
+  },
+  badgePill: {
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
+  badgeText: {
+    fontSize: 9,
+    fontWeight: '800',
+    letterSpacing: 0.5,
   },
   subtitle: {
-    fontSize: 12,
+    fontSize: 11,
     color: '#64748B',
     fontWeight: '500',
     marginTop: 1,
   },
   closeBtn: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
     backgroundColor: '#F1F5F9',
     alignItems: 'center',
     justifyContent: 'center',
   },
   body: {
-    paddingHorizontal: 20,
-    paddingTop: 16,
-    paddingBottom: 8,
+    paddingHorizontal: 12,
+    paddingTop: 12,
+    paddingBottom: 20,
+  },
+  cardSection: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 10,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  sectionHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 10,
   },
   sectionLabel: {
     fontSize: 11,
     fontWeight: '800',
     textTransform: 'uppercase',
-    letterSpacing: 0.8,
-    marginBottom: 12,
+    letterSpacing: 0.6,
+  },
+  requiredStar: {
+    color: '#EF4444',
+    fontWeight: '800',
+  },
+  fieldBlock: {
+    marginBottom: 8,
+  },
+  fieldLabel: {
+    fontSize: 11.5,
+    fontWeight: '700',
+    color: '#334155',
+    marginBottom: 4,
+  },
+  subFieldLabel: {
+    fontSize: 10.5,
+    fontWeight: '700',
+    color: '#64748B',
+    marginBottom: 4,
+    textTransform: 'uppercase',
+    letterSpacing: 0.4,
   },
   fieldWrapper: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 12,
+    position: 'relative',
+    justifyContent: 'center',
   },
   fieldIcon: {
     position: 'absolute',
     left: 12,
-    zIndex: 1,
+    zIndex: 2,
   },
   input: {
     flex: 1,
-    borderWidth: 1.5,
+    height: 46,
+    borderWidth: 1.2,
     borderColor: '#E2E8F0',
     borderRadius: 10,
-    paddingVertical: 12,
-    paddingHorizontal: 14,
-    paddingLeft: 38,
-    fontSize: 14,
+    paddingVertical: 0,
+    paddingHorizontal: 10,
+    paddingLeft: 34,
+    fontSize: 13.5,
     color: '#0F172A',
     backgroundColor: '#F8FAFC',
     fontWeight: '500',
+    includeFontPadding: false,
+    textAlignVertical: 'center',
   },
-  unitBlock: { marginBottom: 14 },
-  unitLabel: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: '#475569',
-    marginBottom: 8,
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
+  inputError: {
+    borderColor: '#EF4444',
+    backgroundColor: '#FEF2F2',
   },
-  unitRow: { flexDirection: 'row', gap: 8 },
+  noIconInput: {
+    paddingLeft: 10,
+  },
+  errorText: {
+    color: '#EF4444',
+    fontSize: 11,
+    fontWeight: '600',
+    marginTop: 2,
+    marginLeft: 2,
+  },
+  unitBlock: {
+    marginTop: 2,
+    marginBottom: 4,
+  },
+  unitRow: {
+    flexDirection: 'row',
+    gap: 6,
+  },
   unitChip: {
     flex: 1,
-    paddingVertical: 10,
-    borderRadius: 10,
-    borderWidth: 1.5,
+    flexDirection: 'row',
+    height: 38,
+    borderRadius: 8,
+    borderWidth: 1.2,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  unitChipText: { fontSize: 13, fontWeight: '700' },
-  twoCol: { flexDirection: 'row', marginBottom: 0 },
+  unitChipText: {
+    fontSize: 11.5,
+    fontWeight: '700',
+  },
+  timelineRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+  },
+  timelineChip: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 6,
+    borderWidth: 1.2,
+  },
+  timelineChipText: {
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  twoCol: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+  },
+  dropdownSelectBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingLeft: 10,
+    paddingRight: 8,
+  },
+  dropdownSelectText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#1E293B',
+  },
   datePickerBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingRight: 10,
+    paddingLeft: 10,
+    paddingRight: 8,
   },
   datePickerText: {
     flex: 1,
-    fontSize: 14,
+    fontSize: 12,
     fontWeight: '500',
   },
   textArea: {
-    minHeight: 80,
+    height: 72,
     textAlignVertical: 'top',
-    paddingTop: 12,
+    paddingTop: 8,
+    paddingLeft: 12,
   },
   submitButton: {
     flexDirection: 'row',
-    padding: 16,
+    height: 48,
     borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
-    marginTop: 16,
+    marginTop: 4,
+    marginBottom: 12,
     elevation: 3,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
+    shadowOpacity: 0.12,
     shadowRadius: 4,
   },
   submitText: {

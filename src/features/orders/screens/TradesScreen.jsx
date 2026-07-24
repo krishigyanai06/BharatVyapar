@@ -27,6 +27,7 @@ import { showAlert } from '../../../shared/components/CustomAlertBox';
 import { getFriendlyErrorMessage } from '../../../shared/utils/errorUtils';
 import { useTranslation } from '../../../shared/hooks/useTranslation';
 import { ROLE_THEMES } from '../../../theme/roleThemes';
+import { lookupDealId } from '../../../shared/utils/dealIdRegistry';
 
 const OFFER_STATUS_CONFIG = {
   pending:        { label: 'Awaiting Response',  color: '#718096', bg: '#EDF2F7',  icon: 'clock-outline' },
@@ -492,8 +493,8 @@ export default function TradesScreen({ navigation, route }) {
   }, [filteredOffers, filteredSellListings, expandedSections, tradeMode, theme.primary]);
 
   const handleOfferPress = useCallback((offer) => {
-    const dealId = offer.dealId || null;
     const offerId = offer.id || offer._id || null;
+    const dealId = offer.dealId || offer.deal?._id || (typeof offer.deal === 'string' ? offer.deal : null) || lookupDealId(offerId) || null;
     const resolvedCommodity = offer.commodity || 
                              (typeof offer.commodityId === 'object' ? offer.commodityId : null) || 
                              (typeof offer.requirementId === 'object' ? offer.requirementId : null) ||
@@ -698,8 +699,8 @@ export default function TradesScreen({ navigation, route }) {
       
       const handlePress = () => {
         if (isSold) {
-          const dealId = listing._dealId || listing.dealId || null;
           const offerId = listing._acceptedOffer?.id || listing._acceptedOffer?._id || null;
+          const dealId = listing._dealId || listing.dealId || listing._acceptedOffer?.dealId || lookupDealId(offerId) || null;
           navigation.navigate('DealDetails', {
             deal: listing._acceptedOffer || listing,
             dealId,

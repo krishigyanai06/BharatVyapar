@@ -124,16 +124,20 @@ export const requirementService = {
 
   submitRequirement: async (payload) => {
     const apiPayload = {
-      commodityName:    payload.commodity,
-      quantity:         Number(payload.quantity),
+      commodityName:    payload.commodityName || payload.commodity || '',
+      type:             payload.type || undefined,
+      quantity:         Number(payload.quantity || 0),
       unit:             payload.unit === 'Quintal' ? 'Qt' : (payload.unit || 'Qt'),
-      targetPrice:      Number(payload.expectedPrice),
-      deliveryLocation: payload.location,
-      remarks:          payload.remarks,
-      grade:            payload.grade,
-      moisture:         payload.moisture,
-      harvestYear:      payload.harvestYear,
-      deliveryDate:     payload.deliveryDate,
+      targetPrice:      payload.targetPrice !== undefined && payload.targetPrice !== '' ? Number(payload.targetPrice) : (payload.expectedPrice !== undefined && payload.expectedPrice !== '' ? Number(payload.expectedPrice) : undefined),
+      priceUnit:        payload.priceUnit || undefined,
+      tradeType:        payload.tradeType || undefined,
+      deliveryLocation: payload.deliveryLocation || payload.location || undefined,
+      paymentTimeline:  payload.paymentTimeline || undefined,
+      remarks:          payload.remarks || undefined,
+      grade:            payload.grade || undefined,
+      moisture:         payload.moisture || undefined,
+      harvestYear:      payload.harvestYear || undefined,
+      deliveryDate:     payload.deliveryDate || undefined,
     };
     const response = await apiClient.post('/buyer-requirement', apiPayload);
     // Invalidate the cache upon successful submission

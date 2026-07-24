@@ -554,14 +554,14 @@ const DemandCard = React.memo(({ demand, theme, t, onFulfillPress, myQuote }) =>
   if (!demand) return null;
   
   const buyerObj = demand.buyerId;
-  const displayName = resolveName(buyerObj, '', t('Buyer'));
   const shopName = typeof buyerObj === 'object' && buyerObj?.shopName ? buyerObj.shopName : '';
   const contactPerson = typeof buyerObj === 'object'
     ? [buyerObj.firstName, buyerObj.lastName].filter(Boolean).join(' ')
     : '';
-  const subName = shopName && contactPerson ? contactPerson : '';
-  const avatarChar = displayName.substring(0, 1).toUpperCase();
+  const mainTitle = shopName || contactPerson || resolveName(buyerObj, '', t('Buyer'));
   const postedTime = formatDemandPostedTime(demand.createdAt, t);
+  const subTitle = shopName && contactPerson ? `${contactPerson} • ${postedTime}` : postedTime;
+  const avatarChar = mainTitle.substring(0, 1).toUpperCase();
 
   const isAlreadyQuoted = Boolean(myQuote);
   const quotedPrice = myQuote?.price || myQuote?.quotePrice;
@@ -578,8 +578,8 @@ const DemandCard = React.memo(({ demand, theme, t, onFulfillPress, myQuote }) =>
       ]}
     >
       {/* Header with Avatar and Status Badge */}
-      <View style={[styles.cardHeader, { borderBottomColor: theme.primary + '15' }]}>
-        <View style={styles.userRow}>
+      <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: h(8), paddingBottom: h(6), borderBottomWidth: 1, borderBottomColor: theme.primary + '15' }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: w(8), flex: 1, marginRight: w(8) }}>
           <View
             style={[
               styles.avatarBox,
@@ -599,11 +599,13 @@ const DemandCard = React.memo(({ demand, theme, t, onFulfillPress, myQuote }) =>
               {avatarChar}
             </Text>
           </View>
-          <View>
+          <View style={{ flex: 1 }}>
             <Text style={[styles.userName, { fontSize: f(13.5), fontWeight: '800', color: theme.text }]} numberOfLines={1}>
-              {displayName}{subName ? ` (${subName})` : ''}
+              {mainTitle}
             </Text>
-            <Text style={{ fontSize: f(10.5), color: COLORS.textMuted }}>{postedTime}</Text>
+            <Text style={{ fontSize: f(10.5), color: COLORS.textMuted, marginTop: h(1) }} numberOfLines={1}>
+              {subTitle}
+            </Text>
           </View>
         </View>
         <View
@@ -613,6 +615,7 @@ const DemandCard = React.memo(({ demand, theme, t, onFulfillPress, myQuote }) =>
               backgroundColor: isAlreadyQuoted ? '#2E7D32' : theme.primary,
               borderWidth: 1,
               borderColor: isAlreadyQuoted ? '#1B5E20' : theme.primary,
+              flexShrink: 0,
             },
           ]}
         >
@@ -715,7 +718,7 @@ const DemandCard = React.memo(({ demand, theme, t, onFulfillPress, myQuote }) =>
           >
             <Icon name="check-circle" size={18} color="#2E7D32" />
             <Text style={[styles.viewBtnText, { fontSize: f(12.5), fontWeight: '800', color: '#2E7D32' }]}>
-              {quotedPrice ? `✓ ${t('Quote Placed')} (₹${quotedPrice})` : `✓ ${t('Quote Already Placed')}`}
+              {quotedPrice ? `${t('Quote Placed')} (₹${quotedPrice})` : t('Quote Already Placed')}
             </Text>
           </TouchableOpacity>
         ) : (
