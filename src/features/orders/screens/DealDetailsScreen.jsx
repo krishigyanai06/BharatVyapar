@@ -32,6 +32,7 @@ import {
   updatePOStatus,
   dispatchGoods,
   confirmGoodsReceipt,
+  uploadDealDocument,
 } from '../../marketplace/marketplace.api';
 import { lookupDealId, registerDealId } from '../../../shared/utils/dealIdRegistry';
 import { useTranslation } from '../../../shared/hooks/useTranslation';
@@ -81,6 +82,9 @@ function getStatusBadge(statusStr, poStatus, isDispatched = false) {
   const s = String(statusStr || '').toLowerCase();
   const po = String(poStatus || '').toLowerCase();
 
+  if (s === 'delivered' || s === 'goods_delivered') {
+    return { bg: '#D1FAE5', text: '#065F46', border: '#A7F3D0', label: 'GOODS DELIVERED' };
+  }
   if (isDispatched || s === 'dispatched' || s === 'goods_dispatched') {
     return { bg: '#E6FFFA', text: '#0D9488', border: '#99F6E4', label: 'GOODS DISPATCHED' };
   }
@@ -129,6 +133,27 @@ export default function DealDetailsScreen({ route, navigation }) {
   // Dispatch Action Loading States
   const [updatingAction, setUpdatingAction] = useState(null); // 'acknowledged' | 'rejected' | null
   const [dispatching, setDispatching] = useState(false);
+
+  // Dispatch modal fields
+  const [dispatchModalVisible, setDispatchModalVisible] = useState(false);
+  const [transporterName, setTransporterName] = useState('');
+  const [vehicleNumber, setVehicleNumber] = useState('');
+  const [lrNumber, setLrNumber] = useState('');
+  const [taxInvoiceNumber, setTaxInvoiceNumber] = useState('');
+  const [dispatchRemarks, setDispatchRemarks] = useState('');
+  const [taxInvoiceDoc, setTaxInvoiceDoc] = useState(null);
+  const [ewayBillPhysicalSent, setEwayBillPhysicalSent] = useState(false);
+  const [taxInvoicePhysicalSent, setTaxInvoicePhysicalSent] = useState(false);
+  const [weighBillPhysicalSent, setWeighBillPhysicalSent] = useState(false);
+  const [otherDocsPhysicalSent, setOtherDocsPhysicalSent] = useState(false);
+
+  // Goods receipt modal fields
+  const [goodsReceiptModalVisible, setGoodsReceiptModalVisible] = useState(false);
+  const [receivedQuantity, setReceivedQuantity] = useState('');
+  const [buyerRemarks, setBuyerRemarks] = useState('');
+  const [weighBridgeSlipCollected, setWeighBridgeSlipCollected] = useState(false);
+  const [taxInvoiceCollected, setTaxInvoiceCollected] = useState(false);
+  const [lorryReceiptCollected, setLorryReceiptCollected] = useState(false);
 
   // Dynamic Document Upload States
   const [uploadModalVisible, setUploadModalVisible] = useState(false);
@@ -324,6 +349,47 @@ export default function DealDetailsScreen({ route, navigation }) {
     });
   };
 
+  // Dynamic Placeholder Upload Handlers (Actionable Slots)
+  const [uploadingDocType, setUploadingDocType] = useState(null);
+
+  const handleUploadPlaceholderDoc = async (docType) => {
+    try {
+      const file = await pickDocumentOrImage();
+      if (!file) return;
+
+      if (file.size && file.size > 10 * 1024 * 1024) {
+        showAlert({
+          type: 'warning',
+          title: t('File Too Large'),
+          message: t('Document size cannot exceed 10 MB. Selected file: {size} MB.').replace('{size}', (file.size / 1024 / 1024).toFixed(2)),
+        });
+        return;
+      }
+
+      setUploadingDocType(docType);
+      const activeDealId = dealId || lookupDealId(offerId) || deal?._id;
+
+      const res = await uploadDealDocument(activeDealId, docType, file);
+      if (res) {
+        showAlert({
+          type: 'success',
+          title: t('Upload Success'),
+          message: t('Document uploaded and saved successfully!'),
+        });
+        loadDeal(false, true); // Silent reload to sync state
+      }
+    } catch (err) {
+      console.warn(err);
+      showAlert({
+        type: 'error',
+        title: t('Upload Failed'),
+        message: err.message || t('Failed to upload document. Please try again.'),
+      });
+    } finally {
+      setUploadingDocType(null);
+    }
+  };
+
   // Submit Purchase Order (Buyer Action)
   const handleCreatePO = async () => {
     // Extract actual Deal ID (strictly prioritizing real dealId, NOT falling back to offer ID)
@@ -412,8 +478,8 @@ export default function DealDetailsScreen({ route, navigation }) {
     }
   };
 
-  // Dispatch Goods Action
-  const handleDispatchGoods = async () => {
+  // Dispatch Goods Action (Opens inputs modal)
+  const handleDispatchGoods = () => {
     const activeDealId = deal?._id || deal?.id || dealId;
     if (!activeDealId) {
       showAlert({
@@ -423,29 +489,139 @@ export default function DealDetailsScreen({ route, navigation }) {
       });
       return;
     }
+    setDispatchModalVisible(true);
+  };
+
+  // Submit physical logistics dispatch
+  const submitDispatch = async () => {
+    const activeDealId = deal?._id || deal?.id || dealId;
+    if (!activeDealId) return;
+
+    if (!transporterName.trim() || !vehicleNumber.trim() || !lrNumber.trim()) {
+      showAlert({
+        type: 'warning',
+        title: t('Missing Fields'),
+        message: t('Please fill in all mandatory logistics fields (Transporter Name, Vehicle Number, Lorry Receipt Number).'),
+      });
+      return;
+    }
 
     try {
       setDispatching(true);
-      const res = await dispatchGoods(activeDealId, {
-        dispatchDate: new Date().toISOString(),
-        transportName: 'AgriLogistics Transporter',
-        lrNumber: 'LR-' + Math.floor(100000 + Math.random() * 900000),
-      });
+      let payload;
+      let headers = {};
+
+      if (taxInvoiceDoc) {
+        payload = new FormData();
+        payload.append('transporterName', transporterName.trim());
+        payload.append('vehicleNumber', vehicleNumber.toUpperCase().trim());
+        payload.append('lrNumber', lrNumber.trim());
+        payload.append('dispatchDate', new Date().toISOString());
+        payload.append('remarks', dispatchRemarks.trim());
+        payload.append('ewayBillPhysicalSent', String(ewayBillPhysicalSent));
+        payload.append('taxInvoiceNumber', taxInvoiceNumber.trim());
+        payload.append('taxInvoicePhysicalSent', String(taxInvoicePhysicalSent));
+        payload.append('weighBillPhysicalSent', String(weighBillPhysicalSent));
+        payload.append('otherDocsPhysicalSent', String(otherDocsPhysicalSent));
+        payload.append('taxInvoiceDoc', {
+          uri: taxInvoiceDoc.uri,
+          name: taxInvoiceDoc.name || 'invoice.pdf',
+          type: taxInvoiceDoc.type || 'application/pdf',
+        });
+        headers = { 'Content-Type': 'multipart/form-data' };
+      } else {
+        payload = {
+          transporterName: transporterName.trim(),
+          vehicleNumber: vehicleNumber.toUpperCase().trim(),
+          lrNumber: lrNumber.trim(),
+          dispatchDate: new Date().toISOString(),
+          remarks: dispatchRemarks.trim(),
+          ewayBillPhysicalSent,
+          taxInvoiceNumber: taxInvoiceNumber.trim(),
+          taxInvoicePhysicalSent,
+          weighBillPhysicalSent,
+          otherDocsPhysicalSent,
+        };
+      }
+
+      const res = await dispatchGoods(activeDealId, payload, { headers });
       const normalizedDispatch = res?.data || res?.dispatch || res;
       if (normalizedDispatch) {
         setDispatchDetails(normalizedDispatch);
       }
+      setDispatchModalVisible(false);
       showAlert({
         type: 'success',
         title: t('Goods Dispatched'),
-        message: t('Goods dispatch initiated successfully! Lorry Receipt updated.'),
+        message: t('Goods dispatch initiated successfully! Lorry Receipt and logistics updated.'),
       });
       loadDeal(false, true);
     } catch (err) {
+      console.warn('[DealDetails] dispatch error:', err?.response?.data || err?.message || err);
       showAlert({
         type: 'error',
         title: t('Dispatch Failed'),
         message: err?.response?.data?.message || err?.message || t('Could not initiate dispatch.'),
+      });
+    } finally {
+      setDispatching(false);
+    }
+  };
+
+  // Open Goods Receipt modal
+  const handleOpenGoodsReceipt = () => {
+    setReceivedQuantity(finalQty ? finalQty.toString() : '');
+    setGoodsReceiptModalVisible(true);
+  };
+
+  // Submit goods receipt delivery confirmation
+  const submitGoodsReceipt = async () => {
+    const activeDealId = deal?._id || deal?.id || dealId;
+    if (!activeDealId) return;
+
+    const parsedQty = parseFloat(receivedQuantity);
+    if (isNaN(parsedQty) || parsedQty <= 0) {
+      showAlert({
+        type: 'warning',
+        title: t('Invalid Quantity'),
+        message: t('Please enter a valid positive number for received quantity.'),
+      });
+      return;
+    }
+
+    try {
+      setDispatching(true);
+      const collectedDocs = [];
+      if (weighBridgeSlipCollected) {
+        collectedDocs.push({ documentType: 'weighBridgeSlip', collected: true, remarks: 'Collected' });
+      }
+      if (taxInvoiceCollected) {
+        collectedDocs.push({ documentType: 'taxInvoice', collected: true, remarks: 'Collected' });
+      }
+      if (lorryReceiptCollected) {
+        collectedDocs.push({ documentType: 'lorryReceipt', collected: true, remarks: 'Collected' });
+      }
+
+      const payload = {
+        receivedQuantity: parsedQty,
+        buyerRemarks: buyerRemarks.trim(),
+        collectedDocuments: collectedDocs,
+      };
+
+      await confirmGoodsReceipt(activeDealId, payload);
+      setGoodsReceiptModalVisible(false);
+      showAlert({
+        type: 'success',
+        title: t('Receipt Confirmed'),
+        message: t('Goods receipt confirmed and deal status updated successfully!'),
+      });
+      loadDeal(false, true);
+    } catch (err) {
+      console.warn('[DealDetails] goods receipt error:', err?.response?.data || err?.message || err);
+      showAlert({
+        type: 'error',
+        title: t('Confirmation Failed'),
+        message: err?.response?.data?.message || err?.message || t('Could not confirm goods receipt.'),
       });
     } finally {
       setDispatching(false);
@@ -549,7 +725,15 @@ export default function DealDetailsScreen({ route, navigation }) {
   // Stepper calculations (5-Step Trade Workflow per AgriTrade Spec)
   // 0: Deal Accepted, 1: Purchase Order, 2: Dispatch, 3: Delivery, 4: Payment
   let activeStepIndex = 0;
-  if (isDispatched) {
+  const isDeliveredState = 
+    dealStatus === 'delivered' || 
+    dealStatus === 'goods_delivered' || 
+    dispatchDetails?.status === 'delivered' || 
+    dispatchDetails?.data?.status === 'delivered';
+
+  if (isDeliveredState) {
+    activeStepIndex = 4; // Goods Delivered & Settling Payment
+  } else if (isDispatched) {
     activeStepIndex = 3; // Goods Dispatched & In Transit
   } else if (currentPoStatus === 'acknowledged') {
     activeStepIndex = 2; // Dispatch active
@@ -685,8 +869,15 @@ export default function DealDetailsScreen({ route, navigation }) {
 
             {/* Step 3: Dispatch */}
             <View style={styles.stepItem}>
-              <View style={[styles.stepCircle, activeStepIndex >= 2 ? styles.stepActiveCircle : styles.stepInactiveCircle]}>
-                <Icon name="truck-delivery-outline" size={16} color={activeStepIndex >= 2 ? theme.primary : COLORS.textMuted} />
+              <View style={[
+                styles.stepCircle,
+                activeStepIndex >= 3 ? styles.stepCompletedCircle : (activeStepIndex >= 2 ? styles.stepActiveCircle : styles.stepInactiveCircle)
+              ]}>
+                {activeStepIndex >= 3 ? (
+                  <Icon name="check" size={16} color={COLORS.white} />
+                ) : (
+                  <Icon name="truck-delivery-outline" size={16} color={activeStepIndex >= 2 ? theme.primary : COLORS.textMuted} />
+                )}
               </View>
               <Text style={[styles.stepTitle, activeStepIndex >= 2 && { color: theme.primary, fontWeight: '700' }]}>{t('Dispatch')}</Text>
               <View style={[styles.stepLine, activeStepIndex >= 3 ? styles.stepCompletedLine : styles.stepInactiveLine]} />
@@ -694,19 +885,29 @@ export default function DealDetailsScreen({ route, navigation }) {
 
             {/* Step 4: Delivery */}
             <View style={styles.stepItem}>
-              <View style={[styles.stepCircle, styles.stepInactiveCircle]}>
-                <Icon name="package-variant-closed" size={16} color={COLORS.textMuted} />
+              <View style={[
+                styles.stepCircle,
+                activeStepIndex >= 4 ? styles.stepCompletedCircle : (activeStepIndex >= 3 ? styles.stepActiveCircle : styles.stepInactiveCircle)
+              ]}>
+                {activeStepIndex >= 4 ? (
+                  <Icon name="check" size={16} color={COLORS.white} />
+                ) : (
+                  <Icon name="package-variant-closed" size={16} color={activeStepIndex >= 3 ? theme.primary : COLORS.textMuted} />
+                )}
               </View>
-              <Text style={styles.stepTitle}>{t('Delivery')}</Text>
-              <View style={[styles.stepLine, styles.stepInactiveLine]} />
+              <Text style={[styles.stepTitle, activeStepIndex >= 3 && { color: theme.primary, fontWeight: '700' }]}>{t('Delivery')}</Text>
+              <View style={[styles.stepLine, activeStepIndex >= 4 ? styles.stepCompletedLine : styles.stepInactiveLine]} />
             </View>
 
             {/* Step 5: Payment */}
             <View style={styles.stepItem}>
-              <View style={[styles.stepCircle, styles.stepInactiveCircle]}>
-                <Icon name="cash-check" size={16} color={COLORS.textMuted} />
+              <View style={[
+                styles.stepCircle,
+                activeStepIndex >= 4 ? styles.stepActiveCircle : styles.stepInactiveCircle
+              ]}>
+                <Icon name="cash-check" size={16} color={activeStepIndex >= 4 ? theme.primary : COLORS.textMuted} />
               </View>
-              <Text style={styles.stepTitle}>{t('Payment')}</Text>
+              <Text style={[styles.stepTitle, activeStepIndex >= 4 && { color: theme.primary, fontWeight: '700' }]}>{t('Payment')}</Text>
             </View>
           </ScrollView>
         </View>
@@ -721,17 +922,27 @@ export default function DealDetailsScreen({ route, navigation }) {
               </View>
               <View style={styles.flex1}>
                 <Text style={[styles.actionCardTitle, { color: theme.primary, fontSize: f(14), fontWeight: '700' }]}>
-                  {t('Goods Dispatched & In Transit')}
+                  {isDeliveredState
+                    ? t('Goods Delivered & Received')
+                    : t('Goods Dispatched & In Transit')}
                 </Text>
                 <Text style={[styles.actionCardDesc, { marginTop: h(4), fontSize: f(12), color: COLORS.text }]}>
-                  {t('The shipment has been marked as dispatched. Awaiting Buyer goods receipt confirmation.')}
+                  {isDeliveredState
+                    ? t('The goods delivery has been confirmed by the buyer. Escalating escrow settlements.')
+                    : t('The shipment has been marked as dispatched. Awaiting Buyer goods receipt confirmation.')}
                 </Text>
 
                 {/* Dynamic API fields only - zero mock details */}
-                {Boolean(dispatchDetails?.transportName || dispatchDetails?.data?.transportName) && (
+                {Boolean(dispatchDetails?.transporterName || dispatchDetails?.data?.transporterName || dispatchDetails?.transportName || dispatchDetails?.data?.transportName) && (
                   <Text style={{ marginTop: h(6), fontSize: f(12), color: COLORS.textMuted }}>
                     <Text style={{ fontWeight: '700' }}>{t('Transporter')}: </Text>
-                    {dispatchDetails?.transportName || dispatchDetails?.data?.transportName}
+                    {dispatchDetails?.transporterName || dispatchDetails?.data?.transporterName || dispatchDetails?.transportName || dispatchDetails?.data?.transportName}
+                  </Text>
+                )}
+                {Boolean(dispatchDetails?.vehicleNumber || dispatchDetails?.data?.vehicleNumber) && (
+                  <Text style={{ marginTop: h(2), fontSize: f(12), color: COLORS.textMuted }}>
+                    <Text style={{ fontWeight: '700' }}>{t('Vehicle Number')}: </Text>
+                    {dispatchDetails?.vehicleNumber || dispatchDetails?.data?.vehicleNumber}
                   </Text>
                 )}
                 {Boolean(dispatchDetails?.lrNumber || dispatchDetails?.data?.lrNumber) && (
@@ -748,6 +959,16 @@ export default function DealDetailsScreen({ route, navigation }) {
                 )}
               </View>
             </View>
+            {isBuyer && !isDeliveredState && (
+              <TouchableOpacity
+                style={[styles.primaryActionBtn, { backgroundColor: theme.primary, marginTop: h(12) }]}
+                onPress={handleOpenGoodsReceipt}
+                disabled={dispatching}
+              >
+                <Icon name="check" size={18} color={COLORS.white} />
+                <Text style={styles.primaryActionBtnText}>{t('Confirm Goods Receipt')}</Text>
+              </TouchableOpacity>
+            )}
           </View>
         ) : currentPoStatus === 'acknowledged' ? (
           // READY TO DISPATCH STATE (Seller Action Required)
@@ -873,18 +1094,30 @@ export default function DealDetailsScreen({ route, navigation }) {
         <View style={styles.sectionCard}>
           <View style={styles.sectionHeaderRow}>
             <Text style={styles.sectionTitle}>{t('Documents')}</Text>
-            <TouchableOpacity style={styles.uploadHeaderBtn} onPress={handleUploadDocument}>
-              <Icon name="plus" size={14} color={theme.primary} />
-              <Text style={[styles.uploadHeaderBtnText, { color: theme.primary }]}>{t('Upload')}</Text>
-            </TouchableOpacity>
+            {isStrictSeller && (
+              <TouchableOpacity style={styles.uploadHeaderBtn} onPress={handleUploadDocument}>
+                <Icon name="plus" size={14} color={theme.primary} />
+                <Text style={[styles.uploadHeaderBtnText, { color: theme.primary }]}>{t('Upload')}</Text>
+              </TouchableOpacity>
+            )}
           </View>
 
+          <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: w(6), marginBottom: h(12), paddingRight: w(12) }}>
+            <Icon name="lightbulb-on-outline" size={14} color="#D97706" style={{ marginTop: h(1) }} />
+            <Text style={{ flex: 1, fontSize: f(11), color: COLORS.textMuted, lineHeight: h(16) }}>
+              {t('Physical documents are sent along with the goods, or you can also upload reports/documents here.')}
+            </Text>
+          </View>
+ 
           <View style={styles.docList}>
             {/* Purchase Order Document Item */}
-            <View style={styles.docItemRow}>
+            <View style={[
+              styles.docItemRow,
+              isPoCreated ? { backgroundColor: '#F0FDF4', borderColor: '#DCFCE7' } : { backgroundColor: '#FFFBEB', borderColor: '#FDE68A' }
+            ]}>
               <View style={styles.docLeftRow}>
-                <View style={styles.pdfIconContainer}>
-                  <Icon name="file-pdf-box" size={24} color={COLORS.error} />
+                <View style={[styles.pdfIconContainer, { backgroundColor: isPoCreated ? '#DCFCE7' : '#FEE2E2' }]}>
+                  <Icon name="file-pdf-box" size={24} color={isPoCreated ? '#16A34A' : '#EF4444'} />
                 </View>
                 <View style={styles.flex1}>
                   <Text style={styles.docTitleText}>{t('Purchase Order')}</Text>
@@ -910,6 +1143,182 @@ export default function DealDetailsScreen({ route, navigation }) {
                     <Icon name="download-outline" size={18} color={COLORS.textMuted} />
                   </TouchableOpacity>
                 </View>
+              ) : (
+                <View style={styles.docPendingPill}>
+                  <View style={styles.dotOrange} />
+                  <Text style={styles.docPendingPillText}>{t('Pending')}</Text>
+                </View>
+              )}
+            </View>
+
+            {/* Tax Invoice Document Item */}
+            <View style={[
+              styles.docItemRow,
+              (Boolean(dispatchDetails?.taxInvoice?.file || dispatchDetails?.data?.taxInvoice?.file) || isDeliveredState)
+                ? { backgroundColor: '#F0FDF4', borderColor: '#DCFCE7' }
+                : { backgroundColor: '#FFFBEB', borderColor: '#FDE68A' }
+            ]}>
+              <View style={styles.docLeftRow}>
+                <View style={[styles.pdfIconContainer, { backgroundColor: (Boolean(dispatchDetails?.taxInvoice?.file || dispatchDetails?.data?.taxInvoice?.file) || isDeliveredState) ? '#DCFCE7' : '#FEF3C7' }]}>
+                  <Icon name="file-document-outline" size={24} color={(Boolean(dispatchDetails?.taxInvoice?.file || dispatchDetails?.data?.taxInvoice?.file) || isDeliveredState) ? '#16A34A' : '#D97706'} />
+                </View>
+                <View style={styles.flex1}>
+                  <Text style={styles.docTitleText}>{t('Tax Invoice')}</Text>
+                  <Text style={styles.docSubtitleText}>
+                    {Boolean(dispatchDetails?.taxInvoice?.file || dispatchDetails?.data?.taxInvoice?.file)
+                      ? t('Tax Invoice Document Uploaded')
+                      : (isDeliveredState ? t('Verified & Collected physically') : t('Awaiting seller dispatch'))}
+                  </Text>
+                </View>
+              </View>
+              {Boolean(dispatchDetails?.taxInvoice?.file || dispatchDetails?.data?.taxInvoice?.file) ? (
+                <View style={styles.docActionIconsRow}>
+                  <TouchableOpacity
+                    style={styles.iconCircleBtn}
+                    onPress={() => viewDocument(dispatchDetails?.taxInvoice?.file?.url || dispatchDetails?.data?.taxInvoice?.file?.url, 'tax_invoice.pdf')}
+                  >
+                    <Icon name="eye-outline" size={18} color={COLORS.textMuted} />
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.iconCircleBtn}
+                    onPress={() => downloadFile(dispatchDetails?.taxInvoice?.file?.url || dispatchDetails?.data?.taxInvoice?.file?.url, 'tax_invoice.pdf')}
+                  >
+                    <Icon name="download-outline" size={18} color={COLORS.textMuted} />
+                  </TouchableOpacity>
+                </View>
+              ) : isDeliveredState ? (
+                <View style={[styles.docPendingPill, { backgroundColor: '#F0FDF4', borderColor: '#BBF7D0' }]}>
+                  <Icon name="check-circle" size={14} color="#15803D" />
+                  <Text style={[styles.docPendingPillText, { color: '#15803D' }]}>{t('Collected')}</Text>
+                </View>
+              ) : isStrictSeller ? (
+                <TouchableOpacity
+                  style={[styles.outlineActionBtn, { borderColor: theme.primary }]}
+                  onPress={() => handleUploadPlaceholderDoc('tax_invoice')}
+                  disabled={uploadingDocType !== null}
+                >
+                  {uploadingDocType === 'tax_invoice' ? (
+                    <ActivityIndicator size="small" color={theme.primary} />
+                  ) : (
+                    <>
+                      <Icon name="upload" size={14} color={theme.primary} />
+                      <Text style={[styles.outlineActionBtnText, { color: theme.primary }]}>{t('Upload')}</Text>
+                    </>
+                  )}
+                </TouchableOpacity>
+              ) : (
+                <View style={styles.docPendingPill}>
+                  <View style={styles.dotOrange} />
+                  <Text style={styles.docPendingPillText}>{t('Pending')}</Text>
+                </View>
+              )}
+            </View>
+
+            {/* Lorry Receipt Document Item */}
+            <View style={[
+              styles.docItemRow,
+              (Boolean(dispatchDetails?.lrNumber || dispatchDetails?.data?.lrNumber) || isDeliveredState)
+                ? { backgroundColor: '#EFF6FF', borderColor: '#DBEAFE' }
+                : { backgroundColor: '#FFFBEB', borderColor: '#FDE68A' }
+            ]}>
+              <View style={styles.docLeftRow}>
+                <View style={[styles.pdfIconContainer, { backgroundColor: (Boolean(dispatchDetails?.lrNumber || dispatchDetails?.data?.lrNumber) || isDeliveredState) ? '#DBEAFE' : '#FEF3C7' }]}>
+                  <Icon name="truck-delivery-outline" size={24} color={(Boolean(dispatchDetails?.lrNumber || dispatchDetails?.data?.lrNumber) || isDeliveredState) ? '#1D4ED8' : '#D97706'} />
+                </View>
+                <View style={styles.flex1}>
+                  <Text style={styles.docTitleText}>{t('Lorry Receipt (LR)')}</Text>
+                  <Text style={styles.docSubtitleText}>
+                    {Boolean(dispatchDetails?.lrNumber || dispatchDetails?.data?.lrNumber)
+                      ? `${t('LR Number')}: ${dispatchDetails?.lrNumber || dispatchDetails?.data?.lrNumber}`
+                      : (isDeliveredState ? t('Verified & Collected physically') : t('Awaiting seller dispatch'))}
+                  </Text>
+                </View>
+              </View>
+              {Boolean(dispatchDetails?.lrNumber || dispatchDetails?.data?.lrNumber) ? (
+                <View style={[styles.docPendingPill, { backgroundColor: '#EFF6FF', borderColor: '#BFDBFE' }]}>
+                  <Icon name="check-circle" size={14} color="#1D4ED8" />
+                  <Text style={[styles.docPendingPillText, { color: '#1D4ED8' }]}>{t('Details Updated')}</Text>
+                </View>
+              ) : isDeliveredState ? (
+                <View style={[styles.docPendingPill, { backgroundColor: '#F0FDF4', borderColor: '#BBF7D0' }]}>
+                  <Icon name="check-circle" size={14} color="#15803D" />
+                  <Text style={[styles.docPendingPillText, { color: '#15803D' }]}>{t('Collected')}</Text>
+                </View>
+              ) : isStrictSeller ? (
+                <TouchableOpacity
+                  style={[styles.outlineActionBtn, { borderColor: theme.primary }]}
+                  onPress={() => setDispatchModalVisible(true)}
+                >
+                  <Icon name="pencil-outline" size={14} color={theme.primary} />
+                  <Text style={[styles.outlineActionBtnText, { color: theme.primary }]}>{t('Update LR')}</Text>
+                </TouchableOpacity>
+              ) : (
+                <View style={styles.docPendingPill}>
+                  <View style={styles.dotOrange} />
+                  <Text style={styles.docPendingPillText}>{t('Pending')}</Text>
+                </View>
+              )}
+            </View>
+
+            {/* Quality Report Document Item */}
+            <View style={[
+              styles.docItemRow,
+              (Boolean(commodityObj?.qualityReport && commodityObj.qualityReport.length > 0) || isDeliveredState)
+                ? { backgroundColor: '#F0FDF4', borderColor: '#DCFCE7' }
+                : { backgroundColor: '#FFFBEB', borderColor: '#FDE68A' }
+            ]}>
+              <View style={styles.docLeftRow}>
+                <View style={[styles.pdfIconContainer, { backgroundColor: (Boolean(commodityObj?.qualityReport && commodityObj.qualityReport.length > 0) || isDeliveredState) ? '#CCFBF1' : '#FEF3C7' }]}>
+                  <Icon name="file-check-outline" size={24} color={(Boolean(commodityObj?.qualityReport && commodityObj.qualityReport.length > 0) || isDeliveredState) ? '#0F766E' : '#D97706'} />
+                </View>
+                <View style={styles.flex1}>
+                  <Text style={styles.docTitleText}>{t('Quality Report')}</Text>
+                  <Text style={styles.docSubtitleText}>
+                    {Boolean(commodityObj?.qualityReport && commodityObj.qualityReport.length > 0)
+                      ? t('Commodity quality certificate')
+                      : (isDeliveredState ? t('Verified & Checked physically') : t('Awaiting listing upload'))}
+                  </Text>
+                </View>
+              </View>
+              {Boolean(commodityObj?.qualityReport && commodityObj.qualityReport.length > 0) ? (
+                <View style={styles.docActionIconsRow}>
+                  {commodityObj.qualityReport.map((reportUrl, idx) => (
+                    <React.Fragment key={`qr_static_${idx}`}>
+                      <TouchableOpacity
+                        style={styles.iconCircleBtn}
+                        onPress={() => viewDocument(reportUrl, `quality_report_${idx + 1}.pdf`)}
+                      >
+                        <Icon name="eye-outline" size={18} color={COLORS.textMuted} />
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={styles.iconCircleBtn}
+                        onPress={() => downloadFile(reportUrl, `quality_report_${idx + 1}.pdf`)}
+                      >
+                        <Icon name="download-outline" size={18} color={COLORS.textMuted} />
+                      </TouchableOpacity>
+                    </React.Fragment>
+                  ))}
+                </View>
+              ) : isDeliveredState ? (
+                <View style={[styles.docPendingPill, { backgroundColor: '#F0FDF4', borderColor: '#BBF7D0' }]}>
+                  <Icon name="check-circle" size={14} color="#15803D" />
+                  <Text style={[styles.docPendingPillText, { color: '#15803D' }]}>{t('Verified')}</Text>
+                </View>
+              ) : isStrictSeller ? (
+                <TouchableOpacity
+                  style={[styles.outlineActionBtn, { borderColor: theme.primary }]}
+                  onPress={() => handleUploadPlaceholderDoc('quality_report')}
+                  disabled={uploadingDocType !== null}
+                >
+                  {uploadingDocType === 'quality_report' ? (
+                    <ActivityIndicator size="small" color={theme.primary} />
+                  ) : (
+                    <>
+                      <Icon name="upload" size={14} color={theme.primary} />
+                      <Text style={[styles.outlineActionBtnText, { color: theme.primary }]}>{t('Upload')}</Text>
+                    </>
+                  )}
+                </TouchableOpacity>
               ) : (
                 <View style={styles.docPendingPill}>
                   <View style={styles.dotOrange} />
@@ -1027,8 +1436,32 @@ export default function DealDetailsScreen({ route, navigation }) {
                   <View style={styles.timelineNoteBox}>
                     <Text style={styles.timelineNoteText}>
                       {t('Shipment marked as dispatched.')}
-                      {Boolean(dispatchDetails?.transportName || dispatchDetails?.data?.transportName) ? ` via ${dispatchDetails?.transportName || dispatchDetails?.data?.transportName}` : ''}
+                      {Boolean(dispatchDetails?.transporterName || dispatchDetails?.data?.transporterName || dispatchDetails?.transportName || dispatchDetails?.data?.transportName) ? ` via ${dispatchDetails?.transporterName || dispatchDetails?.data?.transporterName || dispatchDetails?.transportName || dispatchDetails?.data?.transportName}` : ''}
                       {Boolean(dispatchDetails?.lrNumber || dispatchDetails?.data?.lrNumber) ? ` (LR #${dispatchDetails?.lrNumber || dispatchDetails?.data?.lrNumber})` : ''}
+                    </Text>
+                  </View>
+                </View>
+              </View>
+            )}
+
+            {/* Step 5: Goods Delivered (ONLY if Delivered/Received) */}
+            {isDeliveredState && (
+              <View style={styles.timelineItem}>
+                <View style={[styles.timelineNode, { borderColor: theme.primary, backgroundColor: theme.primary }]}>
+                  <Icon name="check" size={11} color={COLORS.white} />
+                </View>
+                <View style={styles.timelineContent}>
+                  <Text style={styles.timelineTitle}>{t('Goods Delivered & Received')}</Text>
+                  <Text style={styles.timelineDate}>
+                    {formatDate(dispatchDetails?.goodsReceipt?.receivedDate || dispatchDetails?.data?.goodsReceipt?.receivedDate || dispatchDetails?.updatedAt)}
+                  </Text>
+                  <View style={styles.timelineNoteBox}>
+                    <Text style={styles.timelineNoteText}>
+                      {t('Delivery confirmed. Received quantity: ')}
+                      <Text style={{ fontWeight: '700' }}>
+                        {dispatchDetails?.goodsReceipt?.receivedQuantity || dispatchDetails?.data?.goodsReceipt?.receivedQuantity || '—'} {qtyUnit}
+                      </Text>
+                      {Boolean(dispatchDetails?.goodsReceipt?.buyerRemarks || dispatchDetails?.data?.goodsReceipt?.buyerRemarks) ? ` (${dispatchDetails?.goodsReceipt?.buyerRemarks || dispatchDetails?.data?.goodsReceipt?.buyerRemarks})` : ''}
                     </Text>
                   </View>
                 </View>
@@ -1162,6 +1595,14 @@ export default function DealDetailsScreen({ route, navigation }) {
                 onPress={async () => {
                   const pickedFile = await pickDocumentOrImage();
                   if (pickedFile) {
+                    if (pickedFile.size && pickedFile.size > 10 * 1024 * 1024) {
+                      showAlert({
+                        type: 'warning',
+                        title: t('File Too Large'),
+                        message: t('Document size cannot exceed 10 MB. Selected file: {size} MB.').replace('{size}', (pickedFile.size / 1024 / 1024).toFixed(2)),
+                      });
+                      return;
+                    }
                     setSelectedFile(pickedFile);
                   }
                 }}
@@ -1191,6 +1632,276 @@ export default function DealDetailsScreen({ route, navigation }) {
                 onPress={handleSaveCustomDocument}
               >
                 <Text style={styles.submitPoBtnText}>{t('Upload')}</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Dispatch Logistics Form Modal */}
+      <Modal
+        visible={dispatchModalVisible}
+        transparent={true}
+        animationType="slide"
+        onRequestClose={() => setDispatchModalVisible(false)}
+      >
+        <View style={styles.modalScrim}>
+          <TouchableOpacity style={styles.modalBackdropPressable} onPress={() => setDispatchModalVisible(false)} />
+          <View style={[styles.bottomSheetCard, { paddingBottom: Math.max(insets.bottom + h(16), h(24)) }]}>
+            <View style={styles.handleBar} />
+
+            <Text style={styles.modalHeadline}>{t('Dispatch Logistics Details')}</Text>
+            <Text style={styles.modalSubHeadline}>
+              {t('Enter vehicle details, transporter information and upload tax invoice to confirm shipment.')}
+            </Text>
+
+            <ScrollView style={{ maxHeight: h(450) }} showsVerticalScrollIndicator={false}>
+              <View style={styles.inputGroup}>
+                <Text style={styles.inputLabel}>{t('Transporter Name *')}</Text>
+                <TextInput
+                  style={styles.textInput}
+                  placeholder={t('e.g. AgriLogistics Pvt Ltd')}
+                  placeholderTextColor={COLORS.textMuted}
+                  value={transporterName}
+                  onChangeText={setTransporterName}
+                />
+              </View>
+
+              <View style={styles.inputGroup}>
+                <Text style={styles.inputLabel}>{t('Vehicle Number *')}</Text>
+                <TextInput
+                  style={styles.textInput}
+                  placeholder={t('e.g. UP80ET1234')}
+                  placeholderTextColor={COLORS.textMuted}
+                  value={vehicleNumber}
+                  onChangeText={setVehicleNumber}
+                  autoCapitalize="characters"
+                />
+              </View>
+
+              <View style={styles.inputGroup}>
+                <Text style={styles.inputLabel}>{t('Lorry Receipt (LR) Number *')}</Text>
+                <TextInput
+                  style={styles.textInput}
+                  placeholder={t('e.g. LR-987213')}
+                  placeholderTextColor={COLORS.textMuted}
+                  value={lrNumber}
+                  onChangeText={setLrNumber}
+                />
+              </View>
+
+              <View style={styles.inputGroup}>
+                <Text style={styles.inputLabel}>{t('Tax Invoice Number')}</Text>
+                <TextInput
+                  style={styles.textInput}
+                  placeholder={t('e.g. INV/2026/089')}
+                  placeholderTextColor={COLORS.textMuted}
+                  value={taxInvoiceNumber}
+                  onChangeText={setTaxInvoiceNumber}
+                />
+              </View>
+
+              <View style={styles.inputGroup}>
+                <Text style={styles.inputLabel}>{t('Upload Tax Invoice Document')}</Text>
+                <TouchableOpacity
+                  style={[styles.cancelBtn, { flexDirection: 'row', gap: w(8), backgroundColor: '#F1F5F9', borderStyle: 'dashed', borderWidth: 1, borderColor: '#CBD5E1' }]}
+                  onPress={async () => {
+                    const pickedFile = await pickDocumentOrImage();
+                    if (pickedFile) {
+                      if (pickedFile.size && pickedFile.size > 10 * 1024 * 1024) {
+                        showAlert({
+                          type: 'warning',
+                          title: t('File Too Large'),
+                          message: t('Document size cannot exceed 10 MB. Selected file: {size} MB.').replace('{size}', (pickedFile.size / 1024 / 1024).toFixed(2)),
+                        });
+                        return;
+                      }
+                      setTaxInvoiceDoc(pickedFile);
+                    }
+                  }}
+                >
+                  <Icon name="file-upload-outline" size={18} color={COLORS.text} />
+                  <Text style={styles.cancelBtnText}>
+                    {taxInvoiceDoc ? taxInvoiceDoc.name : t('Select Invoice File (PDF / Image)')}
+                  </Text>
+                </TouchableOpacity>
+                {taxInvoiceDoc?.size && (
+                  <Text style={{ fontSize: f(11), color: COLORS.textMuted, marginTop: h(4) }}>
+                    {t('File Size')}: {(taxInvoiceDoc.size / 1024 / 1024).toFixed(2)} MB
+                  </Text>
+                )}
+              </View>
+
+              <View style={styles.inputGroup}>
+                <Text style={styles.checklistTitle}>{t('Physical Documents Handed Over')}</Text>
+                
+                <TouchableOpacity 
+                  style={styles.checkboxRow} 
+                  onPress={() => setEwayBillPhysicalSent(!ewayBillPhysicalSent)}
+                >
+                  <View style={[styles.checkboxBox, ewayBillPhysicalSent && { backgroundColor: theme.primary, borderColor: theme.primary }]}>
+                    {ewayBillPhysicalSent && <Icon name="check" size={14} color={COLORS.white} />}
+                  </View>
+                  <Text style={styles.checkboxLabel}>{t('E-Way Bill Physical Copy')}</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity 
+                  style={styles.checkboxRow} 
+                  onPress={() => setTaxInvoicePhysicalSent(!taxInvoicePhysicalSent)}
+                >
+                  <View style={[styles.checkboxBox, taxInvoicePhysicalSent && { backgroundColor: theme.primary, borderColor: theme.primary }]}>
+                    {taxInvoicePhysicalSent && <Icon name="check" size={14} color={COLORS.white} />}
+                  </View>
+                  <Text style={styles.checkboxLabel}>{t('Tax Invoice Physical Copy')}</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity 
+                  style={styles.checkboxRow} 
+                  onPress={() => setWeighBillPhysicalSent(!weighBillPhysicalSent)}
+                >
+                  <View style={[styles.checkboxBox, weighBillPhysicalSent && { backgroundColor: theme.primary, borderColor: theme.primary }]}>
+                    {weighBillPhysicalSent && <Icon name="check" size={14} color={COLORS.white} />}
+                  </View>
+                  <Text style={styles.checkboxLabel}>{t('Weigh Bridge Slip Physical Copy')}</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity 
+                  style={styles.checkboxRow} 
+                  onPress={() => setOtherDocsPhysicalSent(!otherDocsPhysicalSent)}
+                >
+                  <View style={[styles.checkboxBox, otherDocsPhysicalSent && { backgroundColor: theme.primary, borderColor: theme.primary }]}>
+                    {otherDocsPhysicalSent && <Icon name="check" size={14} color={COLORS.white} />}
+                  </View>
+                  <Text style={styles.checkboxLabel}>{t('Other Transport Documents')}</Text>
+                </TouchableOpacity>
+              </View>
+
+              <View style={styles.inputGroup}>
+                <Text style={styles.inputLabel}>{t('Remarks')}</Text>
+                <TextInput
+                  style={[styles.textInput, styles.textArea]}
+                  placeholder={t('Add logistics remarks or transporter contact info...')}
+                  placeholderTextColor={COLORS.textMuted}
+                  multiline={true}
+                  numberOfLines={2}
+                  value={dispatchRemarks}
+                  onChangeText={setDispatchRemarks}
+                />
+              </View>
+            </ScrollView>
+
+            <View style={styles.modalBtnRow}>
+              <TouchableOpacity style={styles.cancelBtn} onPress={() => setDispatchModalVisible(false)}>
+                <Text style={styles.cancelBtnText}>{t('Cancel')}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.submitPoBtn, { backgroundColor: theme.primary }]}
+                onPress={submitDispatch}
+                disabled={dispatching}
+              >
+                {dispatching ? (
+                  <ActivityIndicator size="small" color={COLORS.white} />
+                ) : (
+                  <Text style={styles.submitPoBtnText}>{t('Submit Dispatch')}</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Goods Receipt (Confirm Delivery) Modal */}
+      <Modal
+        visible={goodsReceiptModalVisible}
+        transparent={true}
+        animationType="slide"
+        onRequestClose={() => setGoodsReceiptModalVisible(false)}
+      >
+        <View style={styles.modalScrim}>
+          <TouchableOpacity style={styles.modalBackdropPressable} onPress={() => setGoodsReceiptModalVisible(false)} />
+          <View style={[styles.bottomSheetCard, { paddingBottom: Math.max(insets.bottom + h(16), h(24)) }]}>
+            <View style={styles.handleBar} />
+
+            <Text style={styles.modalHeadline}>{t('Goods Receipt (GRN)')}</Text>
+            <Text style={styles.modalSubHeadline}>
+              {t('Confirm the physical received weight/quantity and document checkmarks at mandi/warehouse.')}
+            </Text>
+
+            <ScrollView style={{ maxHeight: h(400) }} showsVerticalScrollIndicator={false}>
+              <View style={styles.inputGroup}>
+                <Text style={styles.inputLabel}>{t('Received Quantity ({unit}) *').replace('{unit}', qtyUnit)}</Text>
+                <TextInput
+                  style={styles.textInput}
+                  keyboardType="numeric"
+                  placeholder={t('e.g. {qty}').replace('{qty}', finalQty)}
+                  placeholderTextColor={COLORS.textMuted}
+                  value={receivedQuantity}
+                  onChangeText={setReceivedQuantity}
+                />
+              </View>
+
+              <View style={styles.inputGroup}>
+                <Text style={styles.checklistTitle}>{t('Documents Collected Checklist')}</Text>
+                
+                <TouchableOpacity 
+                  style={styles.checkboxRow} 
+                  onPress={() => setWeighBridgeSlipCollected(!weighBridgeSlipCollected)}
+                >
+                  <View style={[styles.checkboxBox, weighBridgeSlipCollected && { backgroundColor: theme.primary, borderColor: theme.primary }]}>
+                    {weighBridgeSlipCollected && <Icon name="check" size={14} color={COLORS.white} />}
+                  </View>
+                  <Text style={styles.checkboxLabel}>{t('Weigh Bridge Slip Collected')}</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity 
+                  style={styles.checkboxRow} 
+                  onPress={() => setTaxInvoiceCollected(!taxInvoiceCollected)}
+                >
+                  <View style={[styles.checkboxBox, taxInvoiceCollected && { backgroundColor: theme.primary, borderColor: theme.primary }]}>
+                    {taxInvoiceCollected && <Icon name="check" size={14} color={COLORS.white} />}
+                  </View>
+                  <Text style={styles.checkboxLabel}>{t('Tax Invoice Copy Collected')}</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity 
+                  style={styles.checkboxRow} 
+                  onPress={() => setLorryReceiptCollected(!lorryReceiptCollected)}
+                >
+                  <View style={[styles.checkboxBox, lorryReceiptCollected && { backgroundColor: theme.primary, borderColor: theme.primary }]}>
+                    {lorryReceiptCollected && <Icon name="check" size={14} color={COLORS.white} />}
+                  </View>
+                  <Text style={styles.checkboxLabel}>{t('Lorry Receipt Copy Collected')}</Text>
+                </TouchableOpacity>
+              </View>
+
+              <View style={styles.inputGroup}>
+                <Text style={styles.inputLabel}>{t('Buyer Remarks / Variance Notes')}</Text>
+                <TextInput
+                  style={[styles.textInput, styles.textArea]}
+                  placeholder={t('e.g. Received exactly as dispatched / Note 50kg transit moisture variance...')}
+                  placeholderTextColor={COLORS.textMuted}
+                  multiline={true}
+                  numberOfLines={2}
+                  value={buyerRemarks}
+                  onChangeText={setBuyerRemarks}
+                />
+              </View>
+            </ScrollView>
+
+            <View style={styles.modalBtnRow}>
+              <TouchableOpacity style={styles.cancelBtn} onPress={() => setGoodsReceiptModalVisible(false)}>
+                <Text style={styles.cancelBtnText}>{t('Cancel')}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.submitPoBtn, { backgroundColor: theme.primary }]}
+                onPress={submitGoodsReceipt}
+                disabled={dispatching}
+              >
+                {dispatching ? (
+                  <ActivityIndicator size="small" color={COLORS.white} />
+                ) : (
+                  <Text style={styles.submitPoBtnText}>{t('Confirm Delivery')}</Text>
+                )}
               </TouchableOpacity>
             </View>
           </View>
@@ -1862,5 +2573,47 @@ const styles = StyleSheet.create({
     fontSize: f(12),
     color: COLORS.textMuted,
     fontWeight: '500',
+  },
+  checkboxRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: w(10),
+    paddingVertical: h(6),
+  },
+  checkboxBox: {
+    width: w(20),
+    height: w(20),
+    borderRadius: 4,
+    borderWidth: 1.5,
+    borderColor: '#CBD5E1',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: COLORS.white,
+  },
+  checkboxLabel: {
+    fontSize: f(13),
+    color: COLORS.text,
+  },
+  checklistTitle: {
+    fontSize: f(12),
+    fontWeight: '700',
+    color: COLORS.textMuted,
+    marginTop: h(10),
+    marginBottom: h(4),
+  },
+  outlineActionBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: h(6),
+    paddingHorizontal: w(10),
+    borderWidth: 1,
+    borderRadius: 8,
+    backgroundColor: COLORS.white,
+    gap: w(4),
+  },
+  outlineActionBtnText: {
+    fontSize: f(11),
+    fontWeight: '700',
   },
 });

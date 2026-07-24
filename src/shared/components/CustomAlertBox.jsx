@@ -19,9 +19,10 @@ import {
 import Icon from 'react-native-vector-icons/Ionicons';
 import COLORS from '../../theme/colors';
 import { getFriendlyErrorMessage } from '../utils/errorUtils';
-
+import { triggerOfflineBlockGlobal } from './NetworkProvider';
 
 const { width } = Dimensions.get('window');
+
 
 /* ─── Type config ─────────────────────────────────────────── */
 const TYPE_CONFIG = {
@@ -122,11 +123,10 @@ const CustomAlertInner = forwardRef((_, ref) => {
         (rawMsg && typeof rawMsg === 'object' && (rawMsg.message === 'NO_INTERNET_WRITE_BLOCKED' || rawMsg.message?.includes('NO_INTERNET_WRITE_BLOCKED')));
 
       if (isOfflineBlock) {
-        alertType = 'warning';
-        if (!options.title || options.title === 'Error' || options.title === 'Update Failed' || options.title === 'Submission Failed') {
-          title = 'Connection Required';
-        }
+        triggerOfflineBlockGlobal();
+        return;
       }
+
 
       setConfig({
         type: alertType,
