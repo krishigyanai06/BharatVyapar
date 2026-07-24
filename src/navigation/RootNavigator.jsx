@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { View } from 'react-native';
 import { useDispatch, useSelector } from 'react-redux';
 import { NavigationContainer } from '@react-navigation/native';
 import {
@@ -125,7 +126,6 @@ export default function RootNavigator() {
     <NavigationContainer
       ref={navigationRef}
       onReady={() => {
-        console.log('[RootNavigator] Navigation Container is ready. Flushing queue.');
         flushNavigationQueue();
       }}
     >

@@ -7,7 +7,6 @@ export const notificationApi = {
    */
   saveFcmToken: async (token) => {
     try {
-      console.log('[NotificationApi] Sending FCM Token to backend server...');
       const res = await apiClient.post('/fcm/save-token', {
         token,
         fcmToken: token,

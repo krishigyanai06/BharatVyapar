@@ -8,6 +8,7 @@ import {
   TextInput,
   Modal,
   ActivityIndicator,
+  Platform,
 } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import COLORS from '../../../theme/colors';
@@ -48,10 +49,14 @@ export default function PlaceBuyOfferModal({
 
           <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.modalScroll}>
             <Text style={styles.modalSubtitle}>
-              {t('Offer terms for {commodity} - Grade {grade} ({seller})')
-                .replace('{commodity}', item.commodityName)
-                .replace('{grade}', item.grade)
-                .replace('{seller}', item.sellerName)}
+              {item?.grade && item.grade !== 'null' && item.grade !== '—'
+                ? t('Offer terms for {commodity} (Grade {grade}) - {seller}')
+                    .replace('{commodity}', item.commodityName || t('Commodity'))
+                    .replace('{grade}', item.grade)
+                    .replace('{seller}', item.sellerName || t('Seller'))
+                : t('Offer terms for {commodity} - {seller}')
+                    .replace('{commodity}', item.commodityName || t('Commodity'))
+                    .replace('{seller}', item.sellerName || t('Seller'))}
             </Text>
 
             {/* Price & Quantity input */}
@@ -212,12 +217,15 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
     borderColor: '#E9ECEF',
     borderRadius: 8,
-    paddingHorizontal: w(10),
-    height: h(38),
+    paddingHorizontal: w(12),
+    paddingVertical: Platform.OS === 'ios' ? h(8) : h(4),
+    minHeight: h(44),
     fontSize: f(13),
     color: COLORS.text,
     backgroundColor: '#F8F9FA',
     marginTop: h(4),
+    textAlignVertical: 'center',
+    includeFontPadding: false,
   },
   hintText: {
     fontSize: f(10),

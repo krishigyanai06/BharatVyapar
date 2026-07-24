@@ -101,14 +101,6 @@ export const getUserDetails = createAsyncThunk(
       // mergeWithLocalProfile fills missing fields, normalizeUser trims to UI fields
       const user = mergeWithLocalProfile(rawUser, localProfile);
 
-      if (__DEV__) {
-        console.log('✅ [GET USER]', {
-          name: `${user?.firstName || ''} ${user?.lastName || ''}`.trim() || 'N/A',
-          phone: user?.phone || 'N/A',
-          role: user?.role || 'N/A',
-        });
-      }
-
       return user;
     } catch (err) {
       if (__DEV__) console.error('❌ [GET USER] Failed:', err?.message);
@@ -154,15 +146,6 @@ export const updateProfile = createAsyncThunk(
         if (__DEV__) console.error('❌ [PERSIST USER] Failed:', persistErr);
       }
 
-      if (__DEV__) {
-        console.log('✅ [UPDATE PROFILE]', {
-          firstName: mergedUser?.firstName,
-          lastName: mergedUser?.lastName,
-          shopName: mergedUser?.shopName,
-          emailId: mergedUser?.emailId,
-        });
-      }
-
       return mergedUser;
     } catch (err) {
       if (isSilentCancel(err)) {
@@ -185,7 +168,6 @@ export const logoutUser = createAsyncThunk(
   'auth/logoutUser',
   async (_, { rejectWithValue, getState }) => {
     try {
-      console.log('🔄 [LOGOUT] Logging out...');
       // Get the token before clearing storage
       const token = getState().auth?.token || (await getStoredToken());
       
@@ -207,7 +189,6 @@ export const logoutUser = createAsyncThunk(
         });
       }
       
-      console.log('✅ [LOGOUT] Local session cleared, backend notified');
       return true;
     } catch (err) {
       console.warn('⚠️ [LOGOUT] Session removal failed, fallback successful');

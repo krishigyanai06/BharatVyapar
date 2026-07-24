@@ -189,7 +189,7 @@ export default function ReceivedOffersModal({ visible, onClose, item }) {
               <View style={styles.summaryItem}>
                 <Text style={styles.summaryLabel}>{t('My Asking Price')}</Text>
                 <Text style={styles.summaryValue}>
-                  {item.sellingPrice ? `₹${item.sellingPrice}/${item.sellingPriceUnit || 'Qt'}` : '—'}
+                  {item.sellingPrice ? `₹${item.sellingPrice}/${item.sellingPriceUnit || 'Qt'}` : t('Negotiable')}
                 </Text>
               </View>
               <View style={styles.summaryDivider} />

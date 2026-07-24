@@ -2,6 +2,7 @@ import { createSlice, createAsyncThunk } from '@reduxjs/toolkit';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { translateTextService, translateBatchService } from '../shared/utils/translationService';
 import { storage, initStorage } from '../shared/utils/storage';
+import { initDealIdRegistry } from '../shared/utils/dealIdRegistry';
 
 import enStrings from '../locales/en.json';
 import hiStrings from '../locales/hi.json';
@@ -102,6 +103,8 @@ export const initializeLanguageThunk = createAsyncThunk(
 
       // Await storage preload from AsyncStorage
       await initStorage();
+      // Hydrate offerId→dealId registry from persisted storage
+      initDealIdRegistry();
 
       const savedLang = storage.getString('app_language') || 'en';
       dispatch(setLanguage(savedLang));

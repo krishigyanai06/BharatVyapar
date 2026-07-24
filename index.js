@@ -11,11 +11,19 @@ notifee.onBackgroundEvent(async ({ type, detail }) => {
 
 // Register background headless handler for message packets arriving when app is killed/minimized
 setBackgroundMessageHandler(getMessaging(), async (remoteMessage) => {
-  console.log('[HeadlessJS] Background message intercepted:', remoteMessage);
+  console.log('📬 [HeadlessJS - FCM Background Payload Received]:', JSON.stringify(remoteMessage, null, 2));
 
   const { notification, data } = remoteMessage;
 
-  // Make sure we create the default transactional channel for background triggers
+  // If FCM payload already includes a 'notification' object, Android OS automatically
+  // displays a system notification drawer item. We must NOT call notifee.displayNotification
+  // here to prevent duplicate banners in the system tray.
+  if (notification) {
+    console.log('[HeadlessJS] FCM Notification payload already displayed by Android OS native drawer.');
+    return;
+  }
+
+  // Handle data-only push notifications via Notifee
   await notifee.createChannel({
     id: 'transactional_deals',
     name: 'Deal & Order Updates',
@@ -23,10 +31,9 @@ setBackgroundMessageHandler(getMessaging(), async (remoteMessage) => {
     vibration: true,
   });
 
-  // Display OS-level drawer notification
   await notifee.displayNotification({
-    title: notification?.title || data?.title || 'New Update',
-    body: notification?.body || data?.body || '',
+    title: data?.title || 'New Update',
+    body: data?.body || '',
     data: data || {},
     android: {
       channelId: 'transactional_deals',

@@ -71,7 +71,7 @@ export default function SellerOrdersScreen({ navigation }) {
         <View style={styles.metricRow}>
           <Info label={t('Approved Quantity')} value={`${item.approvedQuantity} ${item.deliveryDetails?.unit || 'Qt'}`} />
           <Info label={t('Final Price')} value={`₹${item.finalPrice}`} color={theme.primary} />
-          <Info label={t('Delivery')} value={item.deliveryDetails?.location || '—'} />
+          <Info label={t('Delivery')} value={item.deliveryDetails?.location && item.deliveryDetails?.location !== '—' ? item.deliveryDetails.location : t('Location Not Specified')} />
         </View>
         {nextStatus ? (
           <TouchableOpacity style={[styles.primaryBtn, { backgroundColor: theme.primary }]} onPress={() => moveNext(item)}>

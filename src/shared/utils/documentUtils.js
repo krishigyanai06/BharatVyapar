@@ -1,6 +1,6 @@
 // Utility: document/image pick, permission and view helpers — production level (Force reload)
 import { launchImageLibrary, launchCamera } from 'react-native-image-picker';
-import { pick, types, isCancel } from '@react-native-documents/picker';
+import { pick, types, isErrorWithCode, errorCodes } from '@react-native-documents/picker';
 import {
   Alert,
   Linking,
@@ -214,7 +214,7 @@ export const pickFromCamera = async () => {
 const pickDocument = async () => {
   try {
     const result = await pick({
-      type: [types.pdf, types.images],
+      type: [types.pdf],
       copyTo: 'cachesDirectory',
     });
 
@@ -228,7 +228,7 @@ const pickDocument = async () => {
       size: doc.size,
     });
   } catch (err) {
-    if (isCancel(err)) return null;
+    if (isErrorWithCode(err, errorCodes.DOCUMENT_PICKER_CANCELED)) return null;
     showAlert({
       type: 'error',
       title: 'Document Error',
@@ -240,21 +240,44 @@ const pickDocument = async () => {
 
 // ─── Public API ───────────────────────────────────────────────────────────────
 
-// Shows action sheet and returns picked file { uri, name, type, size } or null
+// Shows custom alert action picker and returns picked file { uri, name, type, size } or null
 export const pickDocumentOrImage = () =>
   new Promise(resolve => {
-    Alert.alert(
-      'Upload Document',
-      'Choose source',
-      [
-        { text: '📷 Camera', onPress: () => pickFromCamera().then(resolve) },
-        { text: '🖼️ Gallery', onPress: () => pickFromGallery().then(resolve) },
-        { text: '📄 Document (PDF)', onPress: () => pickDocument().then(resolve) },
-        { text: 'Cancel', style: 'cancel', onPress: () => resolve(null) },
+    showAlert({
+      type: 'info',
+      title: 'Upload Document',
+      message: 'Choose how to upload your document:',
+      mode: 'action-sheet',
+      buttons: [
+        {
+          text: 'Take Photo',
+          icon: 'camera-outline',
+          description: 'Capture physical document with camera',
+          onPress: () => pickFromCamera().then(resolve),
+        },
+        {
+          text: 'Choose from Gallery',
+          icon: 'image-outline',
+          description: 'Pick an existing photo from gallery',
+          onPress: () => pickFromGallery().then(resolve),
+        },
+        {
+          text: 'Browse Files (PDF)',
+          icon: 'document-text-outline',
+          description: 'Select a PDF file up to 10MB',
+          onPress: () => pickDocument().then(resolve),
+        },
+        {
+          text: 'Cancel',
+          icon: 'close-circle-outline',
+          style: 'cancel',
+          onPress: () => resolve(null),
+        },
       ],
-      { cancelable: true, onDismiss: () => resolve(null) },
-    );
+      onDismiss: () => resolve(null),
+    });
   });
+
 
 // Normalize URI for FormData (Android content:// URIs need no change, iOS file:// fine as-is)
 export const normalizeFileUri = uri => {
@@ -300,8 +323,10 @@ export const viewDocument = async url => {
   }
 };
 
-// Download a file to local device Downloads (Android) or Documents (iOS)
-export const downloadFile = async (url, fileName = 'download.pdf') => {
+import { getStoredToken } from '../../features/auth/auth.storage';
+
+// Download / View a private file with Bearer Authorization header
+export const downloadFile = async (url, fileName = 'download.pdf', token = null) => {
   if (!url) {
     showAlert({
       type: 'error',
@@ -315,70 +340,47 @@ export const downloadFile = async (url, fileName = 'download.pdf') => {
   const cleanFileName = fileName.replace(/[^a-zA-Z0-9.\-_]/g, '_');
 
   try {
+    // 1. Get stored Auth token for private S3 path access
+    let authToken = token;
+    if (!authToken) {
+      authToken = await getStoredToken();
+    }
+
+    const headers = authToken ? { Authorization: `Bearer ${authToken}` } : {};
+    const { dirs } = ReactNativeBlobUtil.fs;
+    const targetDir = Platform.OS === 'android' ? dirs.DownloadDir : dirs.DocumentDir;
+    const localPath = `${targetDir}/${cleanFileName}`;
+
+    // 2. Fetch authenticated binary stream in-app process (bypassing unauthenticated OS DownloadManager 403 block)
+    const res = await ReactNativeBlobUtil.config({
+      fileCache: true,
+      appendExt: 'pdf',
+      path: localPath,
+    }).fetch('GET', url, headers);
+
+    const filePath = res.path();
+
+    // 3. Automatically launch native PDF viewer intent or iOS document preview
     if (Platform.OS === 'android') {
-      const { dirs } = ReactNativeBlobUtil.fs;
-      ReactNativeBlobUtil.config({
-        fileCache: true,
-        addAndroidDownloads: {
-          useDownloadManager: true,
-          notification: true,
-          title: cleanFileName,
-          path: `${dirs.DownloadDir}/${cleanFileName}`,
-          description: 'Downloading document',
-          mime: 'application/pdf',
-          mediaScannable: true,
-        },
-      })
-      .fetch('GET', url)
-      .then((res) => {
-        const filePath = res.path();
-        // Automatically open the downloaded file via actionViewIntent
-        ReactNativeBlobUtil.android.actionViewIntent(filePath, 'application/pdf')
-          .catch((err) => {
-            console.warn('[downloadFile] Failed to open PDF automatically:', err);
-            showAlert({
-              type: 'success',
-              title: 'Download Complete',
-              message: `File saved to Downloads folder as "${cleanFileName}".`,
-            });
-          });
-      })
-      .catch((err) => {
-        console.error('Download error:', err);
+      try {
+        await ReactNativeBlobUtil.android.actionViewIntent(filePath, 'application/pdf');
+      } catch (err) {
+        console.warn('[downloadFile] ActionViewIntent warning:', err);
         showAlert({
-          type: 'error',
-          title: 'Download Failed',
-          message: 'Failed to download file. Please try again.',
+          type: 'success',
+          title: 'File Downloaded',
+          message: `Purchase Order saved to Downloads as "${cleanFileName}".`,
         });
-      });
+      }
     } else {
-      // iOS
-      const { dirs } = ReactNativeBlobUtil.fs;
-      const localPath = `${dirs.DocumentDir}/${cleanFileName}`;
-      
-      ReactNativeBlobUtil.config({
-        fileCache: true,
-        path: localPath,
-      })
-      .fetch('GET', url)
-      .then((res) => {
-        ReactNativeBlobUtil.ios.previewDocument(localPath);
-      })
-      .catch((err) => {
-        console.error('Download error:', err);
-        showAlert({
-          type: 'error',
-          title: 'Download Failed',
-          message: 'Failed to preview/save document.',
-        });
-      });
+      ReactNativeBlobUtil.ios.previewDocument(filePath);
     }
   } catch (err) {
-    console.error('Download setup error:', err);
+    console.error('[downloadFile] Authenticated fetch error:', err);
     showAlert({
       type: 'error',
       title: 'Download Failed',
-      message: 'Could not initialize download manager.',
+      message: err?.message || 'Failed to download and open Purchase Order document.',
     });
   }
 };

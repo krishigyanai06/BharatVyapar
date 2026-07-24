@@ -19,9 +19,10 @@ import {
 import Icon from 'react-native-vector-icons/Ionicons';
 import COLORS from '../../theme/colors';
 import { getFriendlyErrorMessage } from '../utils/errorUtils';
-
+import { triggerOfflineBlockGlobal } from './NetworkProvider';
 
 const { width } = Dimensions.get('window');
+
 
 /* ─── Type config ─────────────────────────────────────────── */
 const TYPE_CONFIG = {
@@ -83,6 +84,7 @@ const CustomAlertInner = forwardRef((_, ref) => {
     buttons: [],
     themeColor: null,
     imageUrl: null,
+    mode: null,
   });
 
   const scaleAnim = useRef(new Animated.Value(0.8)).current;
@@ -121,11 +123,10 @@ const CustomAlertInner = forwardRef((_, ref) => {
         (rawMsg && typeof rawMsg === 'object' && (rawMsg.message === 'NO_INTERNET_WRITE_BLOCKED' || rawMsg.message?.includes('NO_INTERNET_WRITE_BLOCKED')));
 
       if (isOfflineBlock) {
-        alertType = 'warning';
-        if (!options.title || options.title === 'Error' || options.title === 'Update Failed' || options.title === 'Submission Failed') {
-          title = 'Connection Required';
-        }
+        triggerOfflineBlockGlobal();
+        return;
       }
+
 
       setConfig({
         type: alertType,
@@ -137,6 +138,8 @@ const CustomAlertInner = forwardRef((_, ref) => {
             : [{ text: 'OK', style: 'default' }],
         themeColor: options.themeColor || null,
         imageUrl: options.imageUrl || null,
+        onDismiss: options.onDismiss || null,
+        mode: options.mode || null,
       });
       setVisible(true);
       animRef.current = Animated.parallel([
@@ -173,7 +176,11 @@ const CustomAlertInner = forwardRef((_, ref) => {
       setVisible(false);
       scaleAnim.setValue(0.8);
       opacityAnim.setValue(0);
-      if (btn?.onPress) btn.onPress();
+      if (btn?.onPress) {
+        btn.onPress();
+      } else if (config.onDismiss) {
+        config.onDismiss();
+      }
     });
   };
 
@@ -276,37 +283,74 @@ const CustomAlertInner = forwardRef((_, ref) => {
           />
 
           {/* ── Buttons ── */}
-          {(() => {
-            const isVertical = config.buttons.length >= 3 || config.buttons.some(btn => btn.text && btn.text.length > 12);
-            return (
-              <View
-                style={[
-                  styles.btnRow,
-                  isVertical ? { flexDirection: 'column' } : { flexDirection: 'row' },
-                  config.buttons.length === 1 && { justifyContent: 'center' },
-                ]}
-              >
-                {config.buttons.map((btn, idx) => (
+          {config.mode === 'action-sheet' ? (
+            <View style={styles.actionSheetList}>
+              {config.buttons.map((btn, idx) => {
+                const isCancel = btn.style === 'cancel';
+                return (
                   <TouchableOpacity
                     key={idx}
-                    activeOpacity={0.8}
+                    activeOpacity={0.7}
                     style={[
-                      styles.btn,
-                      getButtonStyle(btn.style),
-                      getDynamicBtnStyle(btn),
-                      isVertical ? { width: '100%', flex: 0 } : { flex: 1 },
-                      config.buttons.length === 1 && { minWidth: 140 },
+                      styles.actionSheetItem,
+                      isCancel && styles.actionSheetCancelItem,
+                      idx < config.buttons.length - 1 && styles.actionSheetItemBorder,
                     ]}
                     onPress={() => handleClose(btn)}
                   >
-                    <Text style={[getButtonTextStyle(btn.style), getDynamicBtnTextStyle(btn)]}>
-                      {btn.text || 'OK'}
-                    </Text>
+                    {btn.icon && (
+                      <View style={[styles.actionSheetIconCircle, { backgroundColor: isCancel ? COLORS.border : typeConf.color + '18' }]}>
+                        <Icon name={btn.icon} size={20} color={isCancel ? COLORS.textLight : typeConf.color} />
+                      </View>
+                    )}
+                    <View style={styles.actionSheetTextBlock}>
+                      <Text style={[styles.actionSheetLabel, isCancel && styles.actionSheetCancelLabel]}>
+                        {btn.text || 'OK'}
+                      </Text>
+                      {!!btn.description && (
+                        <Text style={styles.actionSheetDescription}>{btn.description}</Text>
+                      )}
+                    </View>
+                    {!isCancel && (
+                      <Icon name="chevron-forward" size={16} color={COLORS.textLight} />
+                    )}
                   </TouchableOpacity>
-                ))}
-              </View>
-            );
-          })()}
+                );
+              })}
+            </View>
+          ) : (
+            (() => {
+              const isVertical = config.buttons.length >= 3 || config.buttons.some(btn => btn.text && btn.text.length > 12);
+              return (
+                <View
+                  style={[
+                    styles.btnRow,
+                    isVertical ? { flexDirection: 'column' } : { flexDirection: 'row' },
+                    config.buttons.length === 1 && { justifyContent: 'center' },
+                  ]}
+                >
+                  {config.buttons.map((btn, idx) => (
+                    <TouchableOpacity
+                      key={idx}
+                      activeOpacity={0.8}
+                      style={[
+                        styles.btn,
+                        getButtonStyle(btn.style),
+                        getDynamicBtnStyle(btn),
+                        isVertical ? { width: '100%', flex: 0 } : { flex: 1 },
+                        config.buttons.length === 1 && { minWidth: 140 },
+                      ]}
+                      onPress={() => handleClose(btn)}
+                    >
+                      <Text style={[getButtonTextStyle(btn.style), getDynamicBtnTextStyle(btn)]}>
+                        {btn.text || 'OK'}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              );
+            })()
+          )}
           </Animated.View>
         </TouchableWithoutFeedback>
       </TouchableOpacity>
@@ -414,5 +458,51 @@ const styles = StyleSheet.create({
   },
   btnDestructive: {
     backgroundColor: COLORS.error,
+  },
+  // ─── Action-Sheet Mode ───────────────────────────────────
+  actionSheetList: {
+    width: '100%',
+    marginTop: 4,
+  },
+  actionSheetItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 14,
+    paddingHorizontal: 4,
+    gap: 14,
+  },
+  actionSheetItemBorder: {
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.border,
+  },
+  actionSheetCancelItem: {
+    paddingTop: 16,
+    marginTop: 4,
+    borderTopWidth: 1,
+    borderTopColor: COLORS.border,
+  },
+  actionSheetIconCircle: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  actionSheetTextBlock: {
+    flex: 1,
+  },
+  actionSheetLabel: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: COLORS.text,
+  },
+  actionSheetCancelLabel: {
+    color: COLORS.textLight,
+    fontWeight: '500',
+  },
+  actionSheetDescription: {
+    fontSize: 12,
+    color: COLORS.textLight,
+    marginTop: 2,
   },
 });

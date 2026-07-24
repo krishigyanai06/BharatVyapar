@@ -1,5 +1,6 @@
 // features/orders/orders.service.js
 import apiClient from '../../api/client';
+import { normalizeOfferList } from '../marketplace/marketplace.normalizer';
 
 export const REQUIREMENT_STATUS = {
   OPEN: 'OPEN',
@@ -244,23 +245,10 @@ export const submitQuoteAgainstRequirement = async (requirementId, payload) => {
 export const getMySubmittedQuotes = async (_sellerId = null) => {
   try {
     const response = await apiClient.get('/buy-commodity/quotations/sent');
-    const rawData = response.data;
-    if (rawData?.data?.offers && Array.isArray(rawData.data.offers)) {
-      return rawData.data.offers;
-    }
-    if (rawData?.data?.quotations && Array.isArray(rawData.data.quotations)) {
-      return rawData.data.quotations;
-    }
-    if (rawData?.data && Array.isArray(rawData.data)) {
-      return rawData.data;
-    }
-    if (Array.isArray(rawData)) {
-      return rawData;
-    }
-    return [];
+    return normalizeOfferList(response.data);
   } catch (error) {
     console.warn('[OrdersService] API not available, using fallback:', error.message);
-    return dummyQuotes;
+    return normalizeOfferList(dummyQuotes);
   }
 };
 
@@ -268,23 +256,11 @@ export const getReceivedQuotesOnRequirements = async (_buyerId = null, options =
   try {
     const params = options.requirementId ? { requirementId: options.requirementId } : undefined;
     const response = await apiClient.get('/buy-commodity/offers', { params });
-    const rawData = response.data;
-    if (rawData?.data?.offers && Array.isArray(rawData.data.offers)) {
-      return rawData.data.offers;
-    }
-    if (rawData?.offers && Array.isArray(rawData.offers)) {
-      return rawData.offers;
-    }
-    if (rawData?.data && Array.isArray(rawData.data)) {
-      return rawData.data;
-    }
-    if (Array.isArray(rawData)) {
-      return rawData;
-    }
-    return [];
+    return normalizeOfferList(response.data);
   } catch (error) {
     console.warn('[OrdersService] API not available, using fallback:', error.message);
-    return dummyQuotes.filter((q) => !options.requirementId || q.requirementId === options.requirementId);
+    const filtered = dummyQuotes.filter((q) => !options.requirementId || q.requirementId === options.requirementId);
+    return normalizeOfferList(filtered);
   }
 };
 
