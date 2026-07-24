@@ -207,3 +207,21 @@ export const deleteSellCommodity = async (id) => {
   const response = await api.delete(`${SELL_BASE_URL}/${id}`);
   return response.data;
 };
+
+export const uploadDealDocument = async (dealId, docType, file, config = {}) => {
+  const formData = new FormData();
+  formData.append('docType', docType);
+  formData.append('document', {
+    uri: file.uri,
+    name: file.name || 'document.pdf',
+    type: file.type || 'application/pdf',
+  });
+  const response = await api.post(`${BUY_BASE_URL}/deals/${dealId}/document`, formData, {
+    ...config,
+    headers: {
+      ...config.headers,
+      'Content-Type': 'multipart/form-data',
+    },
+  });
+  return response.data;
+};

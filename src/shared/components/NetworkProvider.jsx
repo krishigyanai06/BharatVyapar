@@ -1,110 +1,141 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { View, Modal, StyleSheet, TouchableOpacity, Text, StatusBar } from 'react-native';
 import NetInfo from '@react-native-community/netinfo';
-import NoInternetScreen from '../../screen/NoInternetScreen';
+import axios from 'axios';
+import NoNetworkComponent from './NoNetworkComponent';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import COLORS from '../../theme/colors';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-
-const NetworkContext = createContext({ isConnected: true });
+const NetworkContext = createContext({
+  isConnected: true,
+  isChecking: false,
+  showBlockingModal: false,
+  handleReconnect: () => {},
+  triggerOfflineModal: () => {},
+  dismissOfflineModal: () => {},
+});
 
 // ─────────────────────────────────────────────────────────────────────────────
-// MODULE-LEVEL STATIC NETWORK STATUS
-// client.js is a plain JS file — it cannot use React hooks or context.
-// This module-level variable is the ONLY safe bridge between the React
-// NetworkProvider and the Axios infrastructure layer.
-// Updated synchronously whenever real or simulated connectivity changes.
+// MODULE-LEVEL STATIC NETWORK STATUS & OFFLINE BLOCK CALLBACK
+// client.js and CustomAlertBox are plain JS/singletons outside the React Context tree.
 // ─────────────────────────────────────────────────────────────────────────────
-let _networkStatusStatic = true; // default: assume connected on boot
+let _networkStatusStatic = true;
 export const getNetworkStatusStatic = () => _networkStatusStatic;
 
-// ─── DEV-ONLY: Simulate network off without turning off WiFi ───────────────
-// __DEV__ = true only in debug builds, automatically false in production APK
-let _devSimulateOffline = false;
+let _offlineBlockCallback = null;
+export const setOfflineBlockCallback = (cb) => {
+  _offlineBlockCallback = cb;
+};
+export const triggerOfflineBlockGlobal = () => {
+  if (_offlineBlockCallback) {
+    _offlineBlockCallback();
+  }
+};
+
 
 export const NetworkProvider = ({ children }) => {
+  // ── 1. ALL REACT HOOKS GROUPED STRICTLY AT TOP LEVEL ─────────────────────
   const [isConnected, setIsConnected] = useState(true);
   const [isChecking, setIsChecking] = useState(false);
-
-  // DEV: simulated offline state (separate from real NetInfo state)
+  const [showBlockingModal, setShowBlockingModal] = useState(false);
   const [devOffline, setDevOffline] = useState(false);
+  const insets = useSafeAreaInsets();
 
   useEffect(() => {
+    setOfflineBlockCallback(() => setShowBlockingModal(true));
+
     // Subscribe to network state changes
     const unsubscribe = NetInfo.addEventListener(state => {
-      // Treat null/undefined state as connected initially to avoid flashing on slow boots
       const status = state.isConnected !== false;
       setIsConnected(status);
+      _networkStatusStatic = status;
+      if (status) {
+        setShowBlockingModal(false);
+      }
     });
 
-    return () => unsubscribe();
+    return () => {
+      setOfflineBlockCallback(null);
+      unsubscribe();
+    };
   }, []);
 
+
+  // ── 2. HELPER HANDLERS (DEFINED AFTER HOOKS) ─────────────────────────────
+  const triggerOfflineModal = () => {
+    setShowBlockingModal(true);
+  };
+
+  const dismissOfflineModal = () => {
+    setShowBlockingModal(false);
+  };
+
   const handleReconnect = async () => {
-    // DEV: If simulating offline, just toggle it off
+    // Reset DEV simulated offline mode
     if (__DEV__ && devOffline) {
       setDevOffline(false);
-      return;
     }
 
     setIsChecking(true);
     try {
-      // 1. Refresh NetInfo state
-      const state = await NetInfo.refresh();
-      if (state.isConnected === false) {
-        setIsConnected(false);
-        setIsChecking(false);
-        return;
-      }
-
-      // 2. Perform a light ping to guarantee WAN internet access (resolves captive portals / dead routers)
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 6000);
-
-      const response = await fetch('https://clients3.google.com/generate_204', {
-        signal: controller.signal,
-        headers: { 'Cache-Control': 'no-cache' }
+      // 1. Axios Ping: Tracked & logged directly in Chrome DevTools Network Tab!
+      const response = await axios.get('https://clients3.google.com/generate_204', {
+        timeout: 5000,
+        headers: { 'Cache-Control': 'no-cache' },
       });
-      clearTimeout(timeoutId);
 
-      if (response.status === 204 || response.ok) {
+
+      if (response.status === 204 || response.status === 200 || response.ok) {
         setIsConnected(true);
+        _networkStatusStatic = true;
+        setShowBlockingModal(false);
       } else {
         setIsConnected(false);
+        _networkStatusStatic = false;
       }
     } catch (e) {
-      console.warn('📶 [NetworkProvider] Reconnect check failed:', e);
+      console.warn('📶 [NetworkProvider] Reconnect Axios ping failed:', e?.message || e);
       setIsConnected(false);
+      _networkStatusStatic = false;
     } finally {
       setIsChecking(false);
     }
   };
 
-  // Show NoInternet if: real network is down OR dev is simulating offline
+
+
+  // Show banner if real network is down OR dev is simulating offline
   const showNoInternet = !isConnected || (__DEV__ && devOffline);
   const effectiveIsConnected = isConnected && !devOffline;
 
-  const insets = useSafeAreaInsets();
-
-  // Keep static variable in sync — used by client.js (outside React tree)
+  // Keep static variable in sync for client.js
   _networkStatusStatic = effectiveIsConnected;
 
   return (
-    <NetworkContext.Provider value={{ isConnected: effectiveIsConnected, isChecking, handleReconnect }}>
-      <StatusBar hidden={showNoInternet} animated={true} />
+    <NetworkContext.Provider
+      value={{
+        isConnected: effectiveIsConnected,
+        isChecking,
+        showBlockingModal,
+        handleReconnect,
+        triggerOfflineModal,
+        dismissOfflineModal,
+      }}
+    >
+      <StatusBar hidden={showNoInternet || showBlockingModal} animated={true} />
       <View style={styles.container}>
         {/*
-          SLICED OFFLINE WARNING BANNER (Approach 2)
-          Premium, non-blocking notification bar showing cache status.
-          Allows farmers to browse prices, bids, and listings without screen freezes.
-          Dynamic padding top prevents notch or camera punch hole overlaps.
+          APPROACH 1: NON-BLOCKING TOP AMBER BANNER (GET Browsing)
+          Allows users to browse cached prices, bids, and listings without screen freezes.
         */}
-        {showNoInternet && (
-          <View style={[
-            styles.offlineBannerContainer, 
-            { paddingTop: Math.max(insets.top, 12) } // Safeguard for physical notch height
-          ]}>
+        {showNoInternet && !showBlockingModal && (
+          <View
+            style={[
+              styles.offlineBannerContainer,
+              { paddingTop: Math.max(insets.top, 12) },
+            ]}
+          >
             <View style={styles.offlineBanner}>
               <Icon name="wifi-strength-off" size={16} color="#FFFFFF" style={styles.offlineIcon} />
               <Text style={styles.offlineBannerText}>
@@ -116,10 +147,25 @@ export const NetworkProvider = ({ children }) => {
 
         {children}
 
-        {/* ─── DEV-ONLY floating toggle button ─────────────────────────────
-            Visible ONLY in debug builds (__DEV__ = false in production APK)
-            Tap to simulate network off/on without touching WiFi
-        ──────────────────────────────────────────────────────────────────── */}
+        {/*
+          APPROACH 2: FULL-SCREEN BLOCKING MODAL (Critical Write Attempts)
+          Triggered when un-synced write calls fail offline.
+        */}
+        <Modal
+          visible={showBlockingModal}
+          animationType="slide"
+          transparent={false}
+          statusBarTranslucent={true}
+          onRequestClose={dismissOfflineModal}
+        >
+          <NoNetworkComponent
+            onRetry={handleReconnect}
+            isRetrying={isChecking}
+            showSettingsButton={true}
+          />
+        </Modal>
+
+        {/* DEV-ONLY floating toggle button */}
         {__DEV__ && (
           <TouchableOpacity
             style={[styles.devToggle, devOffline && styles.devToggleActive]}
@@ -140,10 +186,8 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
-
-  // ─── OFFLINE BANNER STYLES ───────────────────────────────────────────────
   offlineBannerContainer: {
-    backgroundColor: '#D97706', // Premium Amber/Orange
+    backgroundColor: '#D97706',
   },
   offlineBanner: {
     flexDirection: 'row',
@@ -161,11 +205,9 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     letterSpacing: 0.2,
   },
-
-  // ─── DEV-ONLY styles — never ship to users ───────────────────────────────
   devToggle: {
     position: 'absolute',
-    bottom: 90,        // above bottom tab bar
+    bottom: 90,
     right: 12,
     backgroundColor: '#1a1a2e',
     paddingVertical: 6,
@@ -176,7 +218,7 @@ const styles = StyleSheet.create({
     zIndex: 999,
   },
   devToggleActive: {
-    backgroundColor: '#c0392b',  // Red when simulating offline
+    backgroundColor: '#c0392b',
   },
   devToggleText: {
     color: '#ffffff',
